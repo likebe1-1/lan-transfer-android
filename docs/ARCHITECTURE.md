@@ -16,7 +16,9 @@
 2. 从公司局域网的 Linux 服务器用 SFTP/SCP 拉取日志或安装包；
 3. 连接老旧设备仅提供 FTP / FTPS 时的兼容传输。
 
-非目标（本版不做）：手机当服务端（FTP 服务器模式）、局域网设备自动发现、云同步、断点续传、文件夹递归传输。
+非目标（本版不做）：局域网设备自动发现、云同步、断点续传、文件夹递归传输。
+
+> 版本演进：v1.1 已新增「本机服务器」——手机也可以作为 FTP/FTPS/SFTP/SCP 服务端，详见第 10 节。
 
 ## 2. 平台与形态选型
 
@@ -129,9 +131,62 @@ interface RemoteFileSystem : Closeable {
 
 | 验证项 | 环境 | 结果 |
 | --- | --- | --- |
-| JVM 单元测试 | JDK 21 / Gradle 9.6 | 90 个用例全部通过（内嵌 MockFtpServer 与 Apache MINA SSHD 真实服务端） |
+| JVM 单元测试 | JDK 21 / Gradle 9.6 | 146 个用例全部通过（客户端协议 + 服务端协议 + 数据/传输层，内嵌真实服务端走线） |
 | 设备四协议端到端 | Android 10（API 29）Pixel_4_XL 模拟器 + 宿主机真实 FTP/FTPS/SFTP/SCP 服务端 | 4/4 通过（列表、下载、上传回读字节一致、删除、错误映射、MediaStore 落盘） |
 | UI 冒烟 + 截图巡游 | 同上 | 通过，截图见 docs/screenshots |
-| Release（R8）运行时 | API 29 模拟器安装签名 release APK | SFTP 浏览与下载正常，下载文件 MD5 与源文件一致；mapping.txt 确认 JSch/Commons Net 反射类完整保留 |
+| 本机服务器设备测试 | API 29 模拟器（ServerModeDeviceTest / SshServerDeviceTest） | 四种协议启动成功并回环收发；客户端上传文件落到共享目录 |
+| 跨设备（宿主作为另一台设备） | ServerModeHostTestBridge + adb forward + Python ftplib/paramiko | FTP/FTPS/SFTP/SCP 4/4 通过，含 SCP 元数据命令；设备端断言上传文件全部出现 |
+| 设备测试总览 | API 29 模拟器 | 16 个用例全部通过（服务端/客户端/UI/共享目录） |
+| Release（R8）运行时 | API 29 模拟器安装签名 release APK | 客户端 SFTP 下载正常；本机服务器四协议由宿主机实测上传下载回读 4/4 通过；mapping.txt 确认 JSch/Commons Net/SSHD/BouncyCastle 反射类完整保留 |
 
 验证过程中发现：本机 QEMU 模拟器在高速大流量 TCP 下会静默丢字节（设备端 `nc` 亦可复现，与应用代码无关），因此端到端测试服务端对 FTP/FTPS 数据通道做了限速，真机不受此影响。
+
+## 10. 本机服务器（v1.1 新增）
+
+### 10.1 需求与定位
+
+同一 App 既是客户端也是服务端：手机 A 一键启动服务端，手机 B / 电脑用标准 FTP / FTPS / SFTP / SCP 客户端连接 A，浏览并下载 A 的共享文件，也可以上传文件到 A（A 即「局域网文件站」）。
+
+### 10.2 分层
+
+```
+Compose UI（ServerScreen / ServerViewModel）
+        │ StateFlow / 事件
+LocalServerManager（DefaultLocalServerManager：统一启停、端点状态、错误聚合）
+        ├── FtpProtocolServer（FTP / FTPS 共用实现，自研）
+        ├── SshProtocolServer（Apache MINA SSHD：SFTP 子系统 + SCP 命令工厂 + 元数据 shell 命令）
+        └── ShareRepository（共享目录：导入 / 列表 / 删除 / 导出）
+LocalServerService（dataSync 前台服务，保活 + 运行中通知）
+```
+
+### 10.3 协议服务端实现取舍
+
+| 协议 | 方案 | 理由 |
+| --- | --- | --- |
+| FTP / FTPS | **自研**（监听 + 会话状态机 + TLS 升级） | 现成 Java FTP 服务端库（Apache FtpServer）依赖 MINA + 配置体系，Android 兼容性风险高；FTP 协议服务端命令集有限，自研可控且能精确兼容本项目客户端与 Python ftplib |
+| SFTP / SCP | **Apache MINA SSHD 2.14**（sshd-core/sftp/scp） | JVM 生态最成熟的 SSH 服务端实现，直接提供 SFTP 子系统、SCP 命令工厂与虚拟文件系统；自研 SSH2 服务端成本过高 |
+
+- FTP/FTPS：0.0.0.0 监听、每连接一线程；PASV/EPSV 被动模式；Unix 长格式 LIST/NLST/MLSD；UTF-8；路径归一化 + 越界拒绝；RETR 流式；STOR 临时文件 + 原子替换；FTPS 用 BouncyCastle 运行时生成 RSA2048 自签证书（SAN 覆盖本机 IPv4），显式 AUTH TLS 升级控制连接，PROT P 对数据通道做 TLS。
+- SFTP/SCP：密码认证；VirtualFileSystemFactory 将共享目录映射为虚拟根；SCP 额外实现本 App 客户端使用的 `ls -la / mkdir -p / rmdir / rm -f / mv` 元数据命令（POSIX 引号解析 + 越界校验）。
+
+### 10.4 Android 兼容性（实测踩坑，务必保留）
+
+1. **无 user.home**：MINA SSHD 静态初始化会读 user home，Android 上抛 `ExceptionInInitializerError`；必须在创建 SshServer 前调用 `PathUtils.setUserHomeFolderResolver { Paths.get(System.getProperty("java.io.tmpdir")) }`。
+2. **BouncyCastle provider 冲突**：App 为 FTPS 证书引入了 bcprov，SSHD 检测到 BC 类后会优先使用名为 "BC" 的 provider，而 Android 系统内置的 BC 已被裁剪（无 ECDH KeyAgreement），握手报 `no such algorithm: ECDH for provider BC`。解决：SSHD 启动前 `SecurityUtils.setAPrioriDisabledProvider("BC", true)`（以及 EdDSA），让其使用平台默认 JCE。
+3. **默认 KEX 列表为空**：Android 上 SSHD 的算法支持性探测会把内置 key exchange 全部判为 unsupported，`setUpDefaultServer()` 后 kex 列表为 0，start 报 “KeyExchangeFactories not set”。解决：显式安装保底 KEX 集合（ECDH nistp256/384/521 + DH group14/16/18），并仅把 JCE 探测为可用的算法追加进去。
+4. **主机密钥**：默认算法为 EC，Android 上生成/探测不稳定；显式使用 RSA 2048 + `SimpleGeneratorHostKeyProvider` 持久化到应用 cache，重启复用。
+5. **IO 工厂**：显式 `Nio2ServiceFactoryFactory` 绕开 ServiceLoader。
+6. **R8**：ProGuard 保留 `org.apache.sshd.**`、`org.bouncycastle.**`、`org.slf4j.**`，release 构建已实测四种服务端协议可用。
+
+### 10.5 共享目录与生命周期
+
+- 共享目录：`getExternalFilesDir("share")`（回退 `filesDir/share`），无需存储权限；导入（SAF 复制）、列表、删除、导出到公共下载目录均由 `ShareRepository` 负责，协议服务端直接读写该目录。
+- 生命周期：服务器运行期间由 `LocalServerService`（dataSync 前台服务）保活并显示协议/端口/地址通知；手动停止或全部协议启动失败时停止服务；界面销毁不影响服务器。
+- 授权模型：单用户（配置的用户名/密码），仅局域网内明文/加密协议访问，无公钥认证与多用户。
+
+### 10.6 验证策略
+
+- JVM：FTP/FTPS 服务端与 SSHD 服务端均由真实客户端（本工程客户端 + 裸 Socket 断言）回环验证，共 38 个服务端用例；
+- 设备：`ServerModeDeviceTest`/`SshServerDeviceTest` 在模拟器上启动服务器并回环验证四协议；
+- 跨设备：`ServerModeHostTestBridge` 在设备上启动服务器，宿主机经 `adb forward` 以「另一台设备」身份用 Python 标准客户端完成四协议收发，设备端断言上传文件落到共享目录；
+- Release：签名 R8 APK 上真实启动服务器并由宿主机完成四协议上传下载回读。

@@ -2,9 +2,15 @@ package com.manst.lantransfer
 
 import android.content.Context
 import java.io.File
+import com.manst.lantransfer.data.DefaultShareRepository
+import com.manst.lantransfer.data.JsonLocalServerConfigStore
 import com.manst.lantransfer.data.JsonServerRepository
+import com.manst.lantransfer.data.LocalServerConfigStore
+import com.manst.lantransfer.data.ShareRepository
 import com.manst.lantransfer.data.ServerRepository
 import com.manst.lantransfer.transfer.DefaultTransferManager
+import com.manst.lantransfer.server.DefaultLocalServerManager
+import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
 
 /**
@@ -21,5 +27,17 @@ class AppContainer(context: Context) {
 
     val transferManager: TransferManager by lazy {
         DefaultTransferManager(appContext, serverRepository)
+    }
+
+    val shareRepository: ShareRepository by lazy {
+        DefaultShareRepository(appContext)
+    }
+
+    val localServerConfigStore: LocalServerConfigStore by lazy {
+        JsonLocalServerConfigStore(File(appContext.filesDir, "local_server.json"))
+    }
+
+    val localServerManager: LocalServerManager by lazy {
+        DefaultLocalServerManager(appContext, shareRepository)
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -58,7 +59,7 @@ import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 import com.manst.lantransfer.ui.components.ProtocolChip
 
 /**
- * 服务器列表页：最近使用排序、协议标签、传输队列入口、新增/编辑/删除。
+ * 服务器列表页：最近使用排序、协议标签、本机服务器与传输队列入口、新增/编辑/删除。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +68,8 @@ fun ServerListScreen(
     onAddServer: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenServer: (String) -> Unit,
-    onOpenTransfers: () -> Unit
+    onOpenTransfers: () -> Unit,
+    onOpenLocalServer: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,6 +82,12 @@ fun ServerListScreen(
             TopAppBar(
                 title = { Text(text = "局域网传输", fontWeight = FontWeight.SemiBold) },
                 actions = {
+                    IconButton(onClick = onOpenLocalServer) {
+                        Icon(
+                            imageVector = Icons.Filled.WifiTethering,
+                            contentDescription = "本机服务器"
+                        )
+                    }
                     IconButton(onClick = onOpenTransfers) {
                         BadgedBox(
                             badge = {

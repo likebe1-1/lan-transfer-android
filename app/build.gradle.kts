@@ -22,8 +22,8 @@ android {
         applicationId = "com.manst.lantransfer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -80,7 +80,14 @@ android {
                 "META-INF/NOTICE",
                 "META-INF/NOTICE.txt",
                 "META-INF/INDEX.LIST",
-                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                // JSch / BouncyCastle 多版本 jar 里的重复元数据（与运行时无关）
+                "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
+                "META-INF/versions/**/module-info.class",
+                "META-INF/versions/**/MANIFEST.MF",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA"
             )
         }
     }
@@ -111,15 +118,17 @@ dependencies {
     implementation(libs.commons.net)
     implementation(libs.jsch)
 
+    // 本机服务器：SFTP/SCP 服务端用 Apache MINA SSHD；FTPS 自签证书用 BouncyCastle
+    implementation(libs.sshd.core)
+    implementation(libs.sshd.sftp)
+    implementation(libs.sshd.scp)
+    implementation(libs.bcprov)
+    implementation(libs.bcpkix)
+    implementation(libs.slf4j.nop)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockftpserver)
-    testImplementation(libs.sshd.core)
-    testImplementation(libs.sshd.scp)
-    testImplementation(libs.sshd.sftp)
-    testImplementation(libs.bcprov)
-    testImplementation(libs.bcpkix)
-    testImplementation(libs.slf4j.nop)
     testImplementation(libs.org.json)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))

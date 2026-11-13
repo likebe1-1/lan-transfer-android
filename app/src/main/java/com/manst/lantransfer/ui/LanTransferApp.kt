@@ -18,6 +18,8 @@ import com.manst.lantransfer.ui.editor.ServerEditorScreen
 import com.manst.lantransfer.ui.editor.ServerEditorViewModel
 import com.manst.lantransfer.ui.servers.ServerListScreen
 import com.manst.lantransfer.ui.servers.ServerListViewModel
+import com.manst.lantransfer.ui.server.ServerScreen
+import com.manst.lantransfer.ui.server.ServerViewModel
 import com.manst.lantransfer.ui.transfers.TransfersScreen
 import com.manst.lantransfer.ui.transfers.TransfersViewModel
 
@@ -27,6 +29,7 @@ object Routes {
     const val SERVER_EDITOR = "editor?profileId={profileId}"
     const val BROWSER = "browser/{profileId}?path={path}"
     const val TRANSFERS = "transfers"
+    const val SERVER = "server"
 
     fun editor(profileId: String? = null): String =
         if (profileId.isNullOrBlank()) "editor" else "editor?profileId=${Uri.encode(profileId)}"
@@ -63,7 +66,8 @@ fun LanTransferApp(container: AppContainer) {
                 onAddServer = { navController.navigate(Routes.editor()) },
                 onEditServer = { profileId -> navController.navigate(Routes.editor(profileId)) },
                 onOpenServer = { profileId -> navController.navigate(Routes.browser(profileId)) },
-                onOpenTransfers = { navController.navigate(Routes.TRANSFERS) }
+                onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
+                onOpenLocalServer = { navController.navigate(Routes.SERVER) }
             )
         }
 
@@ -130,6 +134,22 @@ fun LanTransferApp(container: AppContainer) {
                 }
             )
             TransfersScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.SERVER) {
+            val viewModel: ServerViewModel = viewModel(
+                factory = SimpleViewModelFactory {
+                    ServerViewModel(
+                        localServerManager = container.localServerManager,
+                        shareRepository = container.shareRepository,
+                        localServerConfigStore = container.localServerConfigStore
+                    )
+                }
+            )
+            ServerScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )
