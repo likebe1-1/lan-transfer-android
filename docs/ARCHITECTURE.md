@@ -138,6 +138,9 @@ interface RemoteFileSystem : Closeable {
 | 跨设备（宿主作为另一台设备） | ServerModeHostTestBridge + adb forward + Python ftplib/paramiko | FTP/FTPS/SFTP/SCP 4/4 通过，含 SCP 元数据命令；设备端断言上传文件全部出现 |
 | 设备测试总览 | API 29 模拟器 | 16 个用例全部通过（服务端/客户端/UI/共享目录） |
 | Release（R8）运行时 | API 29 模拟器安装签名 release APK | 客户端 SFTP 下载正常；本机服务器四协议由宿主机实测上传下载回读 4/4 通过；mapping.txt 确认 JSch/Commons Net/SSHD/BouncyCastle 反射类完整保留 |
+| **真机功能测试** | Xiaomi 25080RABDC / Android 16 / arm64-v8a（无线 ADB） | 13 个非 UI 用例全部通过：本机服务器四协议回环收发与共享目录落盘、SFTP/SCP 服务端、共享目录仓库 |
+| **真机跨设备 E2E** | 真机（服务器）+ 宿主机（另一台设备，无线 adb forward） | FTP/FTPS/SFTP/SCP 4/4 通过；设备端断言宿主机上传文件全部出现在共享目录 |
+| 真机 release 运行时 | 真机安装签名 R8 APK | 安装/启动成功，无崩溃、无类缺失；release 版保留在设备上 |
 
 验证过程中发现：本机 QEMU 模拟器在高速大流量 TCP 下会静默丢字节（设备端 `nc` 亦可复现，与应用代码无关），因此端到端测试服务端对 FTP/FTPS 数据通道做了限速，真机不受此影响。
 

@@ -163,6 +163,15 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 - 在 API 29 模拟器安装**签名 release APK**，真实添加 SFTP 服务器并浏览远程目录、下载文件到 `Download/LanTransfer/`，下载文件 MD5 与宿主端源文件一致。证明 R8 混淆后 JSch 反射与传输链路正常；
 - 同一 release APK 上真实启动本机服务器，宿主机用 FTP/FTPS/SFTP/SCP 四协议完成上传下载回读（4/4 通过），证明 R8 混淆下 MINA SSHD、BouncyCastle 自签证书与自实现 FTP 服务端运行正常。
 
+### 6. 真机验证（Xiaomi 25080RABDC · Android 16 · arm64-v8a）
+
+在真实手机上（无线 ADB 连接）完成了以下验证：
+
+- **设备内功能测试：13 个用例全部通过**（`ServerModeDeviceTest` 本机服务器四协议回环收发 + 共享目录上传落盘；`SshServerDeviceTest` SFTP/SCP 服务端；`ShareRepositoryTest` 共享目录导入/导出/删除）；
+- **跨设备端到端：宿主机作为「另一台设备」通过无线 adb forward 连接手机服务器，FTP/FTPS/SFTP/SCP 4/4 协议通过**（列目录、下载校验、上传回读、SCP 元数据命令），设备端测试断言宿主机上传的 4 个文件全部出现在共享目录；
+- **签名 release APK（v1.1.0, R8）在真机安装并启动成功**，无崩溃/类缺失；
+- 说明：真机当时处于锁屏状态，需要解锁屏幕的 3 个 UI 仪器用例无法自动执行（已在模拟器上全部通过）；手机仍保持 release 版安装，解锁后可直接体验。
+
 ## 使用
 
 ### 客户端模式（连接其他服务器）
