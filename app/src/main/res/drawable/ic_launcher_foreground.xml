@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 上传箭头 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,25 L23,47 L33,47 L33,82 L43,82 L43,47 L53,47 Z" />
+    <!-- 下载箭头 -->
+    <path
+        android:fillColor="#FF8FD3FF"
+        android:pathData="M70,83 L85,61 L75,61 L75,26 L65,26 L65,61 L55,61 Z" />
+</vector>

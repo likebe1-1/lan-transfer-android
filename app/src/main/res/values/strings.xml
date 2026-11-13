@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">局域网传输</string>
+    <string name="notification_channel_transfer">文件传输</string>
+    <string name="notification_transfer_title">正在传输文件</string>
+</resources>
