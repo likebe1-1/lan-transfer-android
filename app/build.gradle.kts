@@ -22,9 +22,12 @@ android {
         applicationId = "com.manst.lantransfer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 8
-        versionName = "2.1.0"
+        versionCode = 9
+        versionName = "2.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 资源精简：只保留中英文（UI 文案本身只有中文）；减少 AndroidX/依赖库内置的大量翻译资源
+        resourceConfigurations += listOf("zh", "en")
     }
 
     signingConfigs {
@@ -71,6 +74,30 @@ android {
         abortOnError = false
     }
 
+    // ABI 拆分：为每种 ABI 生成独立 APK（含 universal 兜底），减小下载体积；
+    // 说明：当前 App 原生库很小（~40KB），实际收益有限，但可为后续引入原生库做好准备。
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    // 发布 Google Play 时使用 AAB，并按语言/密度/ABI 拆分（不影响本地 APK 构建）
+    bundle {
+        language {
+            enableSplit = true
+        }
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+
     packaging {
         resources {
             excludes += setOf(
@@ -87,7 +114,10 @@ android {
                 "META-INF/versions/**/MANIFEST.MF",
                 "META-INF/*.SF",
                 "META-INF/*.DSA",
-                "META-INF/*.RSA"
+                "META-INF/*.RSA",
+                // BouncyCastle 未使用的 PQC 参数资源（>1.2MB，压缩率很低）与多语言错误文案
+                "org/bouncycastle/pqc/**",
+                "org/bouncycastle/**/CertPathReviewerMessages_*.properties"
             )
         }
     }

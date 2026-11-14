@@ -30,7 +30,8 @@
 
 | 版本 | 说明 | 直接下载 |
 | --- | --- | --- |
-| **v2.1.0（最新 · LanLink 品牌版）** | **LanLink 新名称** + 断点续传 / 文件夹 / 历史 / 分享 / 扫码快传 | [LanLink-v2.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.0/LanLink-v2.1.0.apk) |
+| **v2.1.1（最新）** | **ABI 拆分 + 资源精简：arm64 包 10.44 MiB**（原 11.77 MiB） | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk) |
+| v2.1.0 | LanLink 品牌版 + 断点续传 / 文件夹 / 历史 / 分享 / 扫码快传 | [LanLink-v2.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.0/LanLink-v2.1.0.apk) |
 | v2.0.0 | 断点续传 / 文件夹传输 / 历史记录 / 分享直达 / 扫码快传 | [LanTransfer-v2.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.0.0/LanTransfer-v2.0.0.apk) |
 | v1.3.1 | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
 | v1.3.0 | 传输中显示进度 / 速度 / 剩余时间 | [LanTransfer-v1.3.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.0/LanTransfer-v1.3.0.apk) |
@@ -39,7 +40,7 @@
 | v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
 | v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
 
-> APK 与 `v1.0.0` ~ `v2.1.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+> APK 与 `v1.0.0` ~ `v2.1.1` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
 
 ## 功能
 
@@ -71,6 +72,25 @@
 | 通知打开文件 | 下载完成通知的「打开」动作直接打开文件 |
 
 > 扫码二维码编码规则（v2.0）：会话信息先序列化为 UTF-8 JSON（字段 v/code/name/addrs/ftp/ftps/ssh/protocols），再整体做 Base64（URL-safe）编码后生成二维码；接收端扫码得到 Base64 → 解码 JSON → 用接收码派生临时凭据连接，不携带明文密码。
+
+## 体积优化（v2.1.1）
+
+v2.1.1 按 ABI 拆分 APK 并精简资源，安装包明显减小（包名不变，可直接覆盖升级）：
+
+| 产物 | 大小 | 说明 |
+| --- | --- | --- |
+| v2.1.0 universal（优化前） | 12,342,911 B（11.77 MiB） | 单一 APK 含全部 ABI 与多语言资源 |
+| **v2.1.1 arm64-v8a** | **10,949,693 B（10.44 MiB）** | **现代手机首选，下载量减少约 11.3%** |
+| v2.1.1 armeabi-v7a | 10,946,851 B（10.44 MiB） | 32 位 ARM 老设备 |
+| v2.1.1 x86_64 | 10,950,354 B（10.44 MiB） | 模拟器/极少见 x86 设备 |
+| v2.1.1 universal | 10,999,766 B（10.49 MiB） | 不确定 ABI 时使用，兼容所有设备 |
+
+优化手段：
+
+- Gradle `splits.abi` 按 `armeabi-v7a / arm64-v8a / x86 / x86_64` 生成独立签名 APK，并提供 universal 兜底；
+- `resourceConfigurations = ["zh", "en"]` 精简依赖库内置的多语言资源；
+- 移除未使用的 BouncyCastle PQC 参数资源与多语言错误文案（约 1.3 MB 压缩后体积）；
+- 说明：本 App 原生库很小（仅 `libandroidx.graphics.path.so` 约 40 KB），ABI 拆分本身仅省约 50 KB，主要收益来自资源精简；dex（SSHD/BouncyCastle/JSch/Compose）仍是主要体积来源，后续可通过发布 AAB（`bundle {}` 已配置语言/密度/ABI 拆分）或替换静态证书去掉 BouncyCastle 进一步减小。
 
 ## 协议支持
 

@@ -307,3 +307,10 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 设备仪器测试 47 个全绿（新增传输恢复/自动重试、文件夹子目录落盘/通知打开、快捷传文件递归接收、二维码/文件夹入口 UI）；
 - 发现的真实问题：恢复未完成任务时若在 `AppContainer` 懒初始化路径中同步启动前台服务，`TransferService.onCreate` 会再次访问同一个 lazy 导致主线程等待，触发 `ForegroundServiceDidNotStartInTimeException`；已改为初始化完成后异步启动；
 - MediaStore 对 `IS_PENDING=1` 的下载记录在部分设备/版本查询不可见，测试需先 commit 再查询 RELATIVE_PATH。
+## 13. 发布体积优化（v2.1.1）
+
+- ABI 拆分：Gradle `splits.abi` 生成 `armeabi-v7a / arm64-v8a / x86 / x86_64` 独立签名 APK，并保留 universal APK；`bundle {}` 同时启用语言/密度/ABI 拆分，便于后续发布 AAB；
+- 资源精简：`resourceConfigurations = ["zh", "en"]`；`packaging.resources.excludes` 移除 BouncyCastle 未使用的 PQC 参数资源（`org/bouncycastle/pqc/**`）与多语言错误文案；
+- 结果：v2.1.0 universal 11.77 MiB → v2.1.1 arm64 10.44 MiB（约 -11.3%），universal 10.49 MiB；
+- 注意：App 原生库仅约 40 KB（androidx graphics path），ABI 拆分实际收益约 50 KB；主要收益来自资源精简。dex（SSHD/BouncyCastle/JSch/Compose）仍是主要体积来源，后续可发布 AAB 或改用内置静态证书移除 BouncyCastle；
+- 验证：236 JVM 单测全绿；设备端 `ServerModeDeviceTest`（含 FTPS 自签证书 + 四协议回环）与 `DownloadRootPathTest` 通过；x86_64 拆分 APK 在模拟器安装启动正常。
