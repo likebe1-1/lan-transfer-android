@@ -130,3 +130,15 @@ adb logcat -s E2EDIAG:V TransferService:V
 ```
 
 或者直接把两台手机的型号/系统版本和现象告诉我，可以补进测试记录。
+---
+
+## 7. 自动化测试记录（2026-11-14）
+
+- 设备：Xiaomi 24129PN74C（Android 16，192.168.3.17）+ Xiaomi 25080RABDC（Android 16，192.168.3.32），同一 Wi-Fi「HUAWEI-03」；
+- 方式：发送端 `TwoPhoneSendBridge` 真实启动快速传文件会话并输出会话信息；宿主机读取后驱动接收端 `TwoPhoneReceiveTest` 进行连接/接收/回传；
+- 结果：
+  - FTP、FTPS、SFTP、SCP **4/4 协议通过**；
+  - 接收端 4 次均通过 UDP 局域网广播发现发送端；
+  - 下载 2MB 文件大小校验一致（2097152 字节），回传文件全部出现在发送端「收到的文件」；
+  - 测试完成后两台手机均安装 v1.3.0 release APK。
+- 真实环境问题：两台手机最初分别连接「CMCC」和「HUAWEI-03」两个不同 Wi-Fi（恰好同网段 192.168.3.x），TCP 报 `EHOSTUNREACH`、广播收不到；切换到同一 SSID 后全部通过。
