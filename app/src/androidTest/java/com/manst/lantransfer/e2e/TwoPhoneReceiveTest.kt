@@ -125,12 +125,13 @@ class TwoPhoneReceiveTest {
         requireNotNull(args.getString(key)) { "缺少 instrumentation 参数 " + key }
 
     private fun deletePreviousDownloads() {
+        // 只清理本测试产生的文件，避免误删下载根目录下用户的文件（新版本直接写入 Download/ 根目录）
         val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         runCatching {
             context.contentResolver.delete(
                 collection,
-                MediaStore.Downloads.RELATIVE_PATH + " = ?",
-                arrayOf(Environment.DIRECTORY_DOWNLOADS + "/")
+                MediaStore.Downloads.DISPLAY_NAME + " LIKE ?",
+                arrayOf("two-phone-%")
             )
         }
     }
@@ -142,9 +143,9 @@ class TwoPhoneReceiveTest {
         val extension = displayName.substringAfterLast('.', "")
         val suffix = if (extension.isBlank()) "" else "." + extension
         // 系统下载目录里可能已有同名文件，MediaStore 会去重成 "name (1).ext"，这里按前缀匹配
-        val selection = MediaStore.Downloads.DISPLAY_NAME + " LIKE ? AND " +
-            MediaStore.Downloads.RELATIVE_PATH + " LIKE ?"
-        val selectionArgs = arrayOf(baseName + "%" + suffix, "%LanTransfer%")
+        // 文件直接写入系统下载根目录 Download/，只按文件名前缀匹配
+        val selection = MediaStore.Downloads.DISPLAY_NAME + " LIKE ?"
+        val selectionArgs = arrayOf(baseName + "%" + suffix)
         context.contentResolver.query(collection, projection, selection, selectionArgs, null)?.use { cursor ->
             while (cursor.moveToNext()) {
                 val size = cursor.getLong(0)

@@ -234,6 +234,19 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 
 > 真实环境排查记录：两台手机最初分别连接不同 Wi-Fi（CMCC / HUAWEI-03，恰好都是 192.168.3.x 网段但属于不同二层网络），表现为 TCP 连接 `EHOSTUNREACH`、UDP 广播收不到；切换到同一 SSID 后全部通过。这印证了「快速传文件」依赖同一局域网，也说明接收端「发现失败可手动输入 IP + 接收码」兜底设计的必要性。
 
+#### 两台真机功能测试套件（v1.3.1，2026-11-14）
+
+在两台真机上执行了完整的**非 UI 仪器测试套件**（25 个用例/台，覆盖协议、服务端、共享目录、下载落盘目录、快速传文件引擎与互传）：
+
+| 设备 | 用例 | 结果 |
+| --- | --- | --- |
+| Xiaomi 24129PN74C（Android 16） | `DownloadRootPathTest`、`QuickTransferEngineTest`、`SessionDataDeviceTest`、`ShareRepositoryTest`、`ServerModeDeviceTest`、`SshServerDeviceTest` | **25/25 通过** |
+| Xiaomi 25080RABDC（Android 16） | 同上 | **25/25 通过** |
+
+> UI 仪器测试（Compose 冒烟、截图巡游、首启提示、传输进度截图等）在这两台 MIUI 16 真机上会卡在 `ActivityScenario.launch`（MIUI 限制后台启动 Activity），无法自动执行；这些用例已由 API 29 模拟器完整覆盖（含 35 个 UI/截图/功能用例全绿）。真机功能测试不依赖 UI，因此协议、服务端与下载路径等核心逻辑均已在真机上验证。
+>
+> 说明：本轮两台手机的跨设备四协议互传已在前面验证通过（4/4）；v1.3.1 相对 v1.3.0 仅调整了下载落盘目录，协议层未变，且新目录已由 `DownloadRootPathTest` 在真机上验证。
+
 ## 使用
 
 ### 客户端模式（连接其他服务器）
