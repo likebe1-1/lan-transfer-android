@@ -36,7 +36,8 @@ class JsonLocalServerConfigStore(private val storageFile: File) : LocalServerCon
                 password = root.optString(KEY_PASSWORD, ""),
                 ftpsMode = runCatching {
                     FtpsMode.valueOf(root.optString(KEY_FTPS_MODE, FtpsMode.EXPLICIT.name))
-                }.getOrDefault(FtpsMode.EXPLICIT)
+                }.getOrDefault(FtpsMode.EXPLICIT),
+                shareRootOverride = root.optString(KEY_SHARE_ROOT_OVERRIDE, "").ifBlank { null }
             )
         }.getOrNull()
     }
@@ -55,6 +56,7 @@ class JsonLocalServerConfigStore(private val storageFile: File) : LocalServerCon
                     .put(KEY_USERNAME, config.username)
                     .put(KEY_PASSWORD, config.password)
                     .put(KEY_FTPS_MODE, config.ftpsMode.name)
+                    .put(KEY_SHARE_ROOT_OVERRIDE, config.shareRootOverride ?: "")
                 storageFile.parentFile?.mkdirs()
                 val temp = File(storageFile.parentFile, storageFile.name + ".tmp")
                 temp.writeText(root.toString(), Charsets.UTF_8)
@@ -79,5 +81,6 @@ class JsonLocalServerConfigStore(private val storageFile: File) : LocalServerCon
         const val KEY_USERNAME = "username"
         const val KEY_PASSWORD = "password"
         const val KEY_FTPS_MODE = "ftpsMode"
+        const val KEY_SHARE_ROOT_OVERRIDE = "shareRootOverride"
     }
 }

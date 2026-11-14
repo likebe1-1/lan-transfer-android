@@ -138,6 +138,9 @@ interface RemoteFileSystem : Closeable {
 | 跨设备（宿主作为另一台设备） | ServerModeHostTestBridge + adb forward + Python ftplib/paramiko | FTP/FTPS/SFTP/SCP 4/4 通过，含 SCP 元数据命令；设备端断言上传文件全部出现 |
 | 设备测试总览 | API 29 模拟器 | 16 个用例全部通过（服务端/客户端/UI/共享目录） |
 | Release（R8）运行时 | API 29 模拟器安装签名 release APK | 客户端 SFTP 下载正常；本机服务器四协议由宿主机实测上传下载回读 4/4 通过；mapping.txt 确认 JSch/Commons Net/SSHD/BouncyCastle 反射类完整保留 |
+| 快速传文件设备测试 | API 29 模拟器 QuickTransferEngineTest | 发送会话四协议分别连接/自动接收/MediaStore 校验/回传互传/会话清理全部通过；UDP 广播→扫描回环通过 |
+| 快速传文件跨设备 E2E | QuickHostE2EBridge + adb forward + 宿主机 Python 客户端 | 宿主机读取会话后以 FTP/FTPS/SFTP/SCP 下载并 SHA-256 校验全部文件、各上传一个文件；设备端断言 4 个上传文件全部出现在「收到的文件」 |
+| 设备测试总览（v1.2） | API 29 模拟器 | 26 个用例全部通过（快速传文件 + 本机服务器 + 共享目录 + UI 冒烟） |
 | **真机功能测试** | Xiaomi 25080RABDC / Android 16 / arm64-v8a（无线 ADB） | 13 个非 UI 用例全部通过：本机服务器四协议回环收发与共享目录落盘、SFTP/SCP 服务端、共享目录仓库 |
 | **真机跨设备 E2E** | 真机（服务器）+ 宿主机（另一台设备，无线 adb forward） | FTP/FTPS/SFTP/SCP 4/4 通过；设备端断言宿主机上传文件全部出现在共享目录 |
 | 真机 release 运行时 | 真机安装签名 R8 APK | 安装/启动成功，无崩溃、无类缺失；release 版保留在设备上 |
@@ -193,3 +196,58 @@ LocalServerService（dataSync 前台服务，保活 + 运行中通知）
 - 设备：`ServerModeDeviceTest`/`SshServerDeviceTest` 在模拟器上启动服务器并回环验证四协议；
 - 跨设备：`ServerModeHostTestBridge` 在设备上启动服务器，宿主机经 `adb forward` 以「另一台设备」身份用 Python 标准客户端完成四协议收发，设备端断言上传文件落到共享目录；
 - Release：签名 R8 APK 上真实启动服务器并由宿主机完成四协议上传下载回读。
+
+## 11. 快速传文件（v1.2 新增）
+
+### 11.1 目标
+
+把「两台设备互传文件」的步骤降到最少：A 选文件后什么都不用配置，B 在附近设备列表里点一下即可收文件，并且 B 也能把文件发回 A。底层仍然使用 FTP / FTPS / SFTP / SCP 四种协议（不引入私有传输协议），做到「用户简单、协议标准」。
+
+### 11.2 会话模型
+
+```
+A：选文件 → 生成 6 位接收码 → SessionFileStore 复制到会话目录
+   → LocalServerManager.start(四协议 + 派生帐号 + shareRootOverride=会话目录 + 自动选空闲端口)
+   → UdpBeaconBroadcaster 每秒广播 {code, deviceName, addresses, ftp/ftps/ssh ports, protocols}
+B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+码
+   → QuickSessionCode.deriveCredentials(code) 得到帐号 → 按 SFTP→SCP→FTPS→FTP 回退连接
+   → 列出文件 → 自动逐个下载（MediaStore.Downloads，Download/LanTransfer/）
+   → 互传：同一个连接把 B 的文件上传回 A（A 端「收到的文件」+ 导出到下载）
+```
+
+关键设计：
+
+- **帐号无需传递**：发送端与接收端用同一算法从接收码派生临时用户名/密码（SHA-256 派生），用户只需分享 6 位数字；
+- **不新增私有协议**：会话本质仍是四种标准协议的服务器；接收端自动回退到可用协议，也可手动指定，四种协议产物一致；
+- **临时目录隔离**：通过 `LocalServerConfig.shareRootOverride` 让快捷会话使用 `quick-send/<code>` 临时目录，不复用/污染「本机服务器」的共享目录；结束会话即删除；
+- **无需手动配置端口**：发送端优先使用 2121/2122/2222，被占用时自动 +1 选空闲端口，广播携带真实端口；
+- **发现失败可兜底**：广播不可用时接收端可手动输入 IP + 接收码（默认端口场景）。
+
+### 11.3 组件
+
+| 组件 | 职责 |
+| --- | --- |
+| `QuickSendManager` | 接收码/凭据、会话目录、四协议服务端启停、UDP 广播、对方上传文件识别与导出 |
+| `QuickReceiveManager` | 局域网发现、手动连接、协议回退、自动下载、反向上传（互传）、断开清理 |
+| `SessionFileStore` | 会话目录管理：SAF 导入（清洗/去重/原子落盘）、列表、导出到下载、清理 |
+| `QuickDownloadSink` | 接收文件写入 MediaStore.Downloads（IS_PENDING + commit/abort 语义） |
+| `UdpLanBeacon // QuickBeaconCodec` | 局域网广播报文编解码（版本化 JSON）与 UDP 发送/扫描（SO_REUSEADDR、MulticastLock） |
+| UI（ui/quick） | 快速传文件入口卡、发送页（接收码大字/全屏/端口/文件/收到文件）、接收页（附近设备/手动输入/协议选择/进度/互传） |
+
+### 11.4 安全与隐私
+
+- 接收码仅为临时会话凭证，会话结束后服务端关闭、目录删除；派生帐号只在本会话有效；
+- 广播报文包含接收码与设备名，同网段可见（定位为可信局域网内的临时互传，与 AirDrop「对所有人」同类）；
+- 文件传输仍走各协议自身的 TLS/SSH 加密（SFTP/SCP/FTPS）；FTP 为明文，自动回退顺序把明文 FTP 放在最后；
+- 不引入云服务，所有流量仅局域网内。
+
+### 11.5 实现中修复的 Android 兼容问题
+
+`UdpBeaconScanner` 绑定端口时误用了 `DatagramSocket.apply { }` 内部的 `port`（未绑定 socket 的端口为 -1），导致「port out of range:-1」而发现功能静默失效；已在设备测试中发现并修复（构造参数提前捕获为 `bindPort`）。这类问题只有真实设备走线测试才能暴露，JVM 测试与编译期都无法发现。
+
+### 11.6 验证策略
+
+- JVM：接收码/凭据（收发双端算法一致）、广播编解码容错、会话文件名逻辑；
+- 设备：`QuickTransferEngineTest` 设备内启动真实会话，四种协议分别连接/自动接收/回传互传，UDP 广播回环；
+- 跨设备：`QuickHostE2EBridge` + `scripts/quick_mode_hosttest.py`，宿主机以「另一台设备」身份用四协议下载校验并上传，设备端断言收到的文件；
+- UI：`QuickScreenSmokeTest` + 截图巡游 `QuickScreenshotTest`。

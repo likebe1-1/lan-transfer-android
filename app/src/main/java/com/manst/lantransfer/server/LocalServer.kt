@@ -23,7 +23,9 @@ data class LocalServerConfig(
     val sshPort: Int = 2222,
     val username: String = "android",
     val password: String = "",
-    val ftpsMode: FtpsMode = FtpsMode.EXPLICIT
+    val ftpsMode: FtpsMode = FtpsMode.EXPLICIT,
+    /** 覆盖服务端共享根目录（快捷传输会话使用临时目录）；null 表示使用 ShareRepository 的共享目录。 */
+    val shareRootOverride: String? = null
 ) {
     fun validationErrors(): List<String> {
         val errors = mutableListOf<String>()

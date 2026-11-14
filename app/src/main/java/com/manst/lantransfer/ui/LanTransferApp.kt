@@ -16,6 +16,10 @@ import com.manst.lantransfer.ui.browser.BrowserViewModel
 import com.manst.lantransfer.ui.common.SimpleViewModelFactory
 import com.manst.lantransfer.ui.editor.ServerEditorScreen
 import com.manst.lantransfer.ui.editor.ServerEditorViewModel
+import com.manst.lantransfer.ui.quick.QuickReceiveScreen
+import com.manst.lantransfer.ui.quick.QuickReceiveViewModel
+import com.manst.lantransfer.ui.quick.QuickSendScreen
+import com.manst.lantransfer.ui.quick.QuickSendViewModel
 import com.manst.lantransfer.ui.servers.ServerListScreen
 import com.manst.lantransfer.ui.servers.ServerListViewModel
 import com.manst.lantransfer.ui.server.ServerScreen
@@ -30,6 +34,8 @@ object Routes {
     const val BROWSER = "browser/{profileId}?path={path}"
     const val TRANSFERS = "transfers"
     const val SERVER = "server"
+    const val QUICK_SEND = "quick/send"
+    const val QUICK_RECEIVE = "quick/receive"
 
     fun editor(profileId: String? = null): String =
         if (profileId.isNullOrBlank()) "editor" else "editor?profileId=${Uri.encode(profileId)}"
@@ -67,7 +73,9 @@ fun LanTransferApp(container: AppContainer) {
                 onEditServer = { profileId -> navController.navigate(Routes.editor(profileId)) },
                 onOpenServer = { profileId -> navController.navigate(Routes.browser(profileId)) },
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
-                onOpenLocalServer = { navController.navigate(Routes.SERVER) }
+                onOpenLocalServer = { navController.navigate(Routes.SERVER) },
+                onOpenQuickSend = { navController.navigate(Routes.QUICK_SEND) },
+                onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) }
             )
         }
 
@@ -150,6 +158,30 @@ fun LanTransferApp(container: AppContainer) {
                 }
             )
             ServerScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.QUICK_SEND) {
+            val viewModel: QuickSendViewModel = viewModel(
+                factory = SimpleViewModelFactory {
+                    QuickSendViewModel(quickSendManager = container.quickSendManager)
+                }
+            )
+            QuickSendScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.QUICK_RECEIVE) {
+            val viewModel: QuickReceiveViewModel = viewModel(
+                factory = SimpleViewModelFactory {
+                    QuickReceiveViewModel(quickReceiveManager = container.quickReceiveManager)
+                }
+            )
+            QuickReceiveScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )

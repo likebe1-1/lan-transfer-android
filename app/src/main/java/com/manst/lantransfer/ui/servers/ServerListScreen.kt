@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,6 +58,7 @@ import com.manst.lantransfer.ui.common.ConfirmDialog
 import com.manst.lantransfer.ui.common.EmptyState
 import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 import com.manst.lantransfer.ui.components.ProtocolChip
+import com.manst.lantransfer.ui.quick.QuickTransferCard
 
 /**
  * 服务器列表页：最近使用排序、协议标签、本机服务器与传输队列入口、新增/编辑/删除。
@@ -69,7 +71,9 @@ fun ServerListScreen(
     onEditServer: (String) -> Unit,
     onOpenServer: (String) -> Unit,
     onOpenTransfers: () -> Unit,
-    onOpenLocalServer: () -> Unit
+    onOpenLocalServer: () -> Unit,
+    onOpenQuickSend: () -> Unit,
+    onOpenQuickReceive: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -115,14 +119,26 @@ fun ServerListScreen(
         }
     ) { innerPadding ->
         if (state.servers.isEmpty()) {
-            EmptyState(
-                icon = Icons.Filled.Dns,
-                title = "还没有服务器",
-                description = "添加一台 FTP / FTPS / SFTP / SCP 服务器，\n在局域网内浏览目录并传输文件",
-                modifier = Modifier.padding(innerPadding),
-                actionLabel = "添加服务器",
-                onAction = onAddServer
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp)
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+                QuickTransferCard(
+                    onSend = onOpenQuickSend,
+                    onReceive = onOpenQuickReceive
+                )
+                EmptyState(
+                    icon = Icons.Filled.Dns,
+                    title = "还没有服务器",
+                    description = "添加一台 FTP / FTPS / SFTP / SCP 服务器，\n在局域网内浏览目录并传输文件",
+                    modifier = Modifier.weight(1f),
+                    actionLabel = "添加服务器",
+                    onAction = onAddServer
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -131,6 +147,12 @@ fun ServerListScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item(key = "quick-transfer") {
+                    QuickTransferCard(
+                        onSend = onOpenQuickSend,
+                        onReceive = onOpenQuickReceive
+                    )
+                }
                 item {
                     Text(
                         text = "共 ${state.servers.size} 台服务器 · 最近使用优先",

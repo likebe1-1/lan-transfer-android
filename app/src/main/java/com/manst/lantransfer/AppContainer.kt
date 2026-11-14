@@ -9,6 +9,14 @@ import com.manst.lantransfer.data.LocalServerConfigStore
 import com.manst.lantransfer.data.ShareRepository
 import com.manst.lantransfer.data.ServerRepository
 import com.manst.lantransfer.transfer.DefaultTransferManager
+import com.manst.lantransfer.quick.DefaultQuickReceiveManager
+import com.manst.lantransfer.quick.DefaultQuickSendManager
+import com.manst.lantransfer.quick.DefaultSessionFileStore
+import com.manst.lantransfer.quick.MediaStoreQuickDownloadSink
+import com.manst.lantransfer.quick.QuickDownloadSink
+import com.manst.lantransfer.quick.QuickReceiveManager
+import com.manst.lantransfer.quick.QuickSendManager
+import com.manst.lantransfer.quick.SessionFileStore
 import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
@@ -39,5 +47,21 @@ class AppContainer(context: Context) {
 
     val localServerManager: LocalServerManager by lazy {
         DefaultLocalServerManager(appContext, shareRepository)
+    }
+
+    val sessionFileStore: SessionFileStore by lazy {
+        DefaultSessionFileStore(appContext)
+    }
+
+    val quickDownloadSink: QuickDownloadSink by lazy {
+        MediaStoreQuickDownloadSink(appContext)
+    }
+
+    val quickSendManager: QuickSendManager by lazy {
+        DefaultQuickSendManager(appContext, localServerManager, sessionFileStore)
+    }
+
+    val quickReceiveManager: QuickReceiveManager by lazy {
+        DefaultQuickReceiveManager(appContext, quickDownloadSink)
     }
 }

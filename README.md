@@ -12,6 +12,10 @@
 | --- | --- |
 | ![本机服务器](docs/screenshots/06_server_running.png) | ![共享文件](docs/screenshots/07_server_share_files.png) |
 
+| 快速传文件（入口） | 发送会话（接收码） | 接收文件 |
+| --- | --- | --- |
+| ![快速传文件](docs/screenshots/08_quick_entry.png) | ![发送会话](docs/screenshots/11_quick_send_session.png) | ![接收文件](docs/screenshots/09_quick_receive.png) |
+
 截图由仪器测试 [ScreenshotTourTest.kt](app/src/androidTest/java/com/manst/lantransfer/e2e/ScreenshotTourTest.kt) 在模拟器上用真实服务端数据生成。
 
 ## 功能
@@ -22,6 +26,7 @@
 - **传输队列**：串行执行、实时进度与速度、取消、重试、移除、清空已完成；有任务时以 `dataSync` 前台服务保活并显示进度通知。
 - **四协议统一体验**：同一套浏览 / 传输界面，协议差异被适配层屏蔽。
 - **本机服务器（收发一体）**：App 内一键启动 FTP / FTPS / SFTP / SCP 服务端，另一台手机或电脑用任意一种协议连接本机，即可下载共享文件、上传文件（手机变成局域网文件站）；支持前台服务保活、访问地址展示、共享文件导入/导出/删除。
+- **快速传文件（一键互传）**：两台手机连同一 Wi-Fi，A 选文件后自动开启服务器并显示 6 位接收码；B 在「附近设备」里点一下（或输入 IP + 接收码）即可自动连接、自动下载全部文件；B 也能把文件发回给 A（A 可一键导出到系统下载目录）。全程自动使用 FTP/FTPS/SFTP/SCP 四种协议（接收端自动按加密优先回退，也可手动指定），无需配置服务器/帐号。
 
 ## 协议支持
 
@@ -31,6 +36,28 @@
 | FTPS | Apache Commons Net 3.11.1 | 21（隐式 990） | 用户名/密码 | 显式 `AUTH TLS`（默认）/ 隐式 TLS；可信任局域网自签名证书 |
 | SFTP | JSch 0.2.26（mwiede 维护版） | 22 | 用户名/密码 | 基于 SSH2 子系统，流式传输 + 进度回调 |
 | SCP | JSch 0.2.26（mwiede 维护版） | 22 | 用户名/密码 | 手写 SCP 线协议（`scp -f / -t`），元数据操作走远端 POSIX shell |
+
+## 快速传文件（一键互传）
+
+```
+手机 A（发送）                                   手机 B（接收）
+┌──────────────────────────┐                    ┌──────────────────────────┐
+│ 快速传文件 → 选择文件       │   UDP 局域网广播    │ 快速传文件 → 接收文件       │
+│  自动开启 FTP/FTPS/SFTP/  │  47823（设备/码/端口）│  「附近设备」点一下即连接     │
+│  SCP 服务端 + 6 位接收码   │ ────────────────>  │  自动下载全部文件到下载目录   │
+│  共享会话目录             │ <──────────────── │  「发送文件给对方」反向互传   │
+└──────────────────────────┘   FTP/FTPS/SFTP/SCP  └──────────────────────────┘
+```
+
+使用步骤：
+
+1. 两台手机连同一个 Wi-Fi；
+2. A 打开 App →「快速传文件」→「发送文件」→ 从系统文件选择器选文件（最多 200 个）→ 页面显示 6 位接收码（如 737 229）、本机 IP 与四个协议端口；
+3. B 打开 App →「快速传文件」→「接收文件」→ 附近设备列表会出现 A（也可手动输入 A 的 IP + 接收码）→ 点击 A 即自动连接，并按 SFTP → SCP → FTPS → FTP 优先顺序自动选用一种协议，自动下载全部文件到系统「下载/LanTransfer」；
+4. 互传：B 在连接页点「发送文件给对方」选择文件，即可上传到 A（A 的「收到的文件」会自动出现，可「导出到下载」）；
+5. A 点「结束会话」后临时服务器、会话目录与接收码全部清理；B 断开连接。
+
+说明：会话帐号由接收码派生（无需传帐号密码），服务端端口自动选择空闲端口；「附近设备」依赖同一网段的 UDP 广播，若路由器开启了 AP 隔离导致发现不到，可用手动输入 IP + 接收码（此时使用默认端口 2121/2122/2222）。
 
 ## 本机服务器（服务端模式）
 
@@ -104,7 +131,7 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 ```
 
-**结果：146 个用例全部通过（0 失败）。** 覆盖：
+**结果：171 个用例全部通过（0 失败）。** 覆盖：
 
 - `core`：远端路径归一化 / 拼接 / 父目录，字节与速度格式化；
 - `data`：服务器配置 JSON 持久化（往返、损坏降级、并发写、删除/更新）；
@@ -112,7 +139,8 @@ cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 - `protocol`：用 **MockFtpServer** 与 **Apache MINA SSHD** 在测试内启动真实 FTP/FTPS/SFTP/SCP 服务端，校验列目录、上传下载字节一致性（含 0 字节与 1 MiB 文件）、mkdir/rename/delete、错误密码与未监听端口；
 - `server/ftp`（19 个）：自实现 FTP/FTPS 服务端 + 真实客户端走线（LIST/NLST、PASV/EPSV、显式/隐式 TLS、PROT P 数据通道、上传临时文件原子替换、路径穿越 550 等）；
 - `server/ssh`（19 个）：MINA SSHD 服务端 SFTP/SCP 回环传输、SCP 元数据 shell 命令（ls -la/mkdir/mv/rm/rmdir）与 POSIX 引号解析、越界拒绝、主机密钥持久化；
-- `server` + `data`：共享目录导入/导出/删除、文件名清洗、本机服务器配置持久化。
+- `server` + `data`：共享目录导入/导出/删除、文件名清洗、本机服务器配置持久化；
+- `quick`（25 个）：接收码生成/规范化/凭据派生（与收发双端算法逐位一致）、局域网广播报文编解码与非法数据容错、会话文件名清洗/重名/忽略规则、MediaStore 下载目标语义。
 
 ### 2. 设备集成测试（真实四协议端到端）
 
@@ -154,7 +182,7 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manst.lantransfer.ui.AppSmokeTest --console=plain
 ```
 
-**结果：通过**（含 `AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` 截图巡游）。
+**结果：通过**（含 `AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **26 个用例通过**。
 
 ### 5. Release（R8 混淆）运行时验证
 
@@ -162,6 +190,13 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 - `mapping.txt` 确认 JSch / Commons Net 反射类被完整保留（ProGuard keep 规则生效）；
 - 在 API 29 模拟器安装**签名 release APK**，真实添加 SFTP 服务器并浏览远程目录、下载文件到 `Download/LanTransfer/`，下载文件 MD5 与宿主端源文件一致。证明 R8 混淆后 JSch 反射与传输链路正常；
 - 同一 release APK 上真实启动本机服务器，宿主机用 FTP/FTPS/SFTP/SCP 四协议完成上传下载回读（4/4 通过），证明 R8 混淆下 MINA SSHD、BouncyCastle 自签证书与自实现 FTP 服务端运行正常。
+
+### 5.1 快速传文件端到端测试
+
+1. **设备内**（`QuickTransferEngineTest`）：真机/模拟器上启动发送会话 → 四种协议分别「连接 + 自动接收 + MediaStore 校验 + 回传互传」→ 会话结束目录清理；另验证 UDP 广播→扫描回环；
+2. **跨设备**（`QuickHostE2EBridge` + `scripts/quick_mode_hosttest.py`）：设备启动发送会话后，宿主机作为「另一台设备」读取会话信息，通过三种端口用 FTP/FTPS/SFTP/SCP 下载全部文件（SHA-256 校验）并各上传一个文件；设备端断言对方上传的 4 个文件全部出现在「收到的文件」。
+
+**结果：设备内 4 协议全通过；跨设备 4/4 协议通过，设备端断言通过。**
 
 ### 6. 真机验证（Xiaomi 25080RABDC · Android 16 · arm64-v8a）
 
@@ -181,6 +216,10 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 3. 点「测试连接」确认可达后保存；
 4. 点击服务器进入远端浏览：点目录进入、点文件下载；右上角上传按钮从系统文件选择器选文件；长按条目可重命名 / 删除；工具栏可新建文件夹；
 5. 顶栏队列图标查看进度，支持取消与重试。
+
+### 快速传文件（最简互传）
+
+见上文「快速传文件（一键互传）」：A「发送文件」→ 显示接收码；B「接收文件」→ 附近设备点击即收；B 可反向发送文件给 A。
 
 ### 服务端模式（手机之间互传）
 
@@ -213,7 +252,9 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 - SCP 的列目录/建目录/重命名/删除依赖远端 POSIX shell（仅支持 SCP 传输、无 shell 的服务器只能下载/上传文件）；
 - 本机服务器仅密码认证、单个共享目录、FTP 服务端只支持被动模式（PASV/EPSV）；FTPS 使用进程内自签证书，App 重启后证书会重新生成；
 - 共享目录位于应用外部私有目录（Android/data/…/files/share），卸载 App 会随之删除；其他设备上传后需在页面「刷新」查看；
-- 未实现局域网服务发现（需手动填写地址）。
+- 快速传文件的「附近设备」依赖同网段 UDP 广播，部分路由器开启 AP 隔离时发现不到，可手动输入 IP + 接收码（默认端口）；
+- 快速传文件收到的文件保存在会话临时目录，需在会话内「导出到下载」；结束会话后会话目录会被删除（发送方的原始文件不受影响）；
+- 快速传文件单次最多 200 个文件、不支持断点续传；会话接收码在局域网广播中明文可见（临时会话设计，仅限可信局域网内置使用）。
 
 ## 安全说明
 

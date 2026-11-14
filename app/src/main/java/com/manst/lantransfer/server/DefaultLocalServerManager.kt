@@ -52,7 +52,7 @@ class DefaultLocalServerManager(
                 return@withLock Result.failure(IllegalArgumentException(configErrors.joinToString("；")))
             }
 
-            val shareRoot = shareRepository.directory().apply { mkdirs() }
+            val shareRoot = (config.shareRootOverride?.let { java.io.File(it) } ?: shareRepository.directory()).apply { mkdirs() }
             mutableState.value = LocalServerState(
                 phase = LocalServerState.Phase.STARTING,
                 config = config,
