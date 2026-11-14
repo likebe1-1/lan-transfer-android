@@ -167,6 +167,8 @@ data class QuickTransferProgress(
     val direction: Direction,
     val bytesTransferred: Long,
     val totalBytes: Long,
+    /** 当前瞬时速度（字节/秒，滑动窗口计算）；未知时为 0。 */
+    val bytesPerSecond: Long = 0L,
     val fileIndex: Int = 0,
     val fileCount: Int = 0
 ) {

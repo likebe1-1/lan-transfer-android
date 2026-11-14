@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.manst.lantransfer.MainActivity
 import com.manst.lantransfer.R
+import com.manst.lantransfer.core.Format
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -74,6 +75,13 @@ internal object TransferNotifications {
             percent = (running.progress * 100f).toInt()
             val builder = StringBuilder(running.displayName)
             if (!indeterminate) builder.append(" · ").append(percent).append("%")
+            if (running.bytesPerSecond > 0L) {
+                builder.append(" · ").append(Format.speed(running.bytesPerSecond))
+                val remaining = running.totalBytes - running.transferredBytes
+                if (remaining > 0L) {
+                    builder.append(" · ").append(Format.remainingTime(remaining, running.bytesPerSecond))
+                }
+            }
             if (queuedCount > 0) builder.append("（队列中 ").append(queuedCount).append(" 个）")
             text = builder.toString()
         } else {

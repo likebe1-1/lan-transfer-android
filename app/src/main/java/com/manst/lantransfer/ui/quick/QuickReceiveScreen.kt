@@ -69,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -386,7 +387,9 @@ private fun ManualJoinCard(
                 null
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("quick_manual_host")
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
@@ -402,7 +405,9 @@ private fun ManualJoinCard(
                     null
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("quick_manual_code")
             )
             QuickProtocolDropdown(
                 selected = state.protocol,
@@ -418,7 +423,9 @@ private fun ManualJoinCard(
         Button(
             onClick = onJoinManual,
             enabled = !state.isJoining,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("quick_manual_connect")
         ) {
             if (state.isJoining) {
                 CircularProgressIndicator(
@@ -650,6 +657,33 @@ private fun TransferProgressCard(progress: QuickTransferProgress) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val percent = if (progress.totalBytes > 0L) {
+                (progress.bytesTransferred * 100L / progress.totalBytes).toInt().coerceIn(0, 100)
+            } else {
+                null
+            }
+            Text(
+                text = buildString {
+                    if (percent != null) {
+                        append(percent).append("% · ")
+                    }
+                    append(Format.speed(progress.bytesPerSecond))
+                },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = Format.remainingTime(
+                    if (progress.totalBytes > 0L) progress.totalBytes - progress.bytesTransferred else -1L,
+                    progress.bytesPerSecond
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

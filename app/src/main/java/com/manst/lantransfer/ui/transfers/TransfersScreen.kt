@@ -218,6 +218,26 @@ private fun TransferTaskCard(
                 }
             }
 
+            if (task.state == TransferState.RUNNING) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "进度 " + (task.progress * 100f).toInt() + "%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = Format.remainingTime(
+                            task.totalBytes - task.transferredBytes,
+                            task.bytesPerSecond
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             if (task.state == TransferState.FAILED && errorMessage != null) {
                 Text(
                     text = errorMessage,

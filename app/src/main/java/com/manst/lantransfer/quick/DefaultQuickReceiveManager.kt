@@ -15,6 +15,7 @@ import com.manst.lantransfer.protocol.RemoteFileSystem
 import com.manst.lantransfer.protocol.RemoteFileSystems
 import com.manst.lantransfer.transfer.TransferDirection
 import com.manst.lantransfer.transfer.TransferErrors
+import com.manst.lantransfer.transfer.TransferProgressTracker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -417,18 +418,24 @@ class DefaultQuickReceiveManager(
             return Result.failure(IllegalStateException(message))
         }
         val totalBytes = if (entry.size > 0L) entry.size else -1L
-        publishProgress(displayName, QuickTransferProgress.Direction.RECEIVE, 0L, totalBytes, index, fileCount)
+        val tracker = TransferProgressTracker()
+        publishProgress(displayName, QuickTransferProgress.Direction.RECEIVE, 0L, totalBytes, index, fileCount, 0L)
         try {
             target.outputStream.use { sink ->
                 currentFileSystem.download(entry.path, sink) { transferred ->
-                    publishProgress(
-                        displayName,
-                        QuickTransferProgress.Direction.RECEIVE,
-                        transferred,
-                        totalBytes,
-                        index,
-                        fileCount
-                    )
+                    // 节流推送并附带滑动窗口瞬时速度，UI 据此显示速度与预计剩余时间
+                    val sample = tracker.sample(System.currentTimeMillis(), transferred, totalBytes)
+                    if (sample != null) {
+                        publishProgress(
+                            displayName,
+                            QuickTransferProgress.Direction.RECEIVE,
+                            transferred,
+                            totalBytes,
+                            index,
+                            fileCount,
+                            sample.bytesPerSecond
+                        )
+                    }
                 }
             }
             val committed = target.commit()
@@ -461,7 +468,8 @@ class DefaultQuickReceiveManager(
         transferred: Long,
         totalBytes: Long,
         index: Int,
-        fileCount: Int
+        fileCount: Int,
+        bytesPerSecond: Long = 0L
     ) {
         mutableState.update {
             it.copy(
@@ -470,6 +478,7 @@ class DefaultQuickReceiveManager(
                     direction = direction,
                     bytesTransferred = transferred,
                     totalBytes = totalBytes,
+                    bytesPerSecond = bytesPerSecond,
                     fileIndex = index,
                     fileCount = fileCount
                 )
@@ -523,24 +532,30 @@ class DefaultQuickReceiveManager(
                         throw IOException("无法读取本地文件：" + rawName, e)
                     } ?: throw IOException("无法读取本地文件：" + rawName)
                     val totalBytes = if (declaredSize > 0L) declaredSize else -1L
+                    val tracker = TransferProgressTracker()
                     publishProgress(
                         displayName,
                         QuickTransferProgress.Direction.SEND,
                         0L,
                         totalBytes,
                         index,
-                        uris.size
+                        uris.size,
+                        0L
                     )
                     input.use { source ->
                         currentFileSystem.upload(source, remotePath, totalBytes) { transferred ->
-                            publishProgress(
-                                displayName,
-                                QuickTransferProgress.Direction.SEND,
-                                transferred,
-                                totalBytes,
-                                index,
-                                uris.size
-                            )
+                            val sample = tracker.sample(System.currentTimeMillis(), transferred, totalBytes)
+                            if (sample != null) {
+                                publishProgress(
+                                    displayName,
+                                    QuickTransferProgress.Direction.SEND,
+                                    transferred,
+                                    totalBytes,
+                                    index,
+                                    uris.size,
+                                    sample.bytesPerSecond
+                                )
+                            }
                         }
                     }
                     existingNames.add(displayName)
