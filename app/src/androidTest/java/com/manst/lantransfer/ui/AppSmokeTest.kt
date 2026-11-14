@@ -41,9 +41,9 @@ class AppSmokeTest {
     fun launch_showsTitleAndEmptyState() {
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("局域网传输").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("LanLink").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithText("局域网传输").assertIsDisplayed()
+            composeRule.onNodeWithText("LanLink").assertIsDisplayed()
             composeRule.onNodeWithText("还没有服务器").assertIsDisplayed()
         }
     }

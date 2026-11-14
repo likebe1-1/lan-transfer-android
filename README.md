@@ -1,6 +1,6 @@
-# 局域网传输 LanTransfer
+# LanLink（局域网传输）
 
-一个 **Android 局域网文件传输** 应用：用手机连接同一局域网内的服务器，通过 **FTP / FTPS / SFTP / SCP** 四种协议浏览远端目录，并上传、下载文件。
+**LanLink** 是一个 **Android 局域网文件传输** 应用：用手机连接同一局域网内的服务器，通过 **FTP / FTPS / SFTP / SCP** 四种协议浏览远端目录，并上传、下载文件。
 
 > GitHub 仓库：[likebe1-1/lan-transfer-android](https://github.com/likebe1-1/lan-transfer-android)
 
@@ -30,7 +30,8 @@
 
 | 版本 | 说明 | 直接下载 |
 | --- | --- | --- |
-| **v2.0.0（最新）** | **断点续传 / 文件夹传输 / 历史记录 / 分享直达 / 扫码快传** | [LanTransfer-v2.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.0.0/LanTransfer-v2.0.0.apk) |
+| **v2.1.0（最新 · LanLink 品牌版）** | **LanLink 新名称** + 断点续传 / 文件夹 / 历史 / 分享 / 扫码快传 | [LanLink-v2.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.0/LanLink-v2.1.0.apk) |
+| v2.0.0 | 断点续传 / 文件夹传输 / 历史记录 / 分享直达 / 扫码快传 | [LanTransfer-v2.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.0.0/LanTransfer-v2.0.0.apk) |
 | v1.3.1 | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
 | v1.3.0 | 传输中显示进度 / 速度 / 剩余时间 | [LanTransfer-v1.3.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.0/LanTransfer-v1.3.0.apk) |
 | v1.2.1 | 首次启动安全提示 | [LanTransfer-v1.2.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.2.1/LanTransfer-v1.2.1.apk) |
@@ -38,7 +39,7 @@
 | v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
 | v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
 
-> APK 与 `v1.0.0` ~ `v2.0.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+> APK 与 `v1.0.0` ~ `v2.1.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
 
 ## 功能
 

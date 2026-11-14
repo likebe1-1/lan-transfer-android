@@ -84,7 +84,7 @@ fun ServerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "局域网传输", fontWeight = FontWeight.SemiBold) },
+                title = { Text(text = "LanLink", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(onClick = onOpenLocalServer) {
                         Icon(

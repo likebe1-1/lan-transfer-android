@@ -99,7 +99,7 @@ class QuickScreenshotTest {
         createContentUri("旅行照片.jpg", ByteArray(512 * 1024) { (it % 251).toByte() })
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
             waitForText("快速传文件")
             capture("08_quick_entry")
 

@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LanTransfer"
+rootProject.name = "LanLink"
 include(":app")

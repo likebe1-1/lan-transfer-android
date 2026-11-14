@@ -75,7 +75,7 @@ class QuickScreenSmokeTest {
     @Test
     fun receiveScreen_showsDiscoveryAndManualEntry() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
 
             composeRule.onNodeWithText("接收文件").performClick()
             waitForText("附近设备")
@@ -100,7 +100,7 @@ class QuickScreenSmokeTest {
     @Test
     fun sendScreen_showsPickFilesEntry() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
 
             composeRule.onNodeWithText("发送文件").performClick()
             waitForText("选择要发送的文件")

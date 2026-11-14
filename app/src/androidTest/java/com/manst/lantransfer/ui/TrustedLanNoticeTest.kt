@@ -48,13 +48,13 @@ class TrustedLanNoticeTest {
             // 对话框关闭后应回到服务器列表
             assertTrue(
                 "确认后应展示服务器列表",
-                composeRule.onAllNodesWithText("局域网传输").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("LanLink").fetchSemanticsNodes().isNotEmpty()
             )
         }
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("局域网传输").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("LanLink").fetchSemanticsNodes().isNotEmpty()
             }
             assertTrue(
                 "第二次启动不应再次展示首启提示",

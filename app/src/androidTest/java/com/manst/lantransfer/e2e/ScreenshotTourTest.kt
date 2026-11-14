@@ -106,7 +106,7 @@ class ScreenshotTourTest {
     @Test
     fun screenshotTour() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
             waitForText("家用 NAS")
             capture("01_server_list")
 

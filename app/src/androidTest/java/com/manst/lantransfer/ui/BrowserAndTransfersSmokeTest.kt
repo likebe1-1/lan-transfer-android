@@ -85,7 +85,7 @@ class BrowserAndTransfersSmokeTest {
     @Test
     fun browserScreen_showsFolderDownloadAndUploadMenu() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
             waitForText("冒烟测试服务器")
             composeRule.onNodeWithText("冒烟测试服务器").performClick()
 
@@ -103,7 +103,7 @@ class BrowserAndTransfersSmokeTest {
     @Test
     fun transfersScreen_showsHistoryEntry() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("局域网传输")
+            waitForText("LanLink")
             composeRule.onNodeWithContentDescription("传输队列").performClick()
             waitForText("传输队列")
             composeRule.onNodeWithText("传输队列").assertIsDisplayed()

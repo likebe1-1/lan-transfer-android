@@ -54,7 +54,7 @@ class ServerScreenSmokeTest {
     fun openLocalServer_showsCoreSections() {
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("局域网传输").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("LanLink").fetchSemanticsNodes().isNotEmpty()
             }
 
             composeRule.onNodeWithContentDescription("本机服务器").performClick()
