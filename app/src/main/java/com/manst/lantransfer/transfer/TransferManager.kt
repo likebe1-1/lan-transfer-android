@@ -44,7 +44,7 @@ data class TransferTask(
  *
  * 实现要求：
  * - 每个任务使用独立的 [com.manst.lantransfer.protocol.RemoteFileSystem] 连接，任务结束即关闭；
- * - 下载写入 MediaStore 公共目录 Download/LanTransfer/（Android 10+ 无需存储权限）；
+ * - 下载直接写入系统「下载」目录 Download/（不新建子文件夹，Android 10+ 无需存储权限）；
  * - 上传通过 SAF content Uri 读取本地文件；
  * - 有进行中任务时启动前台服务保活，队列清空后停止。
  */

@@ -112,7 +112,7 @@ internal object TransferNotifications {
         }
         val text = when {
             task.state == TransferState.COMPLETED && task.direction == TransferDirection.DOWNLOAD ->
-                "已保存到 Download/LanTransfer：" + (task.localDisplayName ?: task.displayName)
+                "已保存到系统「下载」目录：" + (task.localDisplayName ?: task.displayName)
             task.state == TransferState.COMPLETED -> "已上传：" + task.displayName
             task.error != null -> task.displayName + "：" + task.error
             else -> task.displayName

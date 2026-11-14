@@ -21,7 +21,7 @@ interface SessionFileStore {
 
     fun listFiles(directory: File): List<QuickFile>
 
-    /** 把会话目录中的文件导出到系统下载目录（Download/LanTransfer/），返回展示名。 */
+    /** 把会话目录中的文件导出到系统下载根目录（Download/），返回展示名。 */
     suspend fun exportToDownloads(file: File): Result<String>
 
     fun clear(directory: File)

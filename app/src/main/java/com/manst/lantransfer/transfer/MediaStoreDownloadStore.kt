@@ -12,7 +12,7 @@ import java.io.OutputStream
 import java.util.Locale
 
 /**
- * 下载落盘：写入 MediaStore.Downloads 的公共目录 Download/LanTransfer/。
+ * 下载落盘：写入 MediaStore.Downloads 的公共目录 Download/。
  *
  * Android 10+ 通过 MediaStore 写入公共目录无需存储权限。写入过程遵循 IS_PENDING 约定：
  * 先插入 pending 记录 -> 写入字节 -> 提交（IS_PENDING=0）；失败时删除 pending 记录，避免留下空文件。
@@ -121,8 +121,8 @@ internal class MediaStoreDownloadStore(private val context: Context) {
     }
 
     companion object {
-        /** 下载子目录：Download/LanTransfer/。 */
-        val RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/"
+        /** 下载子目录：Download/。 */
+        val RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
         private const val DEFAULT_MIME_TYPE = "application/octet-stream"
         private const val TAG = "MediaStoreDownloadStore"
     }

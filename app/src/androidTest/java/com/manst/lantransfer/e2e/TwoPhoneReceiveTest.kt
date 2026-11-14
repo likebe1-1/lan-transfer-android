@@ -130,7 +130,7 @@ class TwoPhoneReceiveTest {
             context.contentResolver.delete(
                 collection,
                 MediaStore.Downloads.RELATIVE_PATH + " = ?",
-                arrayOf(Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/")
+                arrayOf(Environment.DIRECTORY_DOWNLOADS + "/")
             )
         }
     }

@@ -15,7 +15,7 @@ import java.io.OutputStream
 import java.util.Locale
 
 /**
- * 接收端下载落盘目标默认实现：MediaStore.Downloads（Download/LanTransfer/）。
+ * 接收端下载落盘目标默认实现：MediaStore.Downloads（Download/）。
  *
  * 生命周期：
  * 1. [open] 插入 IS_PENDING=1 的媒体库记录并预留不重名的展示名；
@@ -189,6 +189,6 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
     private companion object {
         const val TAG = "MediaStoreQuickDownloadSink"
         const val DEFAULT_MIME_TYPE = "application/octet-stream"
-        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/"
+        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
     }
 }

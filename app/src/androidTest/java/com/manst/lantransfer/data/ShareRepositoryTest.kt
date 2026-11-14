@@ -199,6 +199,6 @@ class ShareRepositoryTest {
 
     private companion object {
         val TEST_DOWNLOADS_DIR: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransferTest/"
-        val EXPORT_DOWNLOADS_DIR: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/"
+        val EXPORT_DOWNLOADS_DIR: String = Environment.DIRECTORY_DOWNLOADS + "/"
     }
 }

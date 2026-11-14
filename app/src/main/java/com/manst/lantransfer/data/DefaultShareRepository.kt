@@ -306,6 +306,6 @@ class DefaultShareRepository(private val context: Context) : ShareRepository {
         const val IMPORT_TEMP_SUFFIX = ".importing"
         const val COPY_BUFFER_SIZE = 64 * 1024
         const val DEFAULT_MIME_TYPE = "application/octet-stream"
-        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/"
+        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
     }
 }

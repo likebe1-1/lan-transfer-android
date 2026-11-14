@@ -65,7 +65,7 @@
 4. **一任务一连接**：不做连接池。每次浏览会话、每个传输任务各自建立 `RemoteFileSystem`，结束即关闭；取消任务 = 关闭连接。FTP 控制连接并发限制、SSH 会话状态隔离问题都被绕开。
 5. **传输串行**：局域网带宽下多任务并发只会互相抢带宽并增加失败面，队列串行执行、展示逐条进度。
 6. **前台服务保活**：有活动任务时启动 `TransferService`（`dataSync` 类型）显示通知；队列清空即停止。
-7. **下载落盘**：Android 10+ 用 `MediaStore.Downloads` 写入公共目录 `Download/LanTransfer/`，无需存储权限；上传用系统文件选择器（SAF）返回的 content Uri 流式读取。
+7. **下载落盘**：Android 10+ 用 `MediaStore.Downloads` 直接写入公共目录 `Download/` 根目录（不新建子文件夹），无需存储权限；上传用系统文件选择器（SAF）返回的 content Uri 流式读取。
 
 ## 4. 协议层设计
 
@@ -213,7 +213,7 @@ A：选文件 → 生成 6 位接收码 → SessionFileStore 复制到会话目�
    → UdpBeaconBroadcaster 每秒广播 {code, deviceName, addresses, ftp/ftps/ssh ports, protocols}
 B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+码
    → QuickSessionCode.deriveCredentials(code) 得到帐号 → 按 SFTP→SCP→FTPS→FTP 回退连接
-   → 列出文件 → 自动逐个下载（MediaStore.Downloads，Download/LanTransfer/）
+   → 列出文件 → 自动逐个下载（MediaStore.Downloads，直接写入 Download/ 根目录）
    → 互传：同一个连接把 B 的文件上传回 A（A 端「收到的文件」+ 导出到下载）
 ```
 

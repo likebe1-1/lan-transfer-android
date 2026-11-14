@@ -259,7 +259,7 @@ class DefaultSessionFileStore(private val context: Context) : SessionFileStore {
         const val ROOT_DIRECTORY_NAME = "quick-send"
         const val COPY_BUFFER_SIZE = 64 * 1024
         const val DEFAULT_MIME_TYPE = "application/octet-stream"
-        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/LanTransfer/"
+        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
     }
 }
 

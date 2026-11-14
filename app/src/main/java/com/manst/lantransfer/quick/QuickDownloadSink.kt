@@ -15,7 +15,7 @@ interface QuickDownloadTarget {
     fun abort()
 }
 
-/** 接收端下载落盘目标（MediaStore.Downloads：Download/LanTransfer/）。 */
+/** 接收端下载落盘目标（MediaStore.Downloads：直接写入系统「下载」根目录 Download/）。 */
 interface QuickDownloadSink {
     fun open(displayName: String, mimeType: String? = null): QuickDownloadTarget
 }
