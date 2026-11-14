@@ -118,19 +118,20 @@ App 同时是客户端和服务端：
 
 ## 构建
 
-前置：JDK 21、Android SDK（platform 35、build-tools）、Gradle 由 wrapper 提供。
+前置：JDK 17+（推荐 21）、Android SDK（platform 35、build-tools，设置 `ANDROID_HOME` 或 `local.properties`）、Gradle 由 wrapper 提供。
 
 ```powershell
-# 统一入口（固定 JDK 21，Windows）
+# 统一入口（Windows）：优先使用调用方已设置的 JAVA_HOME；
+# 未设置且存在 D:\SDK\JDK21 时使用该路径，否则回退 PATH 中的 java
 cmd /c "scripts\gw.cmd" :app:assembleDebug
 cmd /c "scripts\gw.cmd" :app:assembleRelease
 
 # 产物
 #   app/build/outputs/apk/debug/app-debug.apk
-#   app/build/outputs/apk/release/app-release.apk（R8 + 资源压缩，已用 lantransfer-release.jks 签名）
+#   app/build/outputs/apk/release/app-release.apk（R8 + 资源压缩）
 ```
 
-Release 签名配置位于 `keystore.properties`（含密钥库路径与口令，已在 `.gitignore` 中排除，请勿提交）。
+> 克隆本仓库后默认可以直接构建 **debug** 包。**release** 包需要自备签名：新建 `keystore.properties`（含密钥库路径与口令）并使用自己的 `.jks` 文件；签名文件已在 `.gitignore` 中排除，不会进入仓库。
 
 安装：
 
