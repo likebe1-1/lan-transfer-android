@@ -140,7 +140,7 @@ interface RemoteFileSystem : Closeable {
 | Release（R8）运行时 | API 29 模拟器安装签名 release APK | 客户端 SFTP 下载正常；本机服务器四协议由宿主机实测上传下载回读 4/4 通过；mapping.txt 确认 JSch/Commons Net/SSHD/BouncyCastle 反射类完整保留 |
 | 快速传文件设备测试 | API 29 模拟器 QuickTransferEngineTest | 发送会话四协议分别连接/自动接收/MediaStore 校验/回传互传/会话清理全部通过；UDP 广播→扫描回环通过 |
 | 快速传文件跨设备 E2E | QuickHostE2EBridge + adb forward + 宿主机 Python 客户端 | 宿主机读取会话后以 FTP/FTPS/SFTP/SCP 下载并 SHA-256 校验全部文件、各上传一个文件；设备端断言 4 个上传文件全部出现在「收到的文件」 |
-| 设备测试总览（v1.2） | API 29 模拟器 | 26 个用例全部通过（快速传文件 + 本机服务器 + 共享目录 + UI 冒烟） |
+| 设备测试总览（v1.2.1） | API 29 模拟器 | 27 个用例全部通过（首次启动提示 + 快速传文件 + 本机服务器 + 共享目录 + UI 冒烟） |
 | **真机功能测试** | Xiaomi 25080RABDC / Android 16 / arm64-v8a（无线 ADB） | 13 个非 UI 用例全部通过：本机服务器四协议回环收发与共享目录落盘、SFTP/SCP 服务端、共享目录仓库 |
 | **真机跨设备 E2E** | 真机（服务器）+ 宿主机（另一台设备，无线 adb forward） | FTP/FTPS/SFTP/SCP 4/4 通过；设备端断言宿主机上传文件全部出现在共享目录 |
 | 真机 release 运行时 | 真机安装签名 R8 APK | 安装/启动成功，无崩溃、无类缺失；release 版保留在设备上 |

@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.manst.lantransfer.LanTransferApplication
 import com.manst.lantransfer.MainActivity
+import com.manst.lantransfer.core.AppPreferences
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -39,6 +40,7 @@ class ServerScreenSmokeTest {
     @Before
     fun resetPersistedState() {
         targetContext.deleteFile("servers.json")
+        AppPreferences(targetContext).trustedLanNoticeShown = true
         targetContext.deleteFile("local_server.json")
         // 本机服务器是进程级单例：先确保处于停止状态，避免其他用例遗留运行中的服务器影响断言。
         val application = targetContext.applicationContext as LanTransferApplication

@@ -13,6 +13,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.manst.lantransfer.LanTransferApplication
 import com.manst.lantransfer.MainActivity
+import com.manst.lantransfer.core.AppPreferences
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -36,6 +37,7 @@ class QuickScreenSmokeTest {
     @Before
     fun resetPersistedState() {
         targetContext.deleteFile("servers.json")
+        AppPreferences(targetContext).trustedLanNoticeShown = true
         targetContext.deleteFile("local_server.json")
         // 快捷传输管理器是进程级单例：清理其他用例可能遗留的会话/连接，保证断言从干净状态开始。
         val application = targetContext.applicationContext as LanTransferApplication

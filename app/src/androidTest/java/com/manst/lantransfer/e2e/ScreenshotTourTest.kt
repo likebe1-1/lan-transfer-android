@@ -39,6 +39,7 @@ class ScreenshotTourTest {
 
     @Before
     fun seedServers() {
+        com.manst.lantransfer.core.AppPreferences(context).trustedLanNoticeShown = true
         val storageFile = File(context.filesDir, "servers.json")
         storageFile.delete()
         val repository = JsonServerRepository(storageFile)

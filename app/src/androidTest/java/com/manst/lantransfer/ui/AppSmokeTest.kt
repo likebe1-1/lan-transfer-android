@@ -10,6 +10,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.manst.lantransfer.MainActivity
+import com.manst.lantransfer.core.AppPreferences
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +33,8 @@ class AppSmokeTest {
     @Before
     fun clearPersistedServers() {
         targetContext.deleteFile("servers.json")
+        // 首启提示在本轮功能测试中视为已确认，避免对话框遮挡界面断言（专门用例见 TrustedLanNoticeTest）
+        AppPreferences(targetContext).trustedLanNoticeShown = true
     }
 
     @Test

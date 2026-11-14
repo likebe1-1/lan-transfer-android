@@ -2,6 +2,11 @@ package com.manst.lantransfer.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -10,10 +15,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.manst.lantransfer.AppContainer
+import com.manst.lantransfer.core.AppPreferences
 import com.manst.lantransfer.core.RemotePath
 import com.manst.lantransfer.ui.browser.BrowserScreen
 import com.manst.lantransfer.ui.browser.BrowserViewModel
 import com.manst.lantransfer.ui.common.SimpleViewModelFactory
+import com.manst.lantransfer.ui.common.TrustedLanNoticeDialog
 import com.manst.lantransfer.ui.editor.ServerEditorScreen
 import com.manst.lantransfer.ui.editor.ServerEditorViewModel
 import com.manst.lantransfer.ui.quick.QuickReceiveScreen
@@ -53,6 +60,12 @@ object Routes {
 @Composable
 fun LanTransferApp(container: AppContainer) {
     val navController = rememberNavController()
+    // 首次启动提示：只在第一次打开应用时出现一次（偏好持久化，确认后不再打扰）
+    val context = LocalContext.current
+    val preferences = remember { AppPreferences(context) }
+    var showTrustedLanNotice by rememberSaveable {
+        mutableStateOf(!preferences.trustedLanNoticeShown)
+    }
 
     NavHost(
         navController = navController,
@@ -186,5 +199,14 @@ fun LanTransferApp(container: AppContainer) {
                 onBack = { navController.popBackStack() }
             )
         }
+    }
+
+    if (showTrustedLanNotice) {
+        TrustedLanNoticeDialog(
+            onConfirm = {
+                preferences.trustedLanNoticeShown = true
+                showTrustedLanNotice = false
+            }
+        )
     }
 }

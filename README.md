@@ -16,6 +16,10 @@
 | --- | --- | --- |
 | ![快速传文件](docs/screenshots/08_quick_entry.png) | ![发送会话](docs/screenshots/11_quick_send_session.png) | ![接收文件](docs/screenshots/09_quick_receive.png) |
 
+| 首次启动提示 |
+| --- |
+| ![首次启动提示](docs/screenshots/12_trusted_lan_notice.png) |
+
 截图由仪器测试 [ScreenshotTourTest.kt](app/src/androidTest/java/com/manst/lantransfer/e2e/ScreenshotTourTest.kt) 在模拟器上用真实服务端数据生成。
 
 ## 功能
@@ -27,6 +31,7 @@
 - **四协议统一体验**：同一套浏览 / 传输界面，协议差异被适配层屏蔽。
 - **本机服务器（收发一体）**：App 内一键启动 FTP / FTPS / SFTP / SCP 服务端，另一台手机或电脑用任意一种协议连接本机，即可下载共享文件、上传文件（手机变成局域网文件站）；支持前台服务保活、访问地址展示、共享文件导入/导出/删除。
 - **快速传文件（一键互传）**：两台手机连同一 Wi-Fi，A 选文件后自动开启服务器并显示 6 位接收码；B 在「附近设备」里点一下（或输入 IP + 接收码）即可自动连接、自动下载全部文件；B 也能把文件发回给 A（A 可一键导出到系统下载目录）。全程自动使用 FTP/FTPS/SFTP/SCP 四种协议（接收端自动按加密优先回退，也可手动指定），无需配置服务器/帐号。
+- **首次启动安全提示**：第一次打开应用时弹出「请在你信任的局域网下使用」提示，说明本应用会使用局域网协议传输文件、公共 Wi-Fi 的风险与 FTP 明文说明，确认后记录本地偏好、不再重复弹出。
 
 ## 协议支持
 
@@ -36,6 +41,15 @@
 | FTPS | Apache Commons Net 3.11.1 | 21（隐式 990） | 用户名/密码 | 显式 `AUTH TLS`（默认）/ 隐式 TLS；可信任局域网自签名证书 |
 | SFTP | JSch 0.2.26（mwiede 维护版） | 22 | 用户名/密码 | 基于 SSH2 子系统，流式传输 + 进度回调 |
 | SCP | JSch 0.2.26（mwiede 维护版） | 22 | 用户名/密码 | 手写 SCP 线协议（`scp -f / -t`），元数据操作走远端 POSIX shell |
+
+## 首次启动提示
+
+第一次安装并打开应用时，会展示「请在你信任的局域网下使用」对话框（[截图](docs/screenshots/12_trusted_lan_notice.png)），内容包括：
+
+- 本应用会在当前局域网内使用 FTP/FTPS/SFTP/SCP 传输文件；
+- 建议仅在家庭、公司等可信 Wi-Fi 下使用，公共 Wi-Fi 存在被监听/伪造设备风险；
+- FTP 为明文协议，自动协商时优先使用加密协议；
+- 点击「我已知晓」后记录本地偏好（SharedPreferences），后续启动不再弹出；卸载重装后会再次提示。
 
 ## 快速传文件（一键互传）
 
@@ -182,7 +196,7 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manst.lantransfer.ui.AppSmokeTest --console=plain
 ```
 
-**结果：通过**（含 `AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **26 个用例通过**。
+**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **26 个用例通过**。
 
 ### 5. Release（R8 混淆）运行时验证
 

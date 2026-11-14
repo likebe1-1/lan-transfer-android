@@ -42,6 +42,7 @@ class ServerScreenshotTest {
     @Before
     fun prepareServer() = runBlocking {
         shotsDir.mkdirs()
+        com.manst.lantransfer.core.AppPreferences(context).trustedLanNoticeShown = true
         val share = app.container.shareRepository
         val server = app.container.localServerManager
         server.stop()

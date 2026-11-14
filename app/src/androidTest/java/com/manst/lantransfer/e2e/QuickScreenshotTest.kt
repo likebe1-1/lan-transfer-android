@@ -44,6 +44,7 @@ class QuickScreenshotTest {
     @Before
     fun prepare() = runBlocking {
         shotsDir.mkdirs()
+        com.manst.lantransfer.core.AppPreferences(context).trustedLanNoticeShown = true
         app.container.quickSendManager.stopSession()
         app.container.quickReceiveManager.stopDiscovery()
         context.getExternalFilesDir(null)?.let { root ->
