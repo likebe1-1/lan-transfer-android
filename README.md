@@ -24,6 +24,21 @@
 
 截图由仪器测试 [ScreenshotTourTest.kt](app/src/androidTest/java/com/manst/lantransfer/e2e/ScreenshotTourTest.kt) 在模拟器上用真实服务端数据生成。
 
+## 下载安装包
+
+历史版本签名 APK 已发布在 [GitHub Releases](https://github.com/likebe1-1/lan-transfer-android/releases)（要求 Android 10+ / minSdk 29）：
+
+| 版本 | 说明 | 直接下载 |
+| --- | --- | --- |
+| v1.3.1（最新） | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
+| v1.3.0 | 传输中显示进度 / 速度 / 剩余时间 | [LanTransfer-v1.3.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.0/LanTransfer-v1.3.0.apk) |
+| v1.2.1 | 首次启动安全提示 | [LanTransfer-v1.2.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.2.1/LanTransfer-v1.2.1.apk) |
+| v1.2.0 | 快速传文件（一键互传） | [LanTransfer-v1.2.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.2.0/LanTransfer-v1.2.0.apk) |
+| v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
+| v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
+
+> APK 与 `v1.0.0` ~ `v1.3.1` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+
 ## 功能
 
 - **服务器管理**：新增 / 编辑 / 删除服务器配置，协议彩色标识，最近使用排序，一键「测试连接」。
