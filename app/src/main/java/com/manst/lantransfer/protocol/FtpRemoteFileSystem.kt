@@ -193,6 +193,10 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         )
     }
 
+    /** FTP/FTPS 支持 REST 偏移续传下载与 APPE 追加续传上传。 */
+    override val supportsResume: Boolean
+        get() = true
+
     override suspend fun download(
         remotePath: String,
         sink: OutputStream,
@@ -201,15 +205,53 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         val client = requireConnected()
         val remote = RemotePath.normalize(remotePath)
         try {
-            val progressSink = ProgressOutputStream(sink, onProgress)
-            if (!client.retrieveFile(remote, progressSink)) {
-                throw replyFailure("下载文件", remote)
-            }
-            progressSink.flush()
+            downloadBlocking(client, remote, sink, 0L, onProgress)
         } catch (e: LanTransferException) {
             throw e
         } catch (e: IOException) {
             throw operationFailure("下载文件", remote, e)
+        }
+    }
+
+    override suspend fun downloadPartial(
+        remotePath: String,
+        sink: OutputStream,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ): Unit = withContext(Dispatchers.IO) {
+        if (startOffset < 0L) throw IllegalArgumentException("续传偏移不能为负数：" + startOffset)
+        val client = requireConnected()
+        val remote = RemotePath.normalize(remotePath)
+        try {
+            downloadBlocking(client, remote, sink, startOffset, onProgress)
+        } catch (e: LanTransferException) {
+            throw e
+        } catch (e: IOException) {
+            throw operationFailure("下载文件", remote, e)
+        }
+    }
+
+    /**
+     * 下载主体：startOffset > 0 时通过 Commons Net 的 restart offset（FTP REST 命令）从远端指定偏移读取，
+     * 进度回调返回 startOffset + 本次已读字节数。REST 只对紧随其后的传输命令生效，完成后必须复位。
+     */
+    private fun downloadBlocking(
+        client: FTPClient,
+        remote: String,
+        sink: OutputStream,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        val progressSink = ProgressOutputStream(sink, onProgress, startOffset)
+        val restartApplied = startOffset > 0L
+        try {
+            if (restartApplied) client.setRestartOffset(startOffset)
+            if (!client.retrieveFile(remote, progressSink)) {
+                throw replyFailure("下载文件", remote)
+            }
+            progressSink.flush()
+        } finally {
+            if (restartApplied) client.setRestartOffset(0L)
         }
     }
 
@@ -222,22 +264,120 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         val client = requireConnected()
         val remote = RemotePath.normalize(remotePath)
         try {
-            // ALLO 只是空间预分配提示，服务器拒绝时继续传输
-            if (sizeHint > 0L) {
-                try {
-                    client.allocate(sizeHint)
-                } catch (e: IOException) {
-                    if (closed) throw TransferCancelledException()
-                }
-            }
-            val progressSource = ProgressInputStream(source, onProgress)
-            if (!client.storeFile(remote, progressSource)) {
-                throw replyFailure("上传文件", remote)
-            }
+            uploadBlocking(client, source, remote, sizeHint, 0L, onProgress)
         } catch (e: LanTransferException) {
             throw e
         } catch (e: IOException) {
             throw operationFailure("上传文件", remote, e)
+        }
+    }
+
+    override suspend fun uploadPartial(
+        source: InputStream,
+        remotePath: String,
+        sizeHint: Long,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ): Unit = withContext(Dispatchers.IO) {
+        if (startOffset < 0L) throw IllegalArgumentException("续传偏移不能为负数：" + startOffset)
+        val client = requireConnected()
+        val remote = RemotePath.normalize(remotePath)
+        if (startOffset == 0L) {
+            try {
+                uploadBlocking(client, source, remote, sizeHint, 0L, onProgress)
+            } catch (e: LanTransferException) {
+                throw e
+            } catch (e: IOException) {
+                throw operationFailure("上传文件", remote, e)
+            }
+            return@withContext
+        }
+
+        // 续传上传前必须确认远端已存在的字节数与调用方给出的偏移一致，否则追加会损坏文件
+        val remoteSize = try {
+            readRemoteSize(client, remote)
+        } catch (e: IOException) {
+            throw operationFailure("获取文件大小", remote, e)
+        }
+        if (remoteSize != startOffset) {
+            val actual = if (remoteSize < 0L) "未知（文件不存在或服务器不支持 SIZE）" else remoteSize.toString() + " 字节"
+            throw IOException(
+                "无法续传上传「" + remote + "」：远端已有 " + actual +
+                    "，与续传偏移 " + startOffset + " 字节不一致，请重新上传"
+            )
+        }
+        // 调用方传入的是完整文件流，这里跳过已上传的前缀
+        skipFully(source, startOffset)
+        try {
+            uploadBlocking(client, source, remote, sizeHint, startOffset, onProgress)
+        } catch (e: LanTransferException) {
+            throw e
+        } catch (e: IOException) {
+            throw operationFailure("上传文件", remote, e)
+        }
+    }
+
+    /**
+     * 上传主体：startOffset 为 0 时用 STOR 全量覆盖；大于 0 时用 APPE 追加剩余字节，
+     * 进度回调从 startOffset 起累计（调用方传入的是完整文件流，已在上层跳过前缀）。
+     */
+    private fun uploadBlocking(
+        client: FTPClient,
+        source: InputStream,
+        remote: String,
+        sizeHint: Long,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        val remainingHint = if (sizeHint > startOffset) sizeHint - startOffset else -1L
+        // ALLO 只是空间预分配提示，服务器拒绝时继续传输
+        if (remainingHint > 0L) {
+            try {
+                client.allocate(remainingHint)
+            } catch (e: IOException) {
+                if (closed) throw TransferCancelledException()
+            }
+        }
+        val progressSource = ProgressInputStream(source, onProgress, startOffset)
+        val uploaded = if (startOffset > 0L) {
+            client.appendFile(remote, progressSource)
+        } else {
+            client.storeFile(remote, progressSource)
+        }
+        if (!uploaded) throw replyFailure("上传文件", remote)
+    }
+
+    override suspend fun size(path: String): Long = withContext(Dispatchers.IO) {
+        val client = requireConnected()
+        val remote = RemotePath.normalize(path)
+        try {
+            readRemoteSize(client, remote)
+        } catch (e: LanTransferException) {
+            throw e
+        } catch (e: IOException) {
+            throw operationFailure("获取文件大小", remote, e)
+        }
+    }
+
+    /** SIZE 命令；文件不存在、是目录或服务器不支持 SIZE 时返回 -1（契约语义）。 */
+    private fun readRemoteSize(client: FTPClient, remote: String): Long {
+        val raw = client.getSize(remote) ?: return -1L
+        return raw.trim().toLongOrNull()?.takeIf { it >= 0L } ?: -1L
+    }
+
+    /** 跳过输入流前 count 字节（续传上传时跳过已上传前缀）；来源不足时抛 IOException。 */
+    private fun skipFully(source: InputStream, count: Long) {
+        var remaining = count
+        while (remaining > 0L) {
+            val skipped = source.skip(remaining)
+            if (skipped > 0L) {
+                remaining -= skipped
+                continue
+            }
+            if (source.read() < 0) {
+                throw IOException("本地文件长度不足：还需跳过 " + remaining + " 字节（续传偏移 " + count + " 字节），请重新上传")
+            }
+            remaining -= 1L
         }
     }
 
@@ -387,9 +527,10 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     /** 上传方向的进度输入流：只统计已读字节，不关闭调用方传入的流。 */
     private class ProgressInputStream(
         private val delegate: InputStream,
-        private val onProgress: (Long) -> Unit
+        private val onProgress: (Long) -> Unit,
+        initialTotal: Long = 0L
     ) : InputStream() {
-        private var total = 0L
+        private var total = initialTotal
 
         override fun read(): Int {
             val value = delegate.read()
@@ -419,9 +560,10 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     /** 下载方向的进度输出流：只统计已写字节，不关闭调用方传入的流。 */
     private class ProgressOutputStream(
         private val delegate: OutputStream,
-        private val onProgress: (Long) -> Unit
+        private val onProgress: (Long) -> Unit,
+        initialTotal: Long = 0L
     ) : OutputStream() {
-        private var total = 0L
+        private var total = initialTotal
 
         override fun write(value: Int) {
             delegate.write(value)

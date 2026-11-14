@@ -11,6 +11,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -18,6 +19,7 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -162,6 +164,96 @@ class FtpsRemoteFileSystemTest {
             runCatching { client.connect() }.exceptionOrNull()
         }
         assertTrue("期望 ConnectionException，实际：$error", error is ConnectionException)
+    }
+
+    // ------------------------------------------------------------ 断点续传
+
+    @Test
+    fun explicitTlsDownloadResumeAfterInterruption() = runBlocking {
+        val payload = randomBytes(300_000, 905L)
+        Files.write(root.resolve("resume.bin"), payload)
+        val interruptedAt = 110_000
+        val partial = ByteArrayOutputStream()
+
+        FtpRemoteFileSystem(profile()).use { client ->
+            client.connect()
+            assertTrue("FTPS 应支持断点续传", client.supportsResume)
+            val error = runCatching {
+                client.download("/resume.bin", InterruptingOutputStream(partial, interruptedAt))
+            }.exceptionOrNull()
+            assertNotNull("第一段下载应因模拟中断而失败", error)
+        }
+        assertEquals(interruptedAt, partial.size())
+
+        val resumed = ByteArrayOutputStream()
+        val progress = ArrayList<Long>()
+        FtpRemoteFileSystem(profile()).use { client ->
+            client.connect()
+            client.downloadPartial("/resume.bin", resumed, partial.size().toLong()) { progress.add(it) }
+        }
+        assertArrayEquals("断点续传后拼接内容应与源文件一致", payload, partial.toByteArray() + resumed.toByteArray())
+        assertEquals(payload.size.toLong(), progress.last())
+        assertTrue("进度应包含续传偏移", progress.all { it >= interruptedAt.toLong() })
+    }
+
+    @Test
+    fun explicitTlsUploadResumeAfterPartialUpload() = runBlocking {
+        val payload = randomBytes(256 * 1024, 906L)
+        val half = payload.size / 2
+        val remotePath = "/upload-resume.bin"
+
+        FtpRemoteFileSystem(profile()).use { client ->
+            client.connect()
+            client.uploadPartial(
+                ByteArrayInputStream(payload.copyOfRange(0, half)),
+                remotePath,
+                half.toLong(),
+                0L
+            )
+        }
+        assertEquals(half.toLong(), Files.size(root.resolve("upload-resume.bin")))
+
+        val progress = ArrayList<Long>()
+        FtpRemoteFileSystem(profile()).use { client ->
+            client.connect()
+            assertEquals(half.toLong(), client.size(remotePath))
+            client.uploadPartial(
+                ByteArrayInputStream(payload),
+                remotePath,
+                payload.size.toLong(),
+                half.toLong()
+            ) { progress.add(it) }
+            assertEquals(payload.size.toLong(), progress.last())
+            assertTrue(progress.all { it >= half.toLong() })
+            val readBack = ByteArrayOutputStream()
+            client.download(remotePath, readBack)
+            assertArrayEquals("续传上传后回读应字节一致", payload, readBack.toByteArray())
+        }
+        assertArrayEquals(payload, Files.readAllBytes(root.resolve("upload-resume.bin")))
+    }
+
+    @Test
+    fun uploadResumeRejectsMismatchedOffset() = runBlocking {
+        val payload = randomBytes(64_000, 907L)
+        val remotePath = "/mismatch-ftps.bin"
+        FtpRemoteFileSystem(profile()).use { client ->
+            client.connect()
+            client.upload(ByteArrayInputStream(payload.copyOfRange(0, 10_000)), remotePath, 10_000L)
+            val error = runCatching {
+                client.uploadPartial(ByteArrayInputStream(payload), remotePath, payload.size.toLong(), 20_000L)
+            }.exceptionOrNull()
+            assertTrue("远端大小与续传偏移不一致应抛 IOException，实际：$error", error is IOException)
+            assertTrue("错误信息应说明不一致", error?.message?.contains("不一致") == true)
+        }
+    }
+
+    @Test
+    fun sizeReturnsFileSizeOrMinusOne() = runBlocking {
+        withClient(profile()) { client ->
+            assertEquals(bigBytes.size.toLong(), client.size("/big.bin"))
+            assertEquals(0L, client.size("/empty.bin"))
+            assertEquals(-1L, client.size("/missing.bin"))
+        }
     }
 
     // ------------------------------------------------------------ 辅助

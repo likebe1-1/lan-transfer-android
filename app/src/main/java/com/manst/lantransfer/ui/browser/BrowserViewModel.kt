@@ -1,6 +1,7 @@
 package com.manst.lantransfer.ui.browser
 
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
@@ -108,7 +109,38 @@ class BrowserViewModel(
         }
     }
 
-    /** 上传 SAF 选中的文件到当前目录。 */
+    /** 下载当前所在文件夹（递归，保留子目录结构）。 */
+    fun downloadCurrentFolder() {
+        val profile = _uiState.value.profile ?: return
+        if (_uiState.value.isBusy) return
+        val path = _uiState.value.currentPath
+        val rawName = RemotePath.name(path)
+        val folderName = if (rawName == RemotePath.ROOT || rawName.isBlank()) "全部文件" else rawName
+        try {
+            transferManager.enqueueDownloadFolder(profile, path, folderName)
+            _messages.trySend("已加入文件夹下载队列：$folderName")
+        } catch (e: Exception) {
+            _messages.trySend("文件夹下载入队失败：${e.toUserMessage()}")
+        }
+    }
+
+    /** 递归上传 SAF 目录树到当前目录（保留子目录结构）。 */
+    fun uploadFolder(treeUri: Uri) {
+        val profile = _uiState.value.profile ?: return
+        takePersistablePermission(treeUri)
+        viewModelScope.launch {
+            try {
+                transferManager.enqueueUploadFolder(profile, treeUri, _uiState.value.currentPath)
+                _messages.send("已加入文件夹上传队列")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _messages.send("文件夹上传入队失败：${e.toUserMessage()}")
+            }
+        }
+    }
+
+    /** 上传 SAF 选中的文件到当前目录（逐个记录持久化读权限，便于进程重启后断点续传）。 */
     fun upload(uris: List<Uri>) {
         val profile = _uiState.value.profile ?: return
         if (uris.isEmpty()) return
@@ -117,6 +149,7 @@ class BrowserViewModel(
             var queued = 0
             var failed = 0
             for (uri in uris) {
+                takePersistablePermission(uri)
                 val metadata = try {
                     withContext(Dispatchers.IO) { resolveUploadMetadata(uri) }
                 } catch (e: CancellationException) {
@@ -293,6 +326,20 @@ class BrowserViewModel(
             } catch (e: Exception) {
                 Log.w(TAG, "记录服务器最近使用时间失败", e)
             }
+        }
+    }
+
+    /**
+     * 记录 SAF 授予的持久化读权限（失败忽略：部分来源只提供临时授权，
+     * 进程重启后的断点续传会退化为重新入队）。
+     */
+    private fun takePersistablePermission(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: SecurityException) {
+            // 该 Uri 只提供临时授权，忽略即可。
+        } catch (_: Exception) {
+            // 个别厂商的 SAF 实现会抛其他异常，同样忽略。
         }
     }
 

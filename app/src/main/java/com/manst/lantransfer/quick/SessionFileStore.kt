@@ -19,6 +19,13 @@ interface SessionFileStore {
     /** 复制 SAF 选择的文件到会话目录（文件名清洗、重名自动追加序号）；单个失败不影响其他。 */
     suspend fun importFiles(directory: File, uris: List<Uri>): SessionImportResult
 
+    /**
+     * 导入 SAF 目录树（OpenDocumentTree 返回的 tree Uri）：保留子目录结构复制到 [directory]。
+     * 返回所有成功导入的文件（relativePath 为相对会话目录的路径）。
+     */
+    suspend fun importDirectory(directory: File, treeUri: Uri): SessionImportResult =
+        throw UnsupportedOperationException("当前实现不支持文件夹导入")
+
     fun listFiles(directory: File): List<QuickFile>
 
     /** 把会话目录中的文件导出到系统下载根目录（Download/），返回展示名。 */

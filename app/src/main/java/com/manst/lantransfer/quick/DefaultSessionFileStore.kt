@@ -8,8 +8,10 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
 import android.webkit.MimeTypeMap
+import androidx.documentfile.provider.DocumentFile
 import com.manst.lantransfer.core.LanTransferException
 import com.manst.lantransfer.data.ShareFileNames
+import com.manst.lantransfer.transfer.TransferFolderPaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -103,6 +105,126 @@ class DefaultSessionFileStore(private val context: Context) : SessionFileStore {
                 SessionImportResult(imported = imported, failed = failed)
             }
         }
+
+    /**
+     * 导入 SAF 目录树：保留「被选目录名」作为会话目录下的顶层，递归保留内部子目录结构。
+     * 逐文件使用与 [importFiles] 相同的临时文件 + rename 原子落盘、名字清洗与重名规则；
+     * 单个文件失败不影响其他文件。返回的 [QuickFile.relativePath] 是相对会话目录的真实路径。
+     */
+    override suspend fun importDirectory(directory: File, treeUri: Uri): SessionImportResult =
+        importMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val targetDirectory = requireSessionDirectory(directory)
+                    ?: throw IllegalArgumentException("非法的会话目录")
+                targetDirectory.mkdirs()
+                val root = DocumentFile.fromTreeUri(appContext, treeUri)
+                    ?: throw IllegalArgumentException("无法读取所选文件夹")
+                val rawRootName = queryDisplayName(treeUri)
+                    ?: root.name
+                    ?: "文件夹"
+                val safeRootName = ShareFileNames.sanitize(rawRootName)
+                val imported = mutableListOf<QuickFile>()
+                val failed = mutableListOf<String>()
+                importDocumentDirectory(root, safeRootName, targetDirectory, imported, failed)
+                SessionImportResult(imported = imported, failed = failed)
+            }
+        }
+
+    private fun importDocumentDirectory(
+        documentDirectory: DocumentFile,
+        relativeDirectory: String,
+        sessionDirectory: File,
+        imported: MutableList<QuickFile>,
+        failed: MutableList<String>
+    ) {
+        val children = try {
+            documentDirectory.listFiles()
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "读取 SAF 子目录失败，已跳过：" + relativeDirectory, e)
+            failed += relativeDirectory
+            return
+        }
+        for (child in children) {
+            val rawName = child.name?.takeIf { it.isNotBlank() } ?: continue
+            val rawRelative = if (relativeDirectory.isEmpty()) rawName else relativeDirectory + "/" + rawName
+            if (child.isDirectory) {
+                val safeRelative = TransferFolderPaths.sanitizeRelativePath(rawRelative) ?: safeRelativeFallback(rawRelative)
+                importDocumentDirectory(child, safeRelative, sessionDirectory, imported, failed)
+            } else {
+                importDocumentFile(child, rawRelative, sessionDirectory, imported, failed)
+            }
+        }
+    }
+
+    private fun importDocumentFile(
+        document: DocumentFile,
+        rawRelativePath: String,
+        sessionDirectory: File,
+        imported: MutableList<QuickFile>,
+        failed: MutableList<String>
+    ) {
+        var tempFile: File? = null
+        try {
+            val safeRelative = TransferFolderPaths.sanitizeRelativePath(rawRelativePath)
+                ?: throw IOException("文件名非法")
+            val relativeParent = safeRelative.substringBeforeLast('/', "")
+            val targetDirectory = if (relativeParent.isEmpty()) {
+                sessionDirectory
+            } else {
+                File(sessionDirectory, relativeParent)
+            }
+            if (!targetDirectory.exists() && !targetDirectory.mkdirs() && !targetDirectory.exists()) {
+                throw IOException("创建会话子目录失败")
+            }
+            if (!isInsideSessionDirectory(targetDirectory, sessionDirectory)) {
+                throw IOException("非法的目标目录")
+            }
+            val rawName = safeRelative.substringAfterLast('/')
+            val existingNames = targetDirectory.list()?.toList().orEmpty()
+            val name = ShareFileNames.uniqueName(rawName, existingNames)
+            val target = File(targetDirectory, name)
+            val temp = File(targetDirectory, SessionFileNames.importTempName(name))
+            tempFile = temp
+            val input = resolver.openInputStream(document.uri)
+                ?: throw IOException("无法读取所选文件")
+            input.use { source ->
+                FileOutputStream(temp).use { sink ->
+                    source.copyTo(sink, COPY_BUFFER_SIZE)
+                    sink.flush()
+                }
+            }
+            if (!temp.renameTo(target)) throw IOException("保存会话文件失败")
+            tempFile = null
+            val actualRelative = target.relativeToOrNull(sessionDirectory)?.invariantSeparatorsPath
+                ?: safeRelative
+            imported += QuickFile(
+                name = target.name,
+                size = target.length(),
+                modifiedAt = target.lastModified(),
+                relativePath = actualRelative
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "复制文件夹内的文件失败：" + rawRelativePath, e)
+            failed += rawRelativePath
+        } finally {
+            tempFile?.let { if (it.exists()) it.delete() }
+        }
+    }
+
+    private fun safeRelativeFallback(rawRelative: String): String {
+        val name = rawRelative.substringAfterLast('/')
+        return ShareFileNames.sanitize(name)
+    }
+
+    private fun isInsideSessionDirectory(target: File, sessionDirectory: File): Boolean {
+        return try {
+            val root = sessionDirectory.canonicalFile
+            val candidate = target.canonicalFile
+            candidate.path == root.path || candidate.path.startsWith(root.path + File.separator)
+        } catch (e: IOException) {
+            false
+        }
+    }
 
     override fun listFiles(directory: File): List<QuickFile> {
         val target = requireSessionDirectory(directory) ?: return emptyList()

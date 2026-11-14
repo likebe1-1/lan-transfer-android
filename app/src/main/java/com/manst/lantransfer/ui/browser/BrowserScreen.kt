@@ -27,9 +27,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DriveFolderUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -94,6 +96,12 @@ fun BrowserScreen(
         if (uris.isNotEmpty()) viewModel.upload(uris)
     }
 
+    val uploadFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) viewModel.uploadFolder(treeUri)
+    }
+
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
 
     // 系统返回键：先回上级目录，根目录时退出页面。
@@ -128,11 +136,16 @@ fun BrowserScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { uploadLauncher.launch(arrayOf("*/*")) },
+                        onClick = viewModel::downloadCurrentFolder,
                         enabled = state.profile != null && !state.isBusy
                     ) {
-                        Icon(Icons.Filled.UploadFile, contentDescription = "上传文件")
+                        Icon(Icons.Filled.FolderZip, contentDescription = "下载当前文件夹")
                     }
+                    UploadMenu(
+                        enabled = state.profile != null && !state.isBusy,
+                        onPickFiles = { uploadLauncher.launch(arrayOf("*/*")) },
+                        onPickFolder = { uploadFolderLauncher.launch(null) }
+                    )
                     IconButton(
                         onClick = viewModel::refresh,
                         enabled = state.profile != null && !state.isBusy
@@ -186,7 +199,7 @@ fun BrowserScreen(
                 state.entries.isEmpty() -> EmptyState(
                     icon = Icons.Filled.FolderOpen,
                     title = "此目录为空",
-                    description = "点击右上角上传文件，或新建一个文件夹",
+                    description = "点击右上角上传文件或文件夹，或新建一个文件夹",
                     actionLabel = "上传文件",
                     onAction = { uploadLauncher.launch(arrayOf("*/*")) }
                 )
@@ -244,6 +257,39 @@ fun BrowserScreen(
             },
             onDismiss = { deleteTarget = null }
         )
+    }
+}
+
+/** 顶栏上传下拉菜单：上传文件 / 上传文件夹。 */
+@Composable
+private fun UploadMenu(
+    enabled: Boolean,
+    onPickFiles: () -> Unit,
+    onPickFolder: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }, enabled = enabled) {
+            Icon(Icons.Filled.UploadFile, contentDescription = "上传")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("上传文件") },
+                leadingIcon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onPickFiles()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("上传文件夹") },
+                leadingIcon = { Icon(Icons.Filled.DriveFolderUpload, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onPickFolder()
+                }
+            )
+        }
     }
 }
 

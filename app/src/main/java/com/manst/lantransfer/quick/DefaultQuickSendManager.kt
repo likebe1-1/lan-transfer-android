@@ -3,6 +3,7 @@ package com.manst.lantransfer.quick
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.util.Log
 import com.manst.lantransfer.server.LanAddress
 import com.manst.lantransfer.server.LocalServerConfig
@@ -33,10 +34,12 @@ import java.net.ServerSocket
  * 1. 生成 6 位接收码，用 [QuickSessionCode.deriveCredentials] 派生临时帐号（双方算法一致，无需手动配置）；
  * 2. 选择三个空闲端口（优先 [QuickTransferDefaults.DEFAULT_FTP_PORT] / DEFAULT_FTPS_PORT / DEFAULT_SSH_PORT，
  *    被占用则逐个 +1；SFTP 与 SCP 共用 ssh 端口）；
- * 3. 用 [SessionFileStore.importFiles] 把用户选择的文件复制进会话目录（externalFilesDir/quick-send/接收码）；
- * 4. 以会话目录为共享根目录、四协议全开启动 [LocalServerManager]；
+ * 3. 把用户选择的文件复制进会话目录（externalFilesDir/quick-send/接收码）：普通文件走
+ *    [SessionFileStore.importFiles]，SAF 目录树（OpenDocumentTree 返回的 tree Uri）走
+ *    [SessionFileStore.importDirectory] 并保留子目录结构（QuickFile.relativePath）；
+ * 4. 以会话目录为共享根目录、四协议全开启动 [LocalServerManager]，子目录可被对端浏览/下载；
  * 5. 每秒通过 [UdpBeaconBroadcaster] 在局域网广播 [QuickSessionInfo]；
- * 6. 每 2 秒扫描会话目录：把会话开始后新出现（或内容被覆盖）的文件归入 receivedFiles，实现互传。
+ * 6. 每 2 秒递归扫描会话目录：把会话开始后新出现（或内容被覆盖）的文件归入 receivedFiles（含子目录），实现互传。
  *
  * 生命周期：同一时间只允许一个会话；[stopSession] 幂等，停止广播、停止服务器、删除会话目录并把状态复位。
  */
@@ -64,10 +67,10 @@ class DefaultQuickSendManager(
     /** 会话开始（导入完成）时的会话目录快照，用于识别对方后来上传的文件。 */
     private var baselineFiles: Map<String, FileFingerprint> = emptyMap()
 
-    /** 本机导入的文件名（sendingFiles 始终只展示这些本机文件）。 */
-    private var importedNames: Set<String> = emptySet()
+    /** 本机导入文件的键（relativePath ?: name；sendingFiles 只展示这些本机文件）。 */
+    private var importedKeys: Set<String> = emptySet()
 
-    /** 已导出到系统下载目录的收到文件：文件名 -> 导出时的修改时间，避免重复出现在 receivedFiles。 */
+    /** 已导出到系统下载目录的收到文件：文件键 -> 导出时的修改时间，避免重复出现在 receivedFiles。 */
     private val exportedReceivedAt: MutableMap<String, Long> = HashMap()
 
     private data class FileFingerprint(val size: Long, val modifiedAt: Long)
@@ -111,13 +114,43 @@ class DefaultQuickSendManager(
         val directory = sessionFileStore.directoryFor(code)
         sessionDirectory = directory
 
-        val importResult = sessionFileStore.importFiles(directory, uris)
-        if (importResult.imported.isEmpty()) {
-            val detail = if (importResult.failed.isEmpty()) "" else "（" + importResult.failed.joinToString("、") + "）"
+        // 普通文件 Uri 与 SAF 目录树 Uri 分开导入：目录树保留子目录结构（QuickFile.relativePath）
+        val fileUris = ArrayList<Uri>(uris.size)
+        val treeUris = ArrayList<Uri>()
+        for (uri in uris) {
+            if (isTreeUri(uri)) treeUris += uri else fileUris += uri
+        }
+        val importedFiles = ArrayList<QuickFile>(uris.size)
+        val failedItems = ArrayList<String>()
+        if (fileUris.isNotEmpty()) {
+            val result = sessionFileStore.importFiles(directory, fileUris)
+            importedFiles += result.imported
+            failedItems += result.failed
+        }
+        for (treeUri in treeUris) {
+            try {
+                val result = sessionFileStore.importDirectory(directory, treeUri)
+                importedFiles += result.imported
+                failedItems += result.failed
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 旧实现/导入器异常不应让整个会话崩溃：记录失败并继续导入其他选择
+                Log.w(TAG, "导入文件夹失败：" + treeUri, e)
+                val reason = if (e is UnsupportedOperationException) {
+                    "当前版本不支持文件夹导入"
+                } else {
+                    e.message ?: "导入失败"
+                }
+                failedItems += "文件夹（" + reason + "）"
+            }
+        }
+        if (importedFiles.isEmpty()) {
+            val detail = if (failedItems.isEmpty()) "" else "（" + failedItems.joinToString("、") + "）"
             return failStart("没有成功导入任何文件" + detail)
         }
-        if (importResult.failed.isNotEmpty()) {
-            Log.w(TAG, "部分文件复制到会话目录失败：" + importResult.failed.joinToString("、"))
+        if (failedItems.isNotEmpty()) {
+            Log.w(TAG, "部分文件/文件夹复制到会话目录失败：" + failedItems.joinToString("、"))
         }
 
         val ports = selectPorts()
@@ -155,9 +188,17 @@ class DefaultQuickSendManager(
             runningEndpoints.any { it.protocol == protocol }
         }
 
-        val sendingFiles = sessionFileStore.listFiles(directory)
-        importedNames = sendingFiles.mapTo(LinkedHashSet()) { it.name }
-        baselineFiles = sendingFiles.associate { it.name to FileFingerprint(it.size, it.modifiedAt) }
+        val importedKeySet = importedFiles.mapTo(HashSet()) { fileKey(it) }
+        importedKeys = importedKeySet
+        val scannedFiles = scanSessionFiles(directory)
+        var sendingFiles = scannedFiles.filter { fileKey(it) in importedKeySet }
+        if (sendingFiles.isEmpty()) {
+            // 兜底：个别导入实现的 relativePath 可能与磁盘实际路径不完全一致，至少保证导入成功的文件可见
+            sendingFiles = importedFiles.sortedWith(QUICK_FILE_ORDER)
+        }
+        baselineFiles = sendingFiles.associate {
+            fileKey(it) to FileFingerprint(it.size, it.modifiedAt)
+        }
         val deviceName = Build.MODEL?.trim().orEmpty().ifBlank { "Android 设备" }
         mutableState.value = QuickSendState(
             phase = QuickSendPhase.WAITING,
@@ -203,8 +244,8 @@ class DefaultQuickSendManager(
             sessionFileStore.clear(directory)
         }
         sessionDirectory = null
-        importedNames = emptySet()
         baselineFiles = emptyMap()
+        importedKeys = emptySet()
         exportedReceivedAt.clear()
         mutableState.value = QuickSendState()
     }
@@ -255,8 +296,9 @@ class DefaultQuickSendManager(
         val current = mutableState.value
         if (current.phase != QuickSendPhase.WAITING) return
         val directory = sessionDirectory ?: return
-        val files = sessionFileStore.listFiles(directory)
-        val sendingFiles = files.filter { it.name in importedNames }
+        // 递归扫描会话目录：对方可能把文件上传到任意子目录（FTP/SFTP 均可建目录）
+        val files = scanSessionFiles(directory)
+        val sendingFiles = files.filter { fileKey(it) in importedKeys }
         val receivedFiles = files.filter { isReceivedFile(it) }
         if (current.sendingFiles == sendingFiles && current.receivedFiles == receivedFiles) return
         mutableState.value = current.copy(sendingFiles = sendingFiles, receivedFiles = receivedFiles)
@@ -264,12 +306,13 @@ class DefaultQuickSendManager(
 
     /** 会话开始后新出现的文件、或内容被覆盖过的文件，视为对方上传的收到文件。 */
     private fun isReceivedFile(file: QuickFile): Boolean {
-        val exportedAt = exportedReceivedAt[file.name]
+        val key = fileKey(file)
+        val exportedAt = exportedReceivedAt[key]
         if (exportedAt != null) {
             if (exportedAt == file.modifiedAt) return false
-            exportedReceivedAt.remove(file.name)
+            exportedReceivedAt.remove(key)
         }
-        val baseline = baselineFiles[file.name] ?: return true
+        val baseline = baselineFiles[key] ?: return true
         return baseline.size != file.size || baseline.modifiedAt != file.modifiedAt
     }
 
@@ -282,27 +325,40 @@ class DefaultQuickSendManager(
             }
             val directory = sessionDirectory
                 ?: return@withContext exportFailure("快捷发送会话目录不存在")
-            val safeName = fileName.trim()
-            if (safeName.isEmpty()) return@withContext exportFailure("文件名不能为空")
-            val file = File(directory, safeName)
-            if (!file.isFile) return@withContext exportFailure("会话中没有这个文件：" + safeName)
+            val wanted = QuickFolderPaths.normalizeRelative(fileName)
+                ?: return@withContext exportFailure("文件名不能为空")
+            val received = mutableState.value.receivedFiles
+            // UI 可能传文件名（顶层文件）或相对路径（子目录文件），两种都要能找到
+            val entry = received.firstOrNull {
+                QuickFolderPaths.fileKey(it.relativePath, it.name) == wanted
+            } ?: received.firstOrNull {
+                QuickFolderPaths.normalizeRelative(it.relativePath) == wanted || it.name == fileName.trim()
+            } ?: return@withContext exportFailure("会话中没有这个文件：" + fileName.trim())
+            val relativePath = QuickFolderPaths.normalizeRelative(entry.relativePath)
+            val file = relativePath?.let { path ->
+                File(directory, path.replace('/', File.separatorChar))
+            } ?: File(directory, entry.name)
+            if (!file.isFile) return@withContext exportFailure("会话中没有这个文件：" + fileName.trim())
             val insideSession = try {
-                file.canonicalFile.parentFile?.canonicalPath == directory.canonicalFile.canonicalPath
+                file.canonicalFile.path.startsWith(directory.canonicalFile.path + File.separator)
             } catch (e: IOException) {
                 false
             }
-            if (!insideSession) return@withContext exportFailure("非法的文件名：" + safeName)
+            if (!insideSession) return@withContext exportFailure("非法的文件名：" + fileName.trim())
 
+            val key = QuickFolderPaths.fileKey(entry.relativePath, entry.name)
             val result = sessionFileStore.exportToDownloads(file)
             result.onSuccess { displayName ->
-                exportedReceivedAt[file.name] = file.lastModified()
+                exportedReceivedAt[key] = file.lastModified()
                 val current = mutableState.value
                 mutableState.value = current.copy(
-                    receivedFiles = current.receivedFiles.filterNot { it.name == file.name }
+                    receivedFiles = current.receivedFiles.filterNot {
+                        QuickFolderPaths.fileKey(it.relativePath, it.name) == key
+                    }
                 )
-                Log.i(TAG, "已把收到的文件导出到系统下载目录：" + displayName)
+                Log.i(TAG, "已把收到的文件导出到系统下载目录：" + displayName + "（" + key + "）")
             }.onFailure { error ->
-                Log.w(TAG, "导出收到的文件失败：" + file.name, error)
+                Log.w(TAG, "导出收到的文件失败：" + key, error)
             }
             result.fold(
                 onSuccess = { displayName -> Result.success(displayName) },
@@ -313,6 +369,42 @@ class DefaultQuickSendManager(
 
     private fun exportFailure(message: String): Result<String> =
         Result.failure(IllegalStateException(message))
+
+    // ------------------------------------------------------------ 会话目录递归扫描
+
+    /** OpenDocumentTree 返回的目录树 Uri（普通文件/分享 Uri 不是 tree Uri）。 */
+    private fun isTreeUri(uri: Uri): Boolean = try {
+        DocumentsContract.isTreeUri(uri)
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * 递归扫描会话目录，返回所有可见文件：顶层文件 relativePath 为 null，子目录文件为 "/" 分隔相对路径。
+     * 忽略隐藏文件、导入临时文件与隐藏目录（与数据层 listFiles 的可见性规则保持一致）。
+     */
+    private fun scanSessionFiles(directory: File): List<QuickFile> {
+        if (!directory.isDirectory) return emptyList()
+        val files = directory.walkTopDown()
+            .onEnter { dir -> dir == directory || !dir.name.startsWith(".") }
+            .filter { file -> file.isFile && !isIgnoredSessionFileName(file.name) }
+            .map { file ->
+                QuickFile(
+                    name = file.name,
+                    size = file.length(),
+                    modifiedAt = file.lastModified(),
+                    relativePath = QuickFolderPaths.relativePathOf(directory, file)
+                )
+            }
+            .toList()
+        return files.sortedWith(QUICK_FILE_ORDER)
+    }
+
+    private fun isIgnoredSessionFileName(name: String): Boolean =
+        name.startsWith(".") || name.endsWith(IMPORT_TEMP_SUFFIX)
+
+    private fun fileKey(file: QuickFile): String =
+        QuickFolderPaths.fileKey(file.relativePath, file.name)
 
     // ------------------------------------------------------------ 端口选择
 
@@ -355,5 +447,12 @@ class DefaultQuickSendManager(
         const val MIN_PORT = 1024
         const val MAX_PORT = 65535
         const val RECEIVED_SCAN_INTERVAL_MS = 2_000L
+
+        /** 数据层导入临时文件后缀（隐藏文件规则与 SessionFileNames 保持一致）。 */
+        const val IMPORT_TEMP_SUFFIX = ".importing"
     }
 }
+
+/** 会话文件排序：与数据层 listFiles 一致，按修改时间倒序、同时间按名称不区分大小写。 */
+private val QUICK_FILE_ORDER: Comparator<QuickFile> = compareByDescending<QuickFile> { it.modifiedAt }
+    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }

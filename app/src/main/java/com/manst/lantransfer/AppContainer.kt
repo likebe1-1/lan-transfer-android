@@ -1,6 +1,7 @@
 package com.manst.lantransfer
 
 import android.content.Context
+import android.net.Uri
 import java.io.File
 import com.manst.lantransfer.data.DefaultShareRepository
 import com.manst.lantransfer.data.JsonLocalServerConfigStore
@@ -20,6 +21,7 @@ import com.manst.lantransfer.quick.SessionFileStore
 import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * 手动依赖注入容器（不引入 Hilt/KSP，保持构建简单）。
@@ -64,4 +66,10 @@ class AppContainer(context: Context) {
     val quickReceiveManager: QuickReceiveManager by lazy {
         DefaultQuickReceiveManager(appContext, quickDownloadSink)
     }
+
+    /**
+     * 来自系统分享（ACTION_SEND / ACTION_SEND_MULTIPLE）待处理的文件 Uri。
+     * MainActivity 写入；快速传文件页创建 ViewModel 时消费并清空。
+     */
+    val shareImports = MutableStateFlow<List<Uri>>(emptyList())
 }

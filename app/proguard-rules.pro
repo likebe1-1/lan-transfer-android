@@ -24,3 +24,8 @@
 # slf4j 绑定
 -keep class org.slf4j.** { *; }
 -dontwarn org.slf4j.**
+# 二维码生成与扫码（ZXing / zxing-android-embedded）
+-keep class com.google.zxing.** { *; }
+-keep class com.journeyapps.barcodescanner.** { *; }
+-dontwarn com.google.zxing.**
+-dontwarn com.journeyapps.barcodescanner.**

@@ -43,6 +43,53 @@ interface RemoteFileSystem : Closeable {
     /** 重命名/移动远端文件或目录。 */
     suspend fun rename(fromPath: String, toPath: String)
 
+    /** 协议是否支持断点续传（FTP/FTPS/SFTP 支持；SCP 不支持，需从 0 重传）。 */
+    val supportsResume: Boolean
+        get() = false
+
+    /**
+     * 断点续传下载：startOffset 为本地已下载字节数（>0 时从该偏移继续），
+     * 实现必须把 startOffset 计入 onProgress 的累计字节数。
+     * 默认实现忽略偏移（从 0 开始），调用方应仅在 [supportsResume] 为 true 时使用。
+     */
+    suspend fun downloadPartial(
+        remotePath: String,
+        sink: OutputStream,
+        startOffset: Long,
+        onProgress: (Long) -> Unit = {}
+    ) {
+        download(remotePath, sink, onProgress)
+    }
+
+    /**
+     * 断点续传上传：startOffset 为远端已存在的字节数，实现需校验远端文件大小后追加剩余内容。
+     * 默认实现忽略偏移（整体重传）。
+     */
+    suspend fun uploadPartial(
+        source: InputStream,
+        remotePath: String,
+        sizeHint: Long = -1L,
+        startOffset: Long = 0L,
+        onProgress: (Long) -> Unit = {}
+    ) {
+        upload(source, remotePath, sizeHint, onProgress)
+    }
+
+    /** 远端文件大小（字节）；不存在或协议不支持返回 -1。 */
+    suspend fun size(path: String): Long = -1L
+
+    /** 递归创建目录（默认逐级调用 [mkdir]，已存在的层级忽略错误）。 */
+    suspend fun mkdirs(path: String) {
+        val normalized = if (path.startsWith("/")) path else "/$path"
+        if (normalized == "/") return
+        var current = "/"
+        for (segment in normalized.trim('/').split('/')) {
+            if (segment.isBlank()) continue
+            current = if (current == "/") "/$segment" else "$current/$segment"
+            runCatching { mkdir(current) }
+        }
+    }
+
     override fun close()
 }
 

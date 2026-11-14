@@ -8,14 +8,17 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.manst.lantransfer.MainActivity
 import com.manst.lantransfer.R
 import com.manst.lantransfer.core.Format
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -117,15 +120,56 @@ internal object TransferNotifications {
             task.error != null -> task.displayName + "：" + task.error
             else -> task.displayName
         }
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        // 下载完成且拿到本地 MediaStore Uri 时，点击通知/「打开」直接打开文件；否则回退打开 App。
+        val openFileIntent = if (task.state == TransferState.COMPLETED &&
+            task.direction == TransferDirection.DOWNLOAD
+        ) {
+            buildOpenFilePendingIntent(context, task)
+        } else {
+            null
+        }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openAppIntent(context))
+            .setContentIntent(openFileIntent ?: openAppIntent(context))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
+        if (openFileIntent != null) {
+            builder.addAction(android.R.drawable.ic_menu_view, "打开", openFileIntent)
+        }
+        return builder.build()
+    }
+
+    /** 构造「用其他应用打开下载文件」的 PendingIntent；无本地 Uri 时返回 null。 */
+    private fun buildOpenFilePendingIntent(context: Context, task: TransferTask): PendingIntent? {
+        val uriString = task.localUri ?: return null
+        return try {
+            val uri = Uri.parse(uriString)
+            val mimeType = context.contentResolver.getType(uri)
+                ?: guessMimeType(task.localDisplayName ?: task.displayName)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            PendingIntent.getActivity(
+                context,
+                uriString.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "构造打开下载文件的 Intent 失败", e)
+            null
+        }
+    }
+
+    private fun guessMimeType(displayName: String): String {
+        val extension = displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (extension.isEmpty()) return "application/octet-stream"
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: "application/octet-stream"
     }
 
     fun notifyProgress(context: Context, notification: Notification) {

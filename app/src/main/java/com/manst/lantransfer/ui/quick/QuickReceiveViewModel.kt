@@ -143,6 +143,9 @@ class QuickReceiveViewModel(
         )
     }
 
+    /** 扫码解析出的会话信息：与点击附近设备一致，协议自动选择（加密优先）。 */
+    fun joinScanned(info: QuickSessionInfo) = joinDiscovered(info)
+
     /** 用上次的目标重试连接（连接失败后的重试按钮）。 */
     fun retryJoin() {
         val target = _uiState.value.lastTarget

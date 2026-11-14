@@ -10,6 +10,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -23,6 +24,10 @@ import org.mockftpserver.fake.filesystem.Permissions
 import org.mockftpserver.fake.filesystem.UnixFakeFileSystem
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Comparator
 import java.util.Date
 
 /**
@@ -216,7 +221,145 @@ class FtpRemoteFileSystemTest {
         assertTrue("期望 ConnectionException，实际：$error", error is ConnectionException)
     }
 
+    // ------------------------------------------------------------ 断点续传
+
+    @Test
+    fun downloadResumeAfterInterruption() = runBlocking {
+        // MockFtpServer 的 FakeFtpServer 不真正实现 REST（仅回 350 不记偏移），
+        // 因此这里用纯 FTP 模式的 TestFtpsServer 验证真实的 REST 偏移下载。
+        withPlainFtpServer { resumeProfile, resumeRoot ->
+            val payload = randomBytes(300_000, 901L)
+            Files.write(resumeRoot.resolve("resume.bin"), payload)
+            val interruptedAt = 120_000
+            val partial = ByteArrayOutputStream()
+
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                assertTrue("FTP 应支持断点续传", client.supportsResume)
+                val error = runCatching {
+                    client.download("/resume.bin", InterruptingOutputStream(partial, interruptedAt))
+                }.exceptionOrNull()
+                assertNotNull("第一段下载应因模拟中断而失败", error)
+            }
+            assertEquals(interruptedAt, partial.size())
+
+            val resumed = ByteArrayOutputStream()
+            val progress = ArrayList<Long>()
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                client.downloadPartial("/resume.bin", resumed, partial.size().toLong()) { progress.add(it) }
+            }
+
+            assertArrayEquals("断点续传后拼接内容应与源文件一致", payload, partial.toByteArray() + resumed.toByteArray())
+            assertEquals(payload.size.toLong(), progress.last())
+            assertTrue("进度应包含续传偏移", progress.all { it >= interruptedAt.toLong() })
+        }
+    }
+
+    @Test
+    fun uploadResumeAfterPartialUpload() = runBlocking {
+        withPlainFtpServer { resumeProfile, resumeRoot ->
+            val payload = randomBytes(300_000, 902L)
+            val half = payload.size / 2
+            val remotePath = "/upload-resume.bin"
+
+            // 先上传前一半：远端已有 half 字节
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                client.uploadPartial(
+                    ByteArrayInputStream(payload.copyOfRange(0, half)),
+                    remotePath,
+                    half.toLong(),
+                    0L
+                )
+            }
+            assertEquals(half.toLong(), Files.size(resumeRoot.resolve("upload-resume.bin")))
+
+            // 用完整文件流 + 续传偏移上传剩余一半
+            val progress = ArrayList<Long>()
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                assertEquals(half.toLong(), client.size(remotePath))
+                client.uploadPartial(
+                    ByteArrayInputStream(payload),
+                    remotePath,
+                    payload.size.toLong(),
+                    half.toLong()
+                ) { progress.add(it) }
+                assertEquals("进度应按 offset+已写累计", payload.size.toLong(), progress.last())
+                assertTrue(progress.all { it >= half.toLong() })
+                assertEquals(payload.size.toLong(), client.size(remotePath))
+
+                val readBack = ByteArrayOutputStream()
+                client.download(remotePath, readBack)
+                assertArrayEquals("续传上传后回读应字节一致", payload, readBack.toByteArray())
+            }
+            assertArrayEquals(payload, Files.readAllBytes(resumeRoot.resolve("upload-resume.bin")))
+        }
+    }
+
+    @Test
+    fun uploadResumeRejectsMismatchedOffset() = runBlocking {
+        withPlainFtpServer { resumeProfile, _ ->
+            val payload = randomBytes(64_000, 903L)
+            val remotePath = "/mismatch.bin"
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                client.upload(ByteArrayInputStream(payload.copyOfRange(0, 10_000)), remotePath, 10_000L)
+                val error = runCatching {
+                    client.uploadPartial(
+                        ByteArrayInputStream(payload),
+                        remotePath,
+                        payload.size.toLong(),
+                        20_000L
+                    )
+                }.exceptionOrNull()
+                assertTrue("远端大小与续传偏移不一致应抛 IOException，实际：$error", error is IOException)
+                assertTrue("错误信息应说明不一致", error?.message?.contains("不一致") == true)
+            }
+        }
+    }
+
+    @Test
+    fun sizeReturnsFileSizeOrMinusOne() = runBlocking {
+        // MockFtpServer 未实现 SIZE 命令：按契约返回 -1
+        withClient(profile()) { client ->
+            assertEquals(-1L, client.size("/testroot/big.bin"))
+        }
+        // 真实 FTP 服务端：SIZE 正常工作，缺失/目录返回 -1
+        withPlainFtpServer { resumeProfile, resumeRoot ->
+            val payload = randomBytes(12_345, 904L)
+            Files.write(resumeRoot.resolve("sized.bin"), payload)
+            FtpRemoteFileSystem(resumeProfile).use { client ->
+                client.connect()
+                assertEquals(payload.size.toLong(), client.size("/sized.bin"))
+                assertEquals(-1L, client.size("/missing.bin"))
+            }
+        }
+    }
+
     // ------------------------------------------------------------ 辅助
+
+    private suspend fun withPlainFtpServer(block: suspend (ServerProfile, Path) -> Unit) {
+        val resumeRoot = Files.createTempDirectory("lantransfer-ftp-resume-")
+        val plainServer = TestFtpsServer(resumeRoot, "tester", "tester", tlsEnabled = false)
+        try {
+            val plainProfile = ServerProfile(
+                name = "ftp-resume",
+                protocol = TransferProtocol.FTP,
+                host = "127.0.0.1",
+                port = plainServer.port,
+                username = "tester",
+                password = "tester"
+            )
+            block(plainProfile, resumeRoot)
+        } finally {
+            plainServer.close()
+            Files.walk(resumeRoot).use { walk ->
+                walk.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
 
     private suspend fun withClient(profile: ServerProfile, block: suspend (RemoteFileSystem) -> Unit) {
         FtpRemoteFileSystem(profile).use { client ->

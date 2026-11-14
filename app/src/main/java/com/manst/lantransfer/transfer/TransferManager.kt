@@ -25,6 +25,16 @@ data class TransferTask(
     val state: TransferState = TransferState.QUEUED,
     val error: String? = null,
     val bytesPerSecond: Long = 0L,
+    /** 下载完成后本地 MediaStore Uri（通知点击打开文件用）。 */
+    val localUri: String? = null,
+    /** 下载目标在「下载」目录下的相对子目录（文件夹递归下载时使用，如 "相册/2024"）。 */
+    val localRelativeDir: String? = null,
+    /** 自动重试次数（用于 UI 展示与重试策略）。 */
+    val attempts: Int = 0,
+    /** 是否支持从已传字节继续（协议能力 + 本地条件）。 */
+    val resumable: Boolean = true,
+    /** 入队时的服务器快照（用于进程重启后恢复队列，不展示在 UI 上）。 */
+    val profileSnapshot: ServerProfile? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val startedAt: Long = 0L,
     val finishedAt: Long = 0L
@@ -73,4 +83,23 @@ interface TransferManager {
     fun remove(taskId: String)
 
     fun clearFinished()
+
+    /**
+     * 递归下载远端目录到系统「下载」目录（保留子目录结构），
+     * 文件任务按现有队列串行执行；返回批次 id（仅用于 UI 提示）。
+     */
+    fun enqueueDownloadFolder(
+        profile: ServerProfile,
+        remoteDir: String,
+        folderDisplayName: String = remoteDir.substringAfterLast('/').ifBlank { "文件夹" }
+    ): String = throw UnsupportedOperationException("当前版本不支持文件夹下载")
+
+    /**
+     * 递归上传 SAF 目录树到远端目录（保留目录结构），逐文件加入队列；返回批次 id。
+     */
+    fun enqueueUploadFolder(profile: ServerProfile, treeUri: Uri, remoteDir: String): String =
+        throw UnsupportedOperationException("当前版本不支持文件夹上传")
+
+    /** 清空历史记录（已完成/失败/取消的任务）。 */
+    fun clearHistory() = clearFinished()
 }

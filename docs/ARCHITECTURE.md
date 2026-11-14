@@ -261,3 +261,49 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - **进度**：进度条 + 已传/总大小 + 百分比（客户端队列页与快速传文件接收页都展示）；快速传文件同时显示「第 N/M 个文件」；
 - **通知**：前台服务进度通知在原有任务名/百分比之后追加速度与剩余时间；
 - **验证**：JVM 单测覆盖格式化与估算边界（174 个用例）；设备端 `QuickProgressTest` 用 64MB 真实文件在传输中截图并断言界面出现速度/剩余时间文字，截图见 `docs/screenshots/13_quick_transfer_progress.png`。
+## 12. v2.0 实用功能（P0）设计
+
+### 12.1 断点续传与自动重试
+
+- 协议层新增 `supportsResume` / `downloadPartial` / `uploadPartial` / `size` / `mkdirs`（`RemoteFileSystem`）：
+  - FTP/FTPS 下载使用 `REST` offset 后重新取流，上传校验远端 `SIZE` 后用 `APPE` 追加剩余内容；
+  - SFTP 使用 JSch 的 offset 读写（`get(skip)` / `put(RESUME)`）；
+  - SCP 协议本身不支持续传（`supportsResume=false`），任务自动从 0 重传，UI 标注不支持；
+- 传输引擎下载先写应用私有暂存文件 `cacheDir/transfer/<taskId>.part`，中断保留；恢复/重试时从暂存文件长度继续，完成后复制到 MediaStore 并删除暂存；
+- 上传续传按远端已有字节数与本地已传字节数校验后追加；不一致则整文件覆盖；
+- 自动重试：`TransferRetryPolicy` 对连接/IO 类错误最多重试 3 次（2s/4s/8s 退避），认证与路径错误不重试；`attempts` 持久化并在 UI 展示「重试中 (n/3)」。
+
+### 12.2 队列持久化与历史
+
+- `JsonTransferStore` 以原子写（临时文件 + rename）持久化任务快照（含服务器 `profileSnapshot`、已传字节、`localUri`、重试次数），历史最多保留 200 条；
+- 进程启动时恢复：未完成任务重置为 QUEUED 并自动继续（上传任务若源 Uri 已不可读则标记失败并提示重新选择），已完成/失败/取消进入历史；
+- 任何状态变化按 500ms 节流落盘，损坏文件回退为空队列并保留 `.bak`。
+
+### 12.3 文件夹递归传输
+
+- 下载：`enqueueDownloadFolder` 用单连接 BFS 递归列远端目录（上限 1000 个文件），逐文件生成下载任务，`localRelativeDir` 保留目录结构，落盘到 `Download/<目录名>/<子目录>/file`；
+- 上传：`enqueueUploadFolder` 用 `DocumentFile` 递归 SAF 目录树，逐文件生成上传任务，远端路径保留层级，执行前调用 `mkdirs` 自动建目录；
+- 所有相对路径逐段清洗（去除 `.`/`..` 与非法字符）防目录穿越；SAF Uri 调用 `takePersistableUriPermission` 尽量保证重启后续传。
+
+### 12.4 系统分享直达
+
+- `MainActivity` 注册 `ACTION_SEND` / `ACTION_SEND_MULTIPLE`（`*/*`），`singleTop`；解析 `ClipData` / `EXTRA_STREAM` 后写入 `AppContainer.shareImports`；
+- `LanTransferApp` 观察该事件自动跳转「快速传文件」发送页，`QuickSendViewModel` 用分享的文件自动 `startSession` 并清空事件。
+
+### 12.5 扫码快速传输（Base64 载荷）
+
+- 发送页显示二维码（ZXing core 生成）；接收页用 `zxing-android-embedded` 相机扫码；
+- 二维码内容 = **Base64(UTF-8 JSON)**：JSON 字段 `v/code/name/addrs/ftp/ftps/ssh/protocols`，由 `QuickQrCodec` 编解码；不携带临时密码，接收端用接收码派生凭据；
+- Base64 解码同时兼容 URL-safe 与标准 Base64（便于复制粘贴），非法载荷返回 null 并提示「二维码无法识别」；
+- 相机权限拒绝/取消时保留手动输入与局域网发现兜底。
+
+### 12.6 通知打开文件
+
+- 下载完成后 `TransferTask.localUri` 记录 MediaStore Uri；结果通知的 contentIntent 与「打开」action 使用 `ACTION_VIEW` + `FLAG_GRANT_READ_URI_PERMISSION`，点击直接打开文件；无 Uri 时回退打开 App。
+
+### 12.7 验证与踩坑
+
+- JVM 单测 236 个全绿（新增协议续传、传输持久化/重试/路径、二维码/文件夹路径等）；
+- 设备仪器测试 47 个全绿（新增传输恢复/自动重试、文件夹子目录落盘/通知打开、快捷传文件递归接收、二维码/文件夹入口 UI）；
+- 发现的真实问题：恢复未完成任务时若在 `AppContainer` 懒初始化路径中同步启动前台服务，`TransferService.onCreate` 会再次访问同一个 lazy 导致主线程等待，触发 `ForegroundServiceDidNotStartInTimeException`；已改为初始化完成后异步启动；
+- MediaStore 对 `IS_PENDING=1` 的下载记录在部分设备/版本查询不可见，测试需先 commit 再查询 RELATIVE_PATH。

@@ -18,4 +18,14 @@ interface QuickDownloadTarget {
 /** 接收端下载落盘目标（MediaStore.Downloads：直接写入系统「下载」根目录 Download/）。 */
 interface QuickDownloadSink {
     fun open(displayName: String, mimeType: String? = null): QuickDownloadTarget
+
+    /**
+     * 下载到系统「下载」目录下的相对子目录（relativeDir 如 "相册/2024"），用于文件夹递归接收。
+     * 默认实现忽略子目录，退化为 [open]。
+     */
+    fun openInDir(
+        displayName: String,
+        relativeDir: String?,
+        mimeType: String? = null
+    ): QuickDownloadTarget = open(displayName, mimeType)
 }

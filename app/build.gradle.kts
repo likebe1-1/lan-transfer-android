@@ -22,8 +22,8 @@ android {
         applicationId = "com.manst.lantransfer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.3.1"
+        versionCode = 7
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -125,6 +125,13 @@ dependencies {
     implementation(libs.bcprov)
     implementation(libs.bcpkix)
     implementation(libs.slf4j.nop)
+
+    // 文件夹传输（SAF 目录树遍历）
+    implementation(libs.androidx.documentfile)
+
+    // 扫码快速传输：二维码生成（ZXing core）+ 相机扫码界面（zxing-android-embedded）
+    implementation(libs.zxing.core)
+    implementation(libs.zxing.android.embedded)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

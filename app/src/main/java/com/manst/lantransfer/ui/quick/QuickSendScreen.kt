@@ -3,6 +3,7 @@ package com.manst.lantransfer.ui.quick
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -42,6 +45,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,9 +74,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.manst.lantransfer.core.Format
 import com.manst.lantransfer.quick.QuickFile
+import com.manst.lantransfer.quick.QuickQrCodec
 import com.manst.lantransfer.quick.QuickSendPhase
+import com.manst.lantransfer.quick.QuickSessionInfo
 import com.manst.lantransfer.quick.QuickTransferDefaults
 import com.manst.lantransfer.ui.common.ConfirmDialog
+import com.manst.lantransfer.ui.common.QrCodeRenderer
 import com.manst.lantransfer.ui.common.LoadingState
 import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 import com.manst.lantransfer.ui.components.ProtocolChip
@@ -95,6 +103,7 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
     var showExitConfirm by remember { mutableStateOf(false) }
     var exitAfterStop by remember { mutableStateOf(false) }
     var showFullscreenCode by remember { mutableStateOf(false) }
+    var showQrCode by remember { mutableStateOf(false) }
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
 
@@ -164,6 +173,7 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
                         scope.launch { snackbarHostState.showSnackbar("接收码已复制") }
                     },
                     onShowFullscreenCode = { showFullscreenCode = true },
+                    onShowQrCode = { showQrCode = true },
                     onExportReceived = viewModel::exportReceived,
                     onStopSession = { showStopConfirm = true }
                 )
@@ -184,6 +194,14 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
             deviceName = state.session.deviceName,
             address = state.session.addresses.firstOrNull(),
             onDismiss = { showFullscreenCode = false }
+        )
+    }
+
+    if (showQrCode) {
+        QrCodeDialog(
+            sessionInfo = state.session.sessionInfo,
+            code = state.codeDisplay,
+            onDismiss = { showQrCode = false }
         )
     }
 
@@ -344,6 +362,7 @@ private fun SendSessionContent(
     state: QuickSendUiState,
     onCopyCode: () -> Unit,
     onShowFullscreenCode: () -> Unit,
+    onShowQrCode: () -> Unit,
     onExportReceived: (String) -> Unit,
     onStopSession: () -> Unit
 ) {
@@ -357,8 +376,10 @@ private fun SendSessionContent(
             CodeCard(
                 code = state.codeDisplay,
                 deviceName = session.deviceName,
+                qrCodeEnabled = session.sessionInfo != null,
                 onCopyCode = onCopyCode,
-                onShowFullscreen = onShowFullscreenCode
+                onShowFullscreen = onShowFullscreenCode,
+                onShowQrCode = onShowQrCode
             )
         }
         item(key = "device") {
@@ -398,8 +419,10 @@ private fun SendSessionContent(
 private fun CodeCard(
     code: String,
     deviceName: String,
+    qrCodeEnabled: Boolean,
     onCopyCode: () -> Unit,
-    onShowFullscreen: () -> Unit
+    onShowFullscreen: () -> Unit,
+    onShowQrCode: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -456,6 +479,21 @@ private fun CodeCard(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("全屏显示")
                 }
+            }
+            OutlinedButton(
+                onClick = onShowQrCode,
+                enabled = qrCodeEnabled,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.QrCode2,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("二维码")
             }
             Text(
                 text = "在另一台设备的「接收文件」中输入该接收码，或从附近设备列表中选择「${deviceName.ifBlank { "本机" }}」。",
@@ -671,6 +709,67 @@ private fun FullscreenCodeDialog(
                 )
                 Spacer(modifier = Modifier.height(40.dp))
                 Button(onClick = onDismiss) { Text("关闭") }
+            }
+        }
+    }
+}
+
+/** 二维码 Dialog：对方用接收页「扫码加入」扫一扫即可自动连接。 */
+@Composable
+private fun QrCodeDialog(
+    sessionInfo: QuickSessionInfo?,
+    code: String,
+    onDismiss: () -> Unit
+) {
+    val payload = remember(sessionInfo) { sessionInfo?.let { QuickQrCodec.encode(it) } }
+    val qrBitmap = remember(payload) { payload?.let { QrCodeRenderer.render(it) } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "扫码连接",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.Black
+                )
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap,
+                        contentDescription = "快速传文件二维码",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(260.dp)
+                    )
+                } else {
+                    Text(
+                        text = "二维码生成失败，请让对方手动输入接收码",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black
+                    )
+                }
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    ),
+                    color = Color.Black
+                )
+                Text(
+                    text = "让对方扫一扫，自动连接",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.DarkGray
+                )
+                TextButton(onClick = onDismiss) {
+                    Text(text = "关闭", color = Color.Black)
+                }
             }
         }
     }

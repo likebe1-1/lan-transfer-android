@@ -52,7 +52,8 @@ class TransfersViewModel(
 
     fun remove(task: TransferTask) = runManagerAction("移除任务") { transferManager.remove(task.id) }
 
-    fun clearFinished() = runManagerAction("清空已完成") { transferManager.clearFinished() }
+    /** 清空历史记录（已完成/失败/取消的任务）。 */
+    fun clearHistory() = runManagerAction("清空历史") { transferManager.clearHistory() }
 
     private fun runManagerAction(label: String, action: () -> Unit) {
         try {

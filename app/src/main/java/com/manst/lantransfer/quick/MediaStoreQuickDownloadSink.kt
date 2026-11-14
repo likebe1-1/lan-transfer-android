@@ -9,16 +9,17 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import com.manst.lantransfer.core.LanTransferException
 import com.manst.lantransfer.data.ShareFileNames
+import com.manst.lantransfer.transfer.TransferFolderPaths
 import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.util.Locale
 
 /**
- * 接收端下载落盘目标默认实现：MediaStore.Downloads（Download/）。
+ * 接收端下载落盘目标默认实现：MediaStore.Downloads（Download/，文件夹接收支持 Download/<子目录>/）。
  *
  * 生命周期：
- * 1. [open] 插入 IS_PENDING=1 的媒体库记录并预留不重名的展示名；
+ * 1. [openInDir] 插入 IS_PENDING=1 的媒体库记录并预留不重名的展示名；
  * 2. 调用方把远端数据写入 [QuickDownloadTarget.outputStream]；
  * 3. [QuickDownloadTarget.commit] 关闭流、置 IS_PENDING=0，使文件对用户可见并返回展示名；
  *    失败或取消时调用 [QuickDownloadTarget.abort] 删除 pending 记录。
@@ -32,11 +33,20 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
 
     private val nameLock = Any()
 
-    /** 进程内已预留的展示名（小写），与 MediaStore 现有行一起参与查重。 */
+    /** 进程内已预留的展示名：key 为 "相对目录|小写文件名"。 */
     private val reservedNames = HashSet<String>()
 
-    override fun open(displayName: String, mimeType: String?): QuickDownloadTarget {
-        val uniqueName = reserveName(displayName)
+    override fun open(displayName: String, mimeType: String?): QuickDownloadTarget =
+        openInDir(displayName, null, mimeType)
+
+    override fun openInDir(
+        displayName: String,
+        relativeDir: String?,
+        mimeType: String?
+    ): QuickDownloadTarget {
+        val safeDir = TransferFolderPaths.sanitizeRelativeDir(relativeDir)
+        val relativePath = relativePathFor(safeDir)
+        val uniqueName = reserveName(displayName, relativePath)
         var pendingUri: Uri? = null
         try {
             val values = ContentValues().apply {
@@ -45,7 +55,7 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
                     MediaStore.Downloads.MIME_TYPE,
                     mimeType?.takeIf { it.isNotBlank() } ?: guessMimeType(uniqueName)
                 )
-                put(MediaStore.Downloads.RELATIVE_PATH, DOWNLOADS_RELATIVE_PATH)
+                put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val uri = resolver.insert(downloadsCollection(), values)
@@ -53,10 +63,12 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
             pendingUri = uri
             val rawStream = resolver.openOutputStream(uri)
                 ?: throw IOException("无法写入系统下载目录")
-            return PendingDownloadTarget(uniqueName, uri, rawStream) { releaseName(uniqueName) }
+            return PendingDownloadTarget(uniqueName, uri, rawStream) {
+                releaseName(uniqueName, relativePath)
+            }
         } catch (e: Exception) {
             pendingUri?.let { uri -> runCatching { resolver.delete(uri, null, null) } }
-            releaseName(uniqueName)
+            releaseName(uniqueName, relativePath)
             Log.w(TAG, "创建下载文件失败：" + displayName, e)
             throw LanTransferException("创建下载文件失败：" + (e.message ?: "未知错误"), e)
         }
@@ -144,29 +156,36 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
     private fun downloadsCollection(): Uri =
         MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
-    private fun reserveName(rawName: String): String = synchronized(nameLock) {
+    private fun relativePathFor(relativeDir: String?): String =
+        if (relativeDir.isNullOrBlank()) BASE_RELATIVE_PATH
+        else BASE_RELATIVE_PATH + relativeDir + "/"
+
+    private fun reserveName(rawName: String, relativePath: String): String = synchronized(nameLock) {
+        val keyPrefix = relativePath.lowercase(Locale.ROOT) + "|"
         val existing = HashSet<String>()
-        existing.addAll(reservedNames)
-        existing.addAll(queryDownloadDirectoryNames())
+        reservedNames
+            .filter { it.startsWith(keyPrefix) }
+            .mapTo(existing) { it.substring(keyPrefix.length) }
+        existing.addAll(queryDownloadDirectoryNames(relativePath))
         val unique = ShareFileNames.uniqueName(rawName, existing)
-        reservedNames.add(unique.lowercase(Locale.ROOT))
+        reservedNames.add(keyPrefix + unique.lowercase(Locale.ROOT))
         unique
     }
 
-    private fun releaseName(displayName: String) {
+    private fun releaseName(displayName: String, relativePath: String) {
         synchronized(nameLock) {
-            reservedNames.remove(displayName.lowercase(Locale.ROOT))
+            reservedNames.remove(relativePath.lowercase(Locale.ROOT) + "|" + displayName.lowercase(Locale.ROOT))
         }
     }
 
-    private fun queryDownloadDirectoryNames(): List<String> {
+    private fun queryDownloadDirectoryNames(relativePath: String): List<String> {
         val names = ArrayList<String>()
         try {
             resolver.query(
                 downloadsCollection(),
                 arrayOf(MediaStore.Downloads.DISPLAY_NAME),
                 MediaStore.Downloads.RELATIVE_PATH + " = ?",
-                arrayOf(DOWNLOADS_RELATIVE_PATH),
+                arrayOf(relativePath),
                 null
             )?.use { cursor ->
                 val index = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
@@ -189,6 +208,8 @@ class MediaStoreQuickDownloadSink(private val context: Context) : QuickDownloadS
     private companion object {
         const val TAG = "MediaStoreQuickDownloadSink"
         const val DEFAULT_MIME_TYPE = "application/octet-stream"
-        val DOWNLOADS_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
+
+        /** 系统「下载」根目录（末尾带斜杠，MediaStore 存储值格式）。 */
+        val BASE_RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
     }
 }

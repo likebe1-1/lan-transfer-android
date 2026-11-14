@@ -177,6 +177,39 @@ class SshRemoteFileSystemScpTest {
         assertTrue("期望 ConnectionException，实际：$error", error is ConnectionException)
     }
 
+    // ------------------------------------------------------------ 断点续传能力
+
+    @Test
+    fun scpDoesNotSupportResume() = runBlocking {
+        withClient(profile()) { client ->
+            assertFalse("SCP 协议不支持断点续传", client.supportsResume)
+            assertEquals("SCP 不支持 SIZE，按契约返回 -1", -1L, client.size("/big.bin"))
+        }
+    }
+
+    @Test
+    fun partialDownloadFallsBackToFullTransferForScp() = runBlocking {
+        withClient(profile()) { client ->
+            val sink = ByteArrayOutputStream()
+            val progress = ArrayList<Long>()
+            // SCP 无偏移读能力：忽略 startOffset，从 0 全量重传，进度也不带偏移语义
+            client.downloadPartial("/big.bin", sink, 500_000L) { progress.add(it) }
+            assertArrayEquals(bigBytes, sink.toByteArray())
+            assertEquals(bigBytes.size.toLong(), progress.last())
+            assertTrue("进度应从 0 开始累计", progress.all { it <= bigBytes.size.toLong() })
+        }
+    }
+
+    @Test
+    fun partialUploadFallsBackToFullTransferForScp() = runBlocking {
+        val payload = randomBytes(64_000, 912L)
+        withClient(profile()) { client ->
+            // SCP 无追加写能力：忽略 startOffset，完整重传
+            client.uploadPartial(ByteArrayInputStream(payload), "/scp-partial.bin", payload.size.toLong(), 10_000L)
+        }
+        assertArrayEquals(payload, Files.readAllBytes(root.resolve("scp-partial.bin")))
+    }
+
     // ------------------------------------------------------------ 辅助
 
     private suspend fun withClient(profile: ServerProfile, block: suspend (RemoteFileSystem) -> Unit) {

@@ -99,7 +99,9 @@ data class QuickSessionInfo(
 data class QuickFile(
     val name: String,
     val size: Long,
-    val modifiedAt: Long
+    val modifiedAt: Long,
+    /** 相对会话目录的路径（文件夹传输时用于保留子目录结构；普通文件为 null）。 */
+    val relativePath: String? = null
 )
 
 enum class QuickSendPhase { IDLE, PREPARING, WAITING, STOPPING }

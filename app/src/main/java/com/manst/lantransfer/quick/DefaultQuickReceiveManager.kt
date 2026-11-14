@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.io.File
 import java.io.IOException
 
 /**
@@ -42,8 +43,10 @@ import java.io.IOException
  * - 局域网发现：[startDiscovery] 用 [UdpBeaconScanner] 监听 UDP 广播（配合 WifiManager.MulticastLock），
  *   按接收码去重、按最近收到时间排序，6 秒未再收到即过期清理；
  * - 连接：[join] 用接收码派生临时帐号，按指定协议或 SFTP -> SCP -> FTPS -> FTP 顺序依次尝试，
- *   第一个 connect + list 成功的协议即会话协议，随后后台自动 [downloadAll]（不阻塞 join 返回）；
- * - 接收：[downloadAll] / [download] 顺序下载到 [QuickDownloadSink]（系统下载目录），提交成功才计入完成；
+ *   第一个 connect + 根目录 list 成功的协议即会话协议，随后递归列出对方根目录（子目录文件也纳入
+ *   remoteFiles），并后台自动 [downloadAll]（不阻塞 join 返回）；
+ * - 接收：[downloadAll] / [download] 顺序下载到 [QuickDownloadSink]：文件夹传输时用
+ *   [QuickDownloadSink.openInDir] 在系统下载目录下保留相对子目录结构，提交成功才计入完成；
  * - 互传：[sendFiles] 用同一个连接把本机文件上传到对方根目录；
  * - 所有网络操作在 Dispatchers.IO 上、由同一把 Mutex 串行；同一时刻只允许一个会话。
  */
@@ -220,6 +223,8 @@ class DefaultQuickReceiveManager(
                     candidate.list(RemotePath.ROOT)
                 }
                 fileSystem = candidate
+                // 文件夹传输：对端根目录下可能是目录树，递归展开后子目录文件才可下载
+                val remoteEntries = listRemoteTree(candidate, entries)
                 val sessionInfo = QuickSessionInfo(
                     code = code,
                     deviceName = target.deviceName.ifBlank { host },
@@ -234,12 +239,16 @@ class DefaultQuickReceiveManager(
                         phase = QuickReceivePhase.CONNECTED,
                         joined = sessionInfo,
                         activeProtocol = protocol,
-                        remoteFiles = entries,
+                        remoteFiles = remoteEntries,
                         error = null,
                         message = "已通过 " + protocol.label + " 连接对方设备"
                     )
                 }
-                Log.i(TAG, "已通过 " + protocol.label + " 连接 " + host + ":" + port + "，远端文件 " + entries.size + " 个")
+                Log.i(
+                    TAG,
+                    "已通过 " + protocol.label + " 连接 " + host + ":" + port +
+                        "，远端共 " + remoteEntries.size + " 项（文件 " + remoteEntries.count { !it.isDirectory } + " 个）"
+                )
                 scheduleAutoDownload()
                 return Result.success(Unit)
             } catch (e: TimeoutCancellationException) {
@@ -305,6 +314,61 @@ class DefaultQuickReceiveManager(
         }
     }
 
+    // ------------------------------------------------------------ 远端目录递归扫描
+
+    /**
+     * 递归扫描对端根目录：返回根条目 + 所有子目录内的条目（文件/目录都保留，层级由 [RemoteEntry.path] 表示）。
+     * 超时或个别子目录失败只降级为根目录内容/跳过该目录，不影响整次连接。
+     */
+    private suspend fun listRemoteTree(
+        currentFileSystem: RemoteFileSystem,
+        rootEntries: List<RemoteEntry>
+    ): List<RemoteEntry> {
+        return try {
+            withTimeout(RECURSIVE_LIST_TIMEOUT_MS) { expandDirectories(currentFileSystem, rootEntries) }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "递归扫描对方目录超时，仅使用根目录内容")
+            rootEntries
+        }
+    }
+
+    /** 广度优先列出子目录；深度/条目数有上界，避免异常目录树拖垮会话。 */
+    private suspend fun expandDirectories(
+        currentFileSystem: RemoteFileSystem,
+        rootEntries: List<RemoteEntry>
+    ): List<RemoteEntry> {
+        val result = ArrayList<RemoteEntry>(rootEntries.size)
+        result += rootEntries
+        val queue = ArrayDeque<Pair<String, Int>>()
+        for (entry in rootEntries) {
+            if (entry.isDirectory && !entry.isSymlink) queue.addLast(entry.path to 1)
+        }
+        val visited = HashSet<String>()
+        while (queue.isNotEmpty() && result.size < QuickFolderPaths.MAX_RECURSIVE_ENTRIES) {
+            val (directoryPath, depth) = queue.removeFirst()
+            if (!visited.add(directoryPath)) continue
+            if (depth > QuickFolderPaths.MAX_RELATIVE_DEPTH) continue
+            val children = try {
+                currentFileSystem.list(directoryPath)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "递归列出子目录失败，已跳过：" + directoryPath, e)
+                continue
+            }
+            val remaining = QuickFolderPaths.MAX_RECURSIVE_ENTRIES - result.size
+            if (remaining <= 0) break
+            val accepted = children.take(remaining)
+            result += accepted
+            if (depth < QuickFolderPaths.MAX_RELATIVE_DEPTH) {
+                for (child in accepted) {
+                    if (child.isDirectory && !child.isSymlink) queue.addLast(child.path to depth + 1)
+                }
+            }
+        }
+        return result
+    }
+
     // ------------------------------------------------------------ 下载
 
     override suspend fun download(remotePath: String): Result<Unit> = operationMutex.withLock {
@@ -314,8 +378,15 @@ class DefaultQuickReceiveManager(
                     ?: return@withContext transferFailure("请先连接对方设备")
                 val wanted = remotePath.trim()
                 if (wanted.isEmpty()) return@withContext transferFailure("请选择要接收的文件")
+                val normalizedWanted = RemotePath.normalize(wanted)
                 val entry = mutableState.value.remoteFiles.firstOrNull { remote ->
-                    remote.isFile && (remote.path == RemotePath.normalize(wanted) || remote.name == wanted)
+                    // 支持传绝对路径、相对路径（子目录文件）或纯文件名
+                    remote.isFile && (
+                        remote.path == normalizedWanted ||
+                            remote.path == wanted ||
+                            remote.path.endsWith("/" + wanted) ||
+                            remote.name == wanted
+                        )
                 } ?: return@withContext transferFailure("对方目录中没有这个文件：" + wanted)
                 mutableState.update { it.copy(phase = QuickReceivePhase.TRANSFERRING, error = null) }
                 val result = downloadOneLocked(currentFileSystem, entry, 0, 1)
@@ -353,8 +424,10 @@ class DefaultQuickReceiveManager(
         val currentFileSystem = fileSystem ?: return transferFailure("请先连接对方设备")
         var files = mutableState.value.remoteFiles.filter { it.isFile }
         if (files.isEmpty()) {
-            // 连接后列表可能为空/过期，重列一次再决定
-            val refreshed = runCatching { currentFileSystem.list(RemotePath.ROOT) }.getOrNull()
+            // 连接后列表可能为空/过期，重新递归列出一次再决定
+            val refreshed = runCatching {
+                listRemoteTree(currentFileSystem, currentFileSystem.list(RemotePath.ROOT))
+            }.getOrNull()
             if (refreshed != null) {
                 mutableState.update { it.copy(remoteFiles = refreshed) }
                 files = refreshed.filter { it.isFile }
@@ -407,14 +480,17 @@ class DefaultQuickReceiveManager(
         fileCount: Int
     ): Result<Unit> {
         val displayName = ShareFileNames.sanitize(entry.name)
+        // 文件夹传输：保留远端相对目录结构；顶层文件 relativeDir 为 null，直接落到下载根目录
+        val relativeDir = QuickFolderPaths.sanitizeRelativeDir(QuickFolderPaths.relativeDirOf(entry.path))
+        val failureLabel = if (relativeDir != null) relativeDir + "/" + displayName else displayName
         val target = try {
-            downloadSink.open(displayName)
+            downloadSink.openInDir(displayName, relativeDir)
         } catch (e: Exception) {
             val message = "创建下载文件失败：" + quickErrorMessage(e)
             mutableState.update {
-                it.copy(failedFiles = it.failedFiles + displayName, error = message, transfer = null)
+                it.copy(failedFiles = it.failedFiles + failureLabel, error = message, transfer = null)
             }
-            Log.w(TAG, "创建下载文件失败：" + displayName, e)
+            Log.w(TAG, "创建下载文件失败：" + failureLabel, e)
             return Result.failure(IllegalStateException(message))
         }
         val totalBytes = if (entry.size > 0L) entry.size else -1L
@@ -455,7 +531,7 @@ class DefaultQuickReceiveManager(
             runCatching { target.abort() }
             val message = quickErrorMessage(e)
             mutableState.update {
-                it.copy(failedFiles = it.failedFiles + displayName, transfer = null, error = message)
+                it.copy(failedFiles = it.failedFiles + failureLabel, transfer = null, error = message)
             }
             Log.w(TAG, "接收文件失败：" + entry.path, e)
             return Result.failure(IllegalStateException(message))
@@ -511,7 +587,9 @@ class DefaultQuickReceiveManager(
             if (uris.size > QuickTransferDefaults.MAX_FILES) {
                 return@withContext transferFailure("一次最多发送 " + QuickTransferDefaults.MAX_FILES + " 个文件")
             }
+            // 目录项不参与上传重名判断（只与对端根目录下的文件比较）
             val existingNames = mutableState.value.remoteFiles
+                .filter { !it.isDirectory }
                 .mapTo(LinkedHashSet<String>()) { it.name }
             val sent = ArrayList<String>(uris.size)
             try {
@@ -563,7 +641,9 @@ class DefaultQuickReceiveManager(
                     mutableState.update { it.copy(sentFiles = it.sentFiles + displayName) }
                     Log.i(TAG, "已发送文件给对方：" + displayName)
                 }
-                val refreshed = runCatching { currentFileSystem.list(RemotePath.ROOT) }.getOrNull()
+                val refreshed = runCatching {
+                    listRemoteTree(currentFileSystem, currentFileSystem.list(RemotePath.ROOT))
+                }.getOrNull()
                 mutableState.update {
                     it.copy(
                         phase = QuickReceivePhase.CONNECTED,
@@ -648,6 +728,76 @@ class DefaultQuickReceiveManager(
         const val DISCOVERY_TTL_MS = 6_000L
         const val DISCOVERY_EXPIRY_CHECK_MS = 1_000L
         const val JOIN_TIMEOUT_MS = 20_000L
+        const val RECURSIVE_LIST_TIMEOUT_MS = 60_000L
         const val MULTICAST_LOCK_TAG = "LanTransferQuick"
     }
+}
+
+/**
+ * 文件夹传输的路径工具（纯 JVM 逻辑，供快捷发送/接收两个 Manager 与 JVM/设备测试共用）。
+ *
+ * 放在本文件是因为 task-14 的 write scope 只覆盖两个 Manager 文件；内容与 Android API 无关，
+ * 可直接在 JVM 单测里验证。
+ */
+internal object QuickFolderPaths {
+
+    /** 相对路径最大层级。 */
+    const val MAX_RELATIVE_DEPTH = 16
+
+    /** 相对路径最大长度（字符）。 */
+    const val MAX_RELATIVE_LENGTH = 1024
+
+    /** 递归扫描远端/会话目录的最大条目数，防止异常目录树拖垮会话。 */
+    const val MAX_RECURSIVE_ENTRIES = 5_000
+
+    /** 规范化相对路径：统一用 "/"、去掉空段与 "."/".."，空结果返回 null。 */
+    fun normalizeRelative(raw: String?): String? {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        val segments = ArrayList<String>()
+        for (segment in text.replace('\\', '/').split('/')) {
+            val name = segment.trim()
+            when {
+                name.isBlank() || name == "." -> continue
+                // ".." 回退上一级（不越出根），防止相对路径上跳造成目录穿越
+                name == ".." -> if (segments.isNotEmpty()) segments.removeAt(segments.lastIndex)
+                else -> {
+                    if (segments.size >= MAX_RELATIVE_DEPTH) break
+                    segments += name
+                }
+            }
+        }
+        if (segments.isEmpty()) return null
+        return segments.joinToString("/").take(MAX_RELATIVE_LENGTH).trimEnd('/').ifBlank { null }
+    }
+
+    /** 远端绝对路径（"/相册/2024/a.jpg"）-> 相对目录（"相册/2024"）；根目录上的文件返回 null。 */
+    fun relativeDirOf(path: String?): String? {
+        val normalized = normalizeRelative(path) ?: return null
+        val index = normalized.lastIndexOf('/')
+        return if (index <= 0) null else normalized.substring(0, index)
+    }
+
+    /** 会话目录内文件的相对路径（"/" 分隔）；顶层文件返回 null。 */
+    fun relativePathOf(directory: File, file: File): String? {
+        return try {
+            val relative = file.relativeTo(directory).invariantSeparatorsPath
+            normalizeRelative(relative)?.takeIf { it.contains('/') }
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+
+    /** 逐段清洗后用作媒体库/本地子目录的相对路径；空结果返回 null。 */
+    fun sanitizeRelativeDir(raw: String?): String? {
+        val normalized = normalizeRelative(raw) ?: return null
+        val cleaned = normalized.split('/')
+            .map { segment -> ShareFileNames.sanitize(segment) }
+            .filter { it.isNotBlank() }
+        return cleaned.joinToString("/").ifBlank { null }
+    }
+
+    /** 会话文件的稳定键：子目录文件用相对路径，顶层文件用文件名。 */
+    fun fileKey(relativePath: String?, name: String): String =
+        normalizeRelative(relativePath) ?: name
 }

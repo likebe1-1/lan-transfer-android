@@ -12,41 +12,49 @@ import java.io.OutputStream
 import java.util.Locale
 
 /**
- * 下载落盘：写入 MediaStore.Downloads 的公共目录 Download/。
+ * 下载落盘：写入 MediaStore.Downloads（默认 Download/，文件夹下载支持 Download/<子目录>/）。
  *
  * Android 10+ 通过 MediaStore 写入公共目录无需存储权限。写入过程遵循 IS_PENDING 约定：
  * 先插入 pending 记录 -> 写入字节 -> 提交（IS_PENDING=0）；失败时删除 pending 记录，避免留下空文件。
- * 文件名在进程内与 MediaStore 现有文件中查重，重名追加 " (1)"、" (2)"……
+ * 文件名在「目标子目录」内查重（MediaStore 现有文件 + 进程内预留），重名追加 " (1)"、" (2)"……
  */
 internal class MediaStoreDownloadStore(private val context: Context) {
 
     private val resolver = context.contentResolver
     private val lock = Any()
+
+    /** 进程内已预留的 "相对目录|小写文件名"。 */
     private val reservedNames = HashSet<String>()
 
-    /** 预留一个不重名的文件名（比较 MediaStore 已有文件与本次进程中已分配的名字）。 */
-    fun reserveFileName(rawName: String?): String = synchronized(lock) {
+    /** 预留一个不重名的文件名（比较 MediaStore 目标子目录已有文件与本次进程中已分配的名字）。 */
+    fun reserveFileName(rawName: String?, relativeDir: String? = null): String = synchronized(lock) {
+        val dir = TransferFolderPaths.sanitizeRelativeDir(relativeDir)
+        val keyPrefix = reservationKey(dir, "")
         val existing = HashSet<String>()
-        existing.addAll(reservedNames)
-        existing.addAll(queryExistingNames())
+        reservedNames
+            .filter { it.startsWith(keyPrefix) }
+            .mapTo(existing) { it.substring(keyPrefix.length) }
+        existing.addAll(queryExistingNames(relativePathFor(dir)))
         val unique = TransferFileNames.uniqueName(rawName, existing)
-        reservedNames.add(unique.lowercase(Locale.ROOT))
+        reservedNames.add(reservationKey(dir, unique.lowercase(Locale.ROOT)))
         unique
     }
 
     /** 释放文件名的进程内预留（任务结束后调用；成功写入的文件由 MediaStore 查询负责查重）。 */
-    fun releaseFileName(displayName: String) {
+    fun releaseFileName(displayName: String, relativeDir: String? = null) {
         synchronized(lock) {
-            reservedNames.remove(displayName.lowercase(Locale.ROOT))
+            val dir = TransferFolderPaths.sanitizeRelativeDir(relativeDir)
+            reservedNames.remove(reservationKey(dir, displayName.lowercase(Locale.ROOT)))
         }
     }
 
     /** 插入 pending 记录并返回目标 Uri；失败抛出 [IOException]。 */
-    fun createPendingFile(displayName: String): Uri {
+    fun createPendingFile(displayName: String, relativeDir: String? = null): Uri {
+        val dir = TransferFolderPaths.sanitizeRelativeDir(relativeDir)
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, displayName)
             put(MediaStore.Downloads.MIME_TYPE, guessMimeType(displayName))
-            put(MediaStore.Downloads.RELATIVE_PATH, RELATIVE_PATH)
+            put(MediaStore.Downloads.RELATIVE_PATH, relativePathFor(dir))
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = try {
@@ -82,6 +90,12 @@ internal class MediaStoreDownloadStore(private val context: Context) {
         if (rows <= 0) throw IOException("保存下载文件失败：媒体库记录不存在")
     }
 
+    /** 提交 pending 记录并返回最终 Uri（通知点击打开文件用）。 */
+    fun commitAndGetUri(uri: Uri): Uri {
+        commit(uri)
+        return uri
+    }
+
     /** 删除未完成的 pending 记录（失败清理，尽力而为）。 */
     fun discard(uri: Uri) {
         try {
@@ -91,14 +105,20 @@ internal class MediaStoreDownloadStore(private val context: Context) {
         }
     }
 
-    private fun queryExistingNames(): List<String> {
+    private fun reservationKey(relativeDir: String?, lowercaseName: String): String =
+        (relativeDir ?: "").lowercase(Locale.ROOT) + "|" + lowercaseName
+
+    private fun relativePathFor(relativeDir: String?): String =
+        if (relativeDir.isNullOrBlank()) RELATIVE_PATH else RELATIVE_PATH + relativeDir + "/"
+
+    private fun queryExistingNames(relativePath: String): List<String> {
         val names = ArrayList<String>()
         try {
             resolver.query(
                 collection(),
                 arrayOf(MediaStore.Downloads.DISPLAY_NAME),
                 MediaStore.Downloads.RELATIVE_PATH + " = ?",
-                arrayOf(RELATIVE_PATH),
+                arrayOf(relativePath),
                 null
             )?.use { cursor ->
                 val index = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
@@ -121,7 +141,7 @@ internal class MediaStoreDownloadStore(private val context: Context) {
     }
 
     companion object {
-        /** 下载子目录：Download/。 */
+        /** 系统「下载」根目录（末尾带斜杠，MediaStore 存储值格式）。 */
         val RELATIVE_PATH: String = Environment.DIRECTORY_DOWNLOADS + "/"
         private const val DEFAULT_MIME_TYPE = "application/octet-stream"
         private const val TAG = "MediaStoreDownloadStore"

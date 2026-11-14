@@ -17,6 +17,9 @@ mockftpserver = "3.1.0"
 bouncycastle = "1.78.1"
 jsonOrg = "20240303"
 slf4j = "2.0.16"
+zxingCore = "3.5.3"
+zxingEmbedded = "4.3.0"
+documentFile = "1.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -50,6 +53,9 @@ bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "b
 slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
 org-json = { group = "org.json", name = "json", version.ref = "jsonOrg" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentFile" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -1,5 +1,6 @@
 package com.manst.lantransfer.ui.transfers
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
@@ -38,7 +40,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -51,8 +55,10 @@ import com.manst.lantransfer.transfer.TransferDirection
 import com.manst.lantransfer.transfer.TransferState
 import com.manst.lantransfer.transfer.TransferTask
 import com.manst.lantransfer.ui.common.EmptyState
+import com.manst.lantransfer.ui.common.FileOpener
 import com.manst.lantransfer.ui.common.SectionHeader
 import com.manst.lantransfer.ui.common.SnackbarMessageEffect
+import kotlinx.coroutines.launch
 
 /** 传输队列页：进行中/已完成分区，展示进度、速度，支持取消/重试/移除/清空。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,8 +66,23 @@ import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
+
+    val openTask: (TransferTask) -> Unit = { task ->
+        val opened = FileOpener.openTransferFile(
+            context = context,
+            localUri = task.localUri,
+            displayName = task.localDisplayName ?: task.displayName
+        )
+        if (!opened) {
+            scope.launch {
+                snackbarHostState.showSnackbar("无法打开「${task.displayName}」，文件可能已被移动或删除")
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -74,10 +95,10 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
                 },
                 actions = {
                     IconButton(
-                        onClick = viewModel::clearFinished,
+                        onClick = viewModel::clearHistory,
                         enabled = state.finished.isNotEmpty()
                     ) {
-                        Icon(Icons.Filled.DeleteSweep, contentDescription = "清空已完成")
+                        Icon(Icons.Filled.DeleteSweep, contentDescription = "清空历史")
                     }
                 }
             )
@@ -110,20 +131,22 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
                             task = task,
                             onCancel = { viewModel.cancel(task) },
                             onRetry = { viewModel.retry(task) },
-                            onRemove = { viewModel.remove(task) }
+                            onRemove = { viewModel.remove(task) },
+                            onOpen = openTask
                         )
                     }
                 }
                 if (state.finished.isNotEmpty()) {
                     item(key = "finished-header") {
-                        SectionHeader("已完成（${state.finished.size}）")
+                        SectionHeader("历史记录（${state.finished.size}）")
                     }
                     items(items = state.finished, key = { it.id }) { task ->
                         TransferTaskCard(
                             task = task,
                             onCancel = { viewModel.cancel(task) },
                             onRetry = { viewModel.retry(task) },
-                            onRemove = { viewModel.remove(task) }
+                            onRemove = { viewModel.remove(task) },
+                            onOpen = openTask
                         )
                     }
                 }
@@ -137,16 +160,28 @@ private fun TransferTaskCard(
     task: TransferTask,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onOpen: (TransferTask) -> Unit
 ) {
     val isUpload = task.direction == TransferDirection.UPLOAD
+    val canOpen = task.direction == TransferDirection.DOWNLOAD && task.state == TransferState.COMPLETED
     val directionColor = if (isUpload) {
         MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
     } else {
         MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
     }
+    // 文件夹批次任务展示相对路径（如「相册/2024/文件名」）
+    val displayPath = if (task.localRelativeDir.isNullOrBlank()) {
+        task.displayName
+    } else {
+        task.localRelativeDir.trimEnd('/') + "/" + task.displayName
+    }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = canOpen) { onOpen(task) }
+    ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -169,7 +204,7 @@ private fun TransferTaskCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = task.displayName,
+                            text = displayPath,
                             style = MaterialTheme.typography.titleSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -185,8 +220,25 @@ private fun TransferTaskCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (task.attempts > 0) {
+                        Text(
+                            text = if (task.state == TransferState.FAILED || task.state == TransferState.CANCELLED) {
+                                "已重试 ${task.attempts} 次"
+                            } else {
+                                "重试中 (${task.attempts}/3)"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
                 }
-                TaskActionButtons(task = task, onCancel = onCancel, onRetry = onRetry, onRemove = onRemove)
+                TaskActionButtons(
+                    task = task,
+                    onCancel = onCancel,
+                    onRetry = onRetry,
+                    onRemove = onRemove,
+                    onOpen = onOpen
+                )
             }
 
             if (task.state == TransferState.RUNNING) {
@@ -216,6 +268,22 @@ private fun TransferTaskCard(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+            }
+
+            if (task.direction == TransferDirection.DOWNLOAD && task.state != TransferState.COMPLETED) {
+                Text(
+                    text = when {
+                        !task.resumable -> "不支持断点续传（SCP）"
+                        task.attempts > 0 && task.transferredBytes > 0L -> "已续传 · 支持断点续传"
+                        else -> "支持断点续传"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (task.resumable) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
             }
 
             if (task.state == TransferState.RUNNING) {
@@ -265,7 +333,8 @@ private fun TaskActionButtons(
     task: TransferTask,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onOpen: (TransferTask) -> Unit
 ) {
     Row {
         when (task.state) {
@@ -285,6 +354,14 @@ private fun TaskActionButtons(
             }
 
             TransferState.COMPLETED -> {
+                if (task.direction == TransferDirection.DOWNLOAD) {
+                    IconButton(onClick = { onOpen(task) }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "打开文件"
+                        )
+                    }
+                }
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Filled.Close, contentDescription = "移除任务")
                 }

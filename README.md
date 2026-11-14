@@ -30,14 +30,15 @@
 
 | 版本 | 说明 | 直接下载 |
 | --- | --- | --- |
-| v1.3.1（最新） | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
+| **v2.0.0（最新）** | **断点续传 / 文件夹传输 / 历史记录 / 分享直达 / 扫码快传** | [LanTransfer-v2.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.0.0/LanTransfer-v2.0.0.apk) |
+| v1.3.1 | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
 | v1.3.0 | 传输中显示进度 / 速度 / 剩余时间 | [LanTransfer-v1.3.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.0/LanTransfer-v1.3.0.apk) |
 | v1.2.1 | 首次启动安全提示 | [LanTransfer-v1.2.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.2.1/LanTransfer-v1.2.1.apk) |
 | v1.2.0 | 快速传文件（一键互传） | [LanTransfer-v1.2.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.2.0/LanTransfer-v1.2.0.apk) |
 | v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
 | v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
 
-> APK 与 `v1.0.0` ~ `v1.3.1` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+> APK 与 `v1.0.0` ~ `v2.0.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
 
 ## 功能
 
@@ -50,6 +51,25 @@
 - **快速传文件（一键互传）**：两台手机连同一 Wi-Fi，A 选文件后自动开启服务器并显示 6 位接收码；B 在「附近设备」里点一下（或输入 IP + 接收码）即可自动连接、自动下载全部文件；B 也能把文件发回给 A（A 可一键导出到系统下载目录）。全程自动使用 FTP/FTPS/SFTP/SCP 四种协议（接收端自动按加密优先回退，也可手动指定），无需配置服务器/帐号。
 - **首次启动安全提示**：第一次打开应用时弹出「请在你信任的局域网下使用」提示，说明本应用会使用局域网协议传输文件、公共 Wi-Fi 的风险与 FTP 明文说明，确认后记录本地偏好、不再重复弹出。
 - **传输中实时指标**：传输时实时显示已传/总大小、进度百分比、瞬时速度（如 4.9 MB/s）和预计剩余时间（如「剩余约 8 秒」），客户端传输队列页、快速传文件接收/发送页以及前台服务通知中都会展示；速度按滑动窗口计算，剩余时间由剩余字节/当前速度估算。
+- **断点续传与自动重试**：下载先写本地暂存文件，中断后从已下载字节继续（FTP/FTPS/SFTP 支持，SCP 自动从 0 重传）；上传按远端已有大小续传；网络类失败自动重试 3 次（2s/4s/8s 退避），App 重启后未完成任务自动恢复并继续。
+- **文件夹递归传输**：浏览器页可「下载当前文件夹」（远端目录递归下载，保留子目录结构）与「上传文件夹」（SAF 目录树递归上传，自动创建远端目录）。
+- **传输历史与队列持久化**：任务状态持久化到本地，App 重启后历史仍在、未完成任务自动继续；支持清空历史、点击历史中的下载文件直接打开。
+- **系统分享直达快速传**：在相册/文件管理器选择文件后「分享」到本应用，直接进入快速传文件发送页并用这些文件开启会话。
+- **扫码快速传输**：发送页显示接收码二维码，接收页「扫码加入」用相机扫描自动连接；二维码外层载荷为 **Base64(UTF-8 JSON)**（JSON 含接收码、设备名、IP、端口、协议），不携带明文密码。
+- **下载完成通知打开文件**：下载完成通知带「打开」动作，点击直接打开已保存的文件（无 Uri 时回退打开 App）。
+
+## v2.0 实用功能（P0）
+
+| 功能 | 使用方式 |
+| --- | --- |
+| 断点续传 + 自动重试 | 大文件中断后自动从已传字节继续；网络类失败 3 次退避重试，App 重启自动恢复未完成任务 |
+| 文件夹递归传输 | 浏览器页「下载当前文件夹」/「上传文件夹」，保留目录结构（单次最多 1000 个文件） |
+| 传输历史 + 队列持久化 | 传输队列页「历史记录」区；重启 App 后历史与新任务自动恢复 |
+| 系统分享直达 | 任意 App 中选择文件 → 分享 → 局域网传输 → 自动进入发送会话 |
+| 扫码快速传输 | 发送页二维码；接收页「扫码加入」；二维码内容 = Base64(JSON) |
+| 通知打开文件 | 下载完成通知的「打开」动作直接打开文件 |
+
+> 扫码二维码编码规则（v2.0）：会话信息先序列化为 UTF-8 JSON（字段 v/code/name/addrs/ftp/ftps/ssh/protocols），再整体做 Base64（URL-safe）编码后生成二维码；接收端扫码得到 Base64 → 解码 JSON → 用接收码派生临时凭据连接，不携带明文密码。
 
 ## 协议支持
 
@@ -164,7 +184,7 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 ```
 
-**结果：174 个用例全部通过（0 失败）。** 覆盖：
+**结果：236 个用例全部通过（0 失败）。** 覆盖：
 
 - `core`：远端路径归一化 / 拼接 / 父目录，字节与速度格式化；
 - `data`：服务器配置 JSON 持久化（往返、损坏降级、并发写、删除/更新）；
@@ -173,7 +193,9 @@ cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 - `server/ftp`（19 个）：自实现 FTP/FTPS 服务端 + 真实客户端走线（LIST/NLST、PASV/EPSV、显式/隐式 TLS、PROT P 数据通道、上传临时文件原子替换、路径穿越 550 等）；
 - `server/ssh`（19 个）：MINA SSHD 服务端 SFTP/SCP 回环传输、SCP 元数据 shell 命令（ls -la/mkdir/mv/rm/rmdir）与 POSIX 引号解析、越界拒绝、主机密钥持久化；
 - `server` + `data`：共享目录导入/导出/删除、文件名清洗、本机服务器配置持久化；
-- `quick`（25 个）：接收码生成/规范化/凭据派生（与收发双端算法逐位一致）、局域网广播报文编解码与非法数据容错、会话文件名清洗/重名/忽略规则、MediaStore 下载目标语义。
+- `quick`（36 个）：接收码生成/规范化/凭据派生（与收发双端算法逐位一致）、局域网广播报文编解码与非法数据容错、二维码 Base64 载荷编解码、会话文件名清洗/重名/忽略规则、文件夹相对路径映射、MediaStore 下载目标语义。
+- `transfer`（48 个）：队列状态机、文件名清洗、进度节流、错误映射、传输任务 JSON 持久化（往返/损坏回退/历史上限）、自动重试策略与退避、文件夹路径清洗/穿越防护。
+- `protocol`（58 个）：真实 FTP/FTPS/SFTP/SCP 服务端上的下载/上传中断续传（REST/APPE、SFTP offset）、远端大小校验、SCP 不支持续传的回退行为。
 
 ### 2. 设备集成测试（真实四协议端到端）
 
@@ -215,7 +237,7 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manst.lantransfer.ui.AppSmokeTest --console=plain
 ```
 
-**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **31 个用例通过**（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间显示验证）。
+**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **47 个用例通过**（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间、`TransferPersistenceDeviceTest` 队列恢复/自动重试、`FolderTransferDeviceTest` 子目录落盘与通知打开、`QuickFolderTransferDeviceTest` 快捷传文件递归接收、`QuickScreenSmokeTest` 二维码按钮、`BrowserAndTransfersSmokeTest` 文件夹入口/历史清空）。
 
 ### 5. Release（R8 混淆）运行时验证
 

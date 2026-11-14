@@ -116,6 +116,116 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         if (sftpMode) uploadSftp(source, remote, onProgress) else uploadScp(source, remote, sizeHint, onProgress)
     }
 
+    /** SFTP 支持偏移续传；SCP 协议本身不支持，按契约从 0 重传。 */
+    override val supportsResume: Boolean
+        get() = sftpMode
+
+    override suspend fun downloadPartial(
+        remotePath: String,
+        sink: OutputStream,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ): Unit = withContext(Dispatchers.IO) {
+        if (startOffset < 0L) throw IllegalArgumentException("续传偏移不能为负数：" + startOffset)
+        val remote = RemotePath.normalize(remotePath)
+        if (sftpMode) {
+            downloadSftpPartial(remote, sink, startOffset, onProgress)
+        } else {
+            // SCP 没有偏移读能力：从 0 全量重传（supportsResume=false，上层据此决策）
+            downloadScp(remote, sink, onProgress)
+        }
+    }
+
+    override suspend fun uploadPartial(
+        source: InputStream,
+        remotePath: String,
+        sizeHint: Long,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ): Unit = withContext(Dispatchers.IO) {
+        if (startOffset < 0L) throw IllegalArgumentException("续传偏移不能为负数：" + startOffset)
+        val remote = RemotePath.normalize(remotePath)
+        if (!sftpMode) {
+            // SCP 没有追加写能力：从 0 全量重传（supportsResume=false，上层据此决策）
+            uploadScp(source, remote, sizeHint, onProgress)
+            return@withContext
+        }
+        if (startOffset == 0L) {
+            uploadSftp(source, remote, onProgress)
+            return@withContext
+        }
+
+        // 续传上传前必须确认远端已存在的字节数与调用方给出的偏移一致，否则 JSch 的 RESUME 会错位追加
+        val remoteSize = sftpSize(remote)
+        if (remoteSize != startOffset) {
+            val actual = if (remoteSize < 0L) "未知（文件不存在或不是普通文件）" else remoteSize.toString() + " 字节"
+            throw IOException(
+                "无法续传上传「" + remote + "」：远端已有 " + actual +
+                    "，与续传偏移 " + startOffset + " 字节不一致，请重新上传"
+            )
+        }
+        uploadSftpPartial(source, remote, startOffset, onProgress)
+    }
+
+    override suspend fun size(path: String): Long = withContext(Dispatchers.IO) {
+        if (!sftpMode) return@withContext -1L
+        sftpSize(RemotePath.normalize(path))
+    }
+
+    /** SFTP 带偏移下载：JSch 的 get(..., RESUME, skip) 会先以 count(skip) 补上偏移，再累计实际读取字节。 */
+    private fun downloadSftpPartial(
+        remote: String,
+        sink: OutputStream,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        if (startOffset == 0L) {
+            downloadSftp(remote, sink, onProgress)
+            return
+        }
+        val channel = requireSftp()
+        try {
+            channel.get(remote, sink, SftpProgressCallback(onProgress), ChannelSftp.RESUME, startOffset)
+        } catch (e: SftpException) {
+            throw sftpFailure("下载文件", remote, e)
+        } catch (e: IOException) {
+            throw ioFailure("下载文件", remote, e)
+        }
+    }
+
+    /** SFTP 续传上传：JSch RESUME 会读取远端大小并跳过来源中对应的前缀，只写剩余字节。 */
+    private fun uploadSftpPartial(
+        source: InputStream,
+        remote: String,
+        startOffset: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        val channel = requireSftp()
+        try {
+            channel.put(
+                source,
+                remote,
+                SftpProgressCallback(onProgress, initialOffset = startOffset),
+                ChannelSftp.RESUME
+            )
+        } catch (e: SftpException) {
+            throw sftpFailure("上传文件", remote, e)
+        } catch (e: IOException) {
+            throw ioFailure("上传文件", remote, e)
+        }
+    }
+
+    /** 远端文件大小（SFTP stat）；不存在或是目录时返回 -1（契约语义）。 */
+    private fun sftpSize(remote: String): Long {
+        val channel = requireSftp()
+        return try {
+            val attributes = channel.stat(remote)
+            if (attributes.isDir) -1L else attributes.getSize()
+        } catch (e: SftpException) {
+            if (e.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) -1L else throw sftpFailure("获取文件大小", remote, e)
+        }
+    }
+
     override suspend fun mkdir(path: String): Unit = withContext(Dispatchers.IO) {
         val remote = RemotePath.normalize(path)
         if (sftpMode) mkdirSftp(remote) else mkdirScp(remote)
@@ -640,12 +750,19 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         val output: OutputStream
     )
 
-    /** JSch 传输进度回调：把增量字节累计后交给上层。 */
-    private class SftpProgressCallback(private val onProgress: (Long) -> Unit) : SftpProgressMonitor {
-        private var total = 0L
+    /**
+     * JSch 传输进度回调：把增量字节累计后交给上层。
+     * [initialOffset] 用于续传上传（JSch 只回调本次写入字节，需要补上已有偏移）；
+     * 续传下载时 JSch 会主动以 count(skip) 上报偏移，因此 initialOffset 保持 0。
+     */
+    private class SftpProgressCallback(
+        private val onProgress: (Long) -> Unit,
+        private val initialOffset: Long = 0L
+    ) : SftpProgressMonitor {
+        private var total = initialOffset
 
         override fun init(op: Int, src: String?, dest: String?, max: Long) {
-            total = 0L
+            total = initialOffset
         }
 
         override fun count(count: Long): Boolean {

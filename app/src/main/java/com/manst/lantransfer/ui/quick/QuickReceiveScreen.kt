@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.quick
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WifiFind
 import androidx.compose.material3.Button
@@ -66,6 +69,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -73,16 +77,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.manst.lantransfer.core.Format
 import com.manst.lantransfer.core.RemoteEntry
 import com.manst.lantransfer.core.TransferProtocol
 import com.manst.lantransfer.quick.QuickJoinTarget
+import com.manst.lantransfer.quick.QuickQrCodec
 import com.manst.lantransfer.quick.QuickSessionInfo
 import com.manst.lantransfer.quick.QuickTransferDefaults
 import com.manst.lantransfer.quick.QuickTransferProgress
 import com.manst.lantransfer.ui.common.ConfirmDialog
+import com.manst.lantransfer.ui.common.FileOpener
 import com.manst.lantransfer.ui.common.SnackbarMessageEffect
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
 /**
@@ -96,12 +105,66 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var disconnectThenExit by remember { mutableStateOf(false) }
     var exitAfterLeave by remember { mutableStateOf(false) }
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
+
+    // 扫码加入：zxing-android-embedded 的扫描界面，识别发送端二维码里的会话信息
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val contents = result.contents
+        if (contents.isNullOrBlank()) {
+            scope.launch { snackbarHostState.showSnackbar("已取消扫码") }
+        } else {
+            val info = QuickQrCodec.decode(contents)
+            if (info == null) {
+                scope.launch {
+                    snackbarHostState.showSnackbar("二维码无法识别，请对准发送端「快速传文件」页面的二维码")
+                }
+            } else {
+                viewModel.joinScanned(info)
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scanLauncher.launch(buildScanOptions())
+        } else {
+            scope.launch {
+                snackbarHostState.showSnackbar("未授予相机权限，无法扫码；请手动输入 IP 和接收码")
+            }
+        }
+    }
+
+    val requestScan: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            try {
+                scanLauncher.launch(buildScanOptions())
+            } catch (e: Exception) {
+                scope.launch { snackbarHostState.showSnackbar("无法启动扫码，请手动输入 IP 和接收码") }
+            }
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // 已保存文件「打开」：按展示名在 MediaStore 下载记录里找同名文件
+    val openCompletedFile: (String) -> Unit = { name ->
+        val opened = FileOpener.openDownloadedFile(context, name)
+        if (!opened) {
+            scope.launch {
+                snackbarHostState.showSnackbar("无法打开「$name」，文件可能已被移动或删除")
+            }
+        }
+    }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -161,6 +224,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
                     onDownloadAll = viewModel::downloadAll,
                     onDownload = viewModel::download,
                     onRetryFailed = viewModel::retryFailed,
+                    onOpenCompleted = openCompletedFile,
                     onSendFiles = { filePicker.launch(arrayOf("*/*")) },
                     onDisconnect = {
                         disconnectThenExit = false
@@ -176,7 +240,8 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
                     onCodeChange = viewModel::onCodeChange,
                     onProtocolChange = viewModel::onProtocolChange,
                     onJoinManual = viewModel::joinManual,
-                    onRetryJoin = viewModel::retryJoin
+                    onRetryJoin = viewModel::retryJoin,
+                    onScanQr = requestScan
                 )
             }
         }
@@ -212,7 +277,8 @@ private fun DiscoveryContent(
     onCodeChange: (String) -> Unit,
     onProtocolChange: (TransferProtocol?) -> Unit,
     onJoinManual: () -> Unit,
-    onRetryJoin: () -> Unit
+    onRetryJoin: () -> Unit,
+    onScanQr: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -240,7 +306,8 @@ private fun DiscoveryContent(
                 onHostChange = onHostChange,
                 onCodeChange = onCodeChange,
                 onProtocolChange = onProtocolChange,
-                onJoinManual = onJoinManual
+                onJoinManual = onJoinManual,
+                onScanQr = onScanQr
             )
         }
         if (state.isJoining) {
@@ -369,7 +436,8 @@ private fun ManualJoinCard(
     onHostChange: (String) -> Unit,
     onCodeChange: (String) -> Unit,
     onProtocolChange: (TransferProtocol?) -> Unit,
-    onJoinManual: () -> Unit
+    onJoinManual: () -> Unit,
+    onScanQr: () -> Unit
 ) {
     val hostError = state.hostError
     val codeError = state.codeError
@@ -420,6 +488,21 @@ private fun ManualJoinCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        OutlinedButton(
+            onClick = onScanQr,
+            enabled = !state.isJoining,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("quick_scan_join")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.QrCodeScanner,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("扫码加入")
+        }
         Button(
             onClick = onJoinManual,
             enabled = !state.isJoining,
@@ -523,6 +606,7 @@ private fun ConnectedContent(
     onDownloadAll: () -> Unit,
     onDownload: (RemoteEntry) -> Unit,
     onRetryFailed: (String) -> Unit,
+    onOpenCompleted: (String) -> Unit,
     onSendFiles: () -> Unit,
     onDisconnect: () -> Unit
 ) {
@@ -550,7 +634,7 @@ private fun ConnectedContent(
             )
         }
         item(key = "completed") {
-            CompletedFilesCard(receive.completedFiles)
+            CompletedFilesCard(receive.completedFiles, onOpenCompleted)
         }
         if (receive.failedFiles.isNotEmpty()) {
             item(key = "failed") {
@@ -720,7 +804,7 @@ private fun RemoteFilesCard(
 }
 
 @Composable
-private fun CompletedFilesCard(names: List<String>) {
+private fun CompletedFilesCard(names: List<String>, onOpen: (String) -> Unit) {
     QuickSectionCard(title = "已保存（${names.size}）", icon = Icons.Filled.CheckCircle) {
         if (names.isEmpty()) {
             Text(
@@ -756,6 +840,7 @@ private fun CompletedFilesCard(names: List<String>) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    TextButton(onClick = { onOpen(name) }) { Text("打开") }
                 }
             }
         }
@@ -843,6 +928,13 @@ private fun SendBackCard(state: QuickReceiveUiState, onSendFiles: () -> Unit) {
             }
         }
     }
+}
+
+/** 扫码界面配置：只识别二维码、中文提示、关闭提示音。 */
+private fun buildScanOptions(): ScanOptions = ScanOptions().apply {
+    setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+    setPrompt("扫描发送端二维码")
+    setBeepEnabled(false)
 }
 
 @Composable

@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import java.time.ZoneOffset
@@ -33,13 +34,17 @@ import javax.net.ssl.SSLSocket
  *   RETR/STOR/MKD/RMD/DELE/RNFR/RNTO/SIZE/PBSZ/PROT/AUTH/QUIT/NOOP）；
  * - 根目录映射到测试临时目录，路径解析为 / 分隔的绝对虚拟路径。
  *
+ * 额外支持纯 FTP 模式（[tlsEnabled] = false）：同一套命令实现也可作为真实 FTP 服务端使用，
+ * 便于验证 FTP REST 偏移续传与 APPE 追加续传（MockFtpServer 的 FakeFtpServer 不真正实现 REST）。
+ *
  * 该类仅用于 JVM 单元测试，不进入 Android 产物。
  */
 internal class TestFtpsServer(
     private val rootDir: Path,
     private val username: String,
     private val password: String,
-    private val implicitTls: Boolean = false
+    private val implicitTls: Boolean = false,
+    private val tlsEnabled: Boolean = true
 ) : AutoCloseable {
 
     private val sslContext: SSLContext = TestTlsSupport.serverContext()
@@ -54,7 +59,7 @@ internal class TestFtpsServer(
 
     init {
         val address = InetAddress.getByName(HOST)
-        controlServer = if (implicitTls) {
+        controlServer = if (implicitTls && tlsEnabled) {
             sslContext.serverSocketFactory.createServerSocket(0, 20, address)
         } else {
             ServerSocket(0, 20, address)
@@ -112,6 +117,8 @@ internal class TestFtpsServer(
         private var protectedData = false
         private var dataListener: ServerSocket? = null
         private var renameFrom: String? = null
+        /** REST 命令设置的续传偏移，仅对紧随其后的 RETR/STOR/APPE 生效。 */
+        private var restartOffset: Long = 0L
 
         fun shutdown() {
             closeDataListener()
@@ -124,7 +131,7 @@ internal class TestFtpsServer(
 
         override fun run() {
             try {
-                if (implicitTls) {
+                if (implicitTls && tlsEnabled) {
                     (socket as SSLSocket).startHandshake()
                 }
                 writeReply("220 LanTransfer Test FTPS ready")
@@ -154,7 +161,9 @@ internal class TestFtpsServer(
             when (command) {
                 "AUTH" -> {
                     val mode = argument.trim().uppercase(Locale.ROOT)
-                    if (mode == "TLS" || mode == "SSL") {
+                    if (!tlsEnabled) {
+                        writeReply("502 AUTH not supported in plain FTP mode")
+                    } else if (mode == "TLS" || mode == "SSL") {
                         writeReply("234 AUTH TLS successful")
                         upgradeToTls()
                     } else {
@@ -208,8 +217,10 @@ internal class TestFtpsServer(
                 "EPSV" -> enterExtendedPassiveMode()
                 "MLSD" -> listing(argument, mlsd = true)
                 "LIST" -> listing(argument, mlsd = false)
+                "REST" -> restart(argument)
                 "RETR" -> retrieve(argument)
                 "STOR" -> store(argument)
+                "APPE" -> append(argument)
                 "MKD" -> makeDirectory(argument)
                 "RMD" -> removeDirectory(argument)
                 "DELE" -> deleteFile(argument)
@@ -354,14 +365,81 @@ internal class TestFtpsServer(
                 writeReply("550 $virtual: No such file or directory")
                 return
             }
+            // REST 偏移只对本次 RETR 生效
+            val offset = restartOffset
+            restartOffset = 0L
+            if (offset > Files.size(target)) {
+                writeReply("550 $virtual: Restart offset beyond file size")
+                return
+            }
             writeReply("150 Opening BINARY mode data connection")
             try {
                 acceptDataConnection().use { data ->
-                    Files.copy(target, data.getOutputStream())
+                    Files.newInputStream(target).use { input ->
+                        skipFully(input, offset)
+                        input.copyTo(data.getOutputStream())
+                    }
                 }
                 writeReply("226 Transfer complete")
             } catch (e: IOException) {
                 writeReply("426 Connection closed; transfer aborted")
+            }
+        }
+
+        private fun append(argument: String) {
+            if (!requireLogin()) return
+            val virtual = resolveVirtual(cwd, argument.trim())
+            val target = resolveReal(virtual)
+            if (Files.isDirectory(target)) {
+                writeReply("550 $virtual: Is a directory")
+                return
+            }
+            val parent = target.parent
+            if (parent == null || !Files.isDirectory(parent)) {
+                writeReply("550 $virtual: No such directory")
+                return
+            }
+            restartOffset = 0L
+            writeReply("150 Ok to send data")
+            try {
+                acceptDataConnection().use { data ->
+                    data.getInputStream().use { stream ->
+                        Files.newOutputStream(
+                            target,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.WRITE,
+                            StandardOpenOption.APPEND
+                        ).use { output -> stream.copyTo(output) }
+                    }
+                }
+                writeReply("226 Transfer complete")
+            } catch (e: IOException) {
+                writeReply("426 Connection closed; transfer aborted")
+            }
+        }
+
+        private fun restart(argument: String) {
+            if (!requireLogin()) return
+            val offset = argument.trim().toLongOrNull()
+            if (offset == null || offset < 0L) {
+                writeReply("501 REST requires a non-negative offset")
+                return
+            }
+            restartOffset = offset
+            writeReply("350 Restarting at $offset")
+        }
+
+        /** 跳过输入流前 count 字节，供 RETR 的 REST 偏移使用。 */
+        private fun skipFully(input: InputStream, count: Long) {
+            var remaining = count
+            while (remaining > 0L) {
+                val skipped = input.skip(remaining)
+                if (skipped > 0L) {
+                    remaining -= skipped
+                    continue
+                }
+                if (input.read() < 0) break
+                remaining -= 1L
             }
         }
 
@@ -378,6 +456,8 @@ internal class TestFtpsServer(
                 writeReply("550 $virtual: No such directory")
                 return
             }
+            // 本测试服务端不实现 REST+STOR 的偏移写入（客户端续传走 APPE）
+            restartOffset = 0L
             writeReply("150 Ok to send data")
             try {
                 acceptDataConnection().use { data ->
@@ -479,6 +559,7 @@ internal class TestFtpsServer(
             output.write(" MLST type*;size*;modify*;\r\n".toByteArray(StandardCharsets.UTF_8))
             output.write(" MLSD\r\n".toByteArray(StandardCharsets.UTF_8))
             output.write(" UTF8\r\n".toByteArray(StandardCharsets.UTF_8))
+            output.write(" REST STREAM\r\n".toByteArray(StandardCharsets.UTF_8))
             output.write("211 End\r\n".toByteArray(StandardCharsets.UTF_8))
             output.flush()
         }

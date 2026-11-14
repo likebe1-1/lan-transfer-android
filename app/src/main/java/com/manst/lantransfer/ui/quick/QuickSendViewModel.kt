@@ -40,7 +40,9 @@ data class QuickSendUiState(
  * 页面可见时每 2 秒刷新一次会话目录（对方上传的文件会出现在「收到的文件」里）。
  */
 class QuickSendViewModel(
-    private val quickSendManager: QuickSendManager
+    private val quickSendManager: QuickSendManager,
+    initialSharedUris: List<Uri> = emptyList(),
+    onSharedUrisConsumed: () -> Unit = {}
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(QuickSendUiState(session = quickSendManager.state.value))
@@ -59,6 +61,11 @@ class QuickSendViewModel(
             quickSendManager.state.collect { sendState ->
                 _uiState.update { it.copy(session = sendState) }
             }
+        }
+        // 从系统分享进入时自动用分享的文件开启发送会话（消费后清空，避免重复触发）
+        if (initialSharedUris.isNotEmpty()) {
+            onSharedUrisConsumed()
+            startSession(initialSharedUris)
         }
     }
 

@@ -2,12 +2,14 @@ package com.manst.lantransfer.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -60,6 +62,15 @@ object Routes {
 @Composable
 fun LanTransferApp(container: AppContainer) {
     val navController = rememberNavController()
+    // 系统分享进来的文件：自动跳转「快速传文件」发送页并在 ViewModel 中用这些文件开会话
+    val sharedUris by container.shareImports.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedUris) {
+        if (sharedUris.isNotEmpty() &&
+            navController.currentDestination?.route != Routes.QUICK_SEND
+        ) {
+            navController.navigate(Routes.QUICK_SEND) { launchSingleTop = true }
+        }
+    }
     // 首次启动提示：只在第一次打开应用时出现一次（偏好持久化，确认后不再打扰）
     val context = LocalContext.current
     val preferences = remember { AppPreferences(context) }
@@ -179,7 +190,11 @@ fun LanTransferApp(container: AppContainer) {
         composable(Routes.QUICK_SEND) {
             val viewModel: QuickSendViewModel = viewModel(
                 factory = SimpleViewModelFactory {
-                    QuickSendViewModel(quickSendManager = container.quickSendManager)
+                    QuickSendViewModel(
+                        quickSendManager = container.quickSendManager,
+                        initialSharedUris = container.shareImports.value,
+                        onSharedUrisConsumed = { container.shareImports.value = emptyList() }
+                    )
                 }
             )
             QuickSendScreen(
