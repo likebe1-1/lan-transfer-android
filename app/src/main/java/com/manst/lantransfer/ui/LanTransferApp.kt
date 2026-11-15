@@ -27,6 +27,8 @@ import com.manst.lantransfer.ui.editor.ServerEditorScreen
 import com.manst.lantransfer.ui.editor.ServerEditorViewModel
 import com.manst.lantransfer.ui.quick.QuickReceiveScreen
 import com.manst.lantransfer.ui.quick.QuickReceiveViewModel
+import com.manst.lantransfer.ui.network.NetworkToolsScreen
+import com.manst.lantransfer.ui.network.NetworkToolsViewModel
 import com.manst.lantransfer.ui.quick.QuickSendScreen
 import com.manst.lantransfer.ui.quick.QuickSendViewModel
 import com.manst.lantransfer.ui.servers.ServerListScreen
@@ -45,6 +47,7 @@ object Routes {
     const val SERVER = "server"
     const val QUICK_SEND = "quick/send"
     const val QUICK_RECEIVE = "quick/receive"
+    const val NETWORK_TOOLS = "network/tools"
 
     /** 桌面快捷方式 Intent action（与 res/xml/shortcuts.xml、MainActivity 的 intent-filter 保持一致）。 */
     const val ACTION_QUICK_SEND = "com.manst.lantransfer.action.QUICK_SEND"
@@ -122,7 +125,20 @@ fun LanTransferApp(container: AppContainer) {
                 onOpenLocalServer = { navController.navigate(Routes.SERVER) },
                 onOpenQuickSend = { navController.navigate(Routes.QUICK_SEND) },
                 onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) },
+                onOpenNetworkTools = { navController.navigate(Routes.NETWORK_TOOLS) },
                 updateManager = container.updateManager
+            )
+        }
+
+        composable(Routes.NETWORK_TOOLS) {
+            val viewModel: NetworkToolsViewModel = viewModel(
+                factory = SimpleViewModelFactory {
+                    NetworkToolsViewModel(container.lanScanner)
+                }
+            )
+            NetworkToolsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 

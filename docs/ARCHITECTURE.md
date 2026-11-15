@@ -334,3 +334,11 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - `TransferService.onCreate` 先立即 `startForeground`（空任务通知），再初始化 `TransferManager` 并刷新通知；
 - 传输引擎仅在**存在前台 Activity** 时启动传输前台服务（`LanTransferApplication` 通过 Activity 生命周期计数），避免无界面/仪器测试场景 startForegroundService 超时导致 `ForegroundServiceDidNotStartInTimeException`；真实场景中服务一旦在界面前台时启动，离开界面后仍持续运行；
 - 该问题在设备测试中由 `TransferPersistenceDeviceTest` 的恢复+自动重试用例暴露并修复。
+## 15. 网络工具（局域网雷达/诊断）
+
+- 页面：首页顶栏「网络工具」→ `ui/network/NetworkToolsScreen`，数据来自 `net/LanScanner`；
+- 当前网络：`ConnectivityManager` + `LinkProperties` 读取活动网络的 IPv4、前缀、默认网关、接口与 Wi-Fi/有线类型（不需要定位权限）；
+- 设备扫描：对 `LanSubnet.hostAddresses()` 生成的同网段地址（大网段只取本机 /24）× 常见端口（21/22/80/139/443/445/8080/2121/2222）做并发 TCP 连接探测（48 并发、250ms 超时），结合 `/proc/net/arp`（可读时）补充 MAC 与无开放端口但曾在线的设备；同时监听快速传文件 UDP 广播识别正在等待接收的 LanLink 设备；对在线设备做限量反向 DNS 获取主机名；
+- 诊断：`LanSubnet.buildChecks()` 生成「已连接局域网 / 网关可达 / 发现其他设备 / LanLink 设备 / 疑似 AP 隔离」项（网关可达但无设备时提示 AP 隔离）；
+- 端口测试：任意 IP:端口 TCP 连接测试（2s 超时），用于排查对方服务是否启动；
+- 纯逻辑（网段计算、设备类型判定、诊断项）在 `net/LanModels.kt` 并用 JVM 单测覆盖；扫描/UI 在模拟器冒烟测试覆盖。

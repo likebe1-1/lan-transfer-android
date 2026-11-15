@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WifiTethering
@@ -80,6 +81,7 @@ fun ServerListScreen(
     onOpenLocalServer: () -> Unit,
     onOpenQuickSend: () -> Unit,
     onOpenQuickReceive: () -> Unit,
+    onOpenNetworkTools: () -> Unit,
     updateManager: UpdateManager
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -109,6 +111,12 @@ fun ServerListScreen(
             TopAppBar(
                 title = { Text(text = stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) },
                 actions = {
+                    IconButton(onClick = onOpenNetworkTools) {
+                        Icon(
+                            imageVector = Icons.Filled.Radar,
+                            contentDescription = stringResource(R.string.cd_network_tools)
+                        )
+                    }
                     IconButton(onClick = {
                         manualUpdateCheck = true
                         updateManager.check(auto = false)

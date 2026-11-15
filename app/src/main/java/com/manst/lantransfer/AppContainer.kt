@@ -21,6 +21,7 @@ import com.manst.lantransfer.quick.SessionFileStore
 import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
+import com.manst.lantransfer.net.LanScanner
 import com.manst.lantransfer.update.DefaultUpdateManager
 import com.manst.lantransfer.update.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,5 +85,10 @@ class AppContainer(context: Context) {
     /** 应用内更新：检查 update.json（GitHub/镜像多源）+ 下载 APK + 拉起系统安装。 */
     val updateManager: UpdateManager by lazy {
         DefaultUpdateManager(appContext)
+    }
+
+    /** 局域网扫描与诊断（网络工具页）。 */
+    val lanScanner: LanScanner by lazy {
+        LanScanner(appContext)
     }
 }
