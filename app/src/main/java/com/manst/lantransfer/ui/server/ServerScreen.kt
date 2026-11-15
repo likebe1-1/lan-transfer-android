@@ -1,5 +1,10 @@
 package com.manst.lantransfer.ui.server
 
+import kotlinx.coroutines.delay
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.compose.runtime.LaunchedEffect
 import com.manst.lantransfer.R
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -113,6 +118,19 @@ fun ServerScreen(viewModel: ServerViewModel, onBack: () -> Unit) {
     }
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
+
+    // 共享目录自动刷新：页面可见（RESUMED）期间每 4.5 秒静默刷新一次；
+    // 进入页面 / 从后台回到前台时立即刷新，离开页面（onStop）自动停止。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.refreshSharedFilesSilently()
+            while (true) {
+                delay(SHARED_FILES_REFRESH_INTERVAL_MS)
+                viewModel.refreshSharedFilesSilently()
+            }
+        }
+    }
 
     val copyToClipboard: (String, String) -> Unit = { text, tip ->
         if (text.isNotBlank()) {
@@ -1121,3 +1139,6 @@ private val SERVER_PROTOCOLS: List<TransferProtocol> = listOf(
     TransferProtocol.SFTP,
     TransferProtocol.SCP
 )
+
+/** 本机服务器页共享目录自动刷新间隔（毫秒）。 */
+private const val SHARED_FILES_REFRESH_INTERVAL_MS = 4_500L

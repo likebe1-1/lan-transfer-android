@@ -295,4 +295,11 @@
     <string name="update_lanzou_fallback_hint">If GitHub is unreachable, download from Lanzou Cloud in a browser (password copied to the clipboard).</string>
     <string name="update_error_title">Failed to check for updates</string>
     <string name="update_no_update">You are on the latest version</string>
+    <string name="shortcut_quick_send_short">Send files</string>
+    <string name="shortcut_quick_send_long">Send files nearby</string>
+    <string name="shortcut_quick_receive_short">Receive</string>
+    <string name="shortcut_quick_receive_long">Receive nearby files</string>
+    <string name="shortcut_local_server_short">Server</string>
+    <string name="shortcut_local_server_long">Start the local server</string>
+    <string name="shortcut_disabled_message">Shortcut unavailable</string>
 </resources>

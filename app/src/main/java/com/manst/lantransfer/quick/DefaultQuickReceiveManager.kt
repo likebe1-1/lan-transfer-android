@@ -35,6 +35,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 
 /**
@@ -48,6 +49,8 @@ import java.io.IOException
  *   remoteFiles），并后台自动 [downloadAll]（不阻塞 join 返回）；
  * - 接收：[downloadAll] / [download] 顺序下载到 [QuickDownloadSink]：文件夹传输时用
  *   [QuickDownloadSink.openInDir] 在系统下载目录下保留相对子目录结构，提交成功才计入完成；
+ * - 断点续传：先写 cacheDir/quick_partial 下的分片，支持续传的协议（FTP/FTPS/SFTP）重试时从已有
+ *   分片长度继续，完成后复制到系统下载目录并删除分片；失败/取消保留分片供下次重试；
  * - 互传：[sendFiles] 用同一个连接把本机文件上传到对方根目录；
  * - 限流：同一目标连续 5 次接收码错误后锁定 10 分钟（[QuickJoinAttemptLimiter]），成功连接即清除；
  * - 所有网络操作在 Dispatchers.IO 上、由同一把 Mutex 串行；同一时刻只允许一个会话。
@@ -83,6 +86,17 @@ class DefaultQuickReceiveManager(
 
     /** 接收码错误次数限制：按目标（host + 三端口）连续 5 次认证失败后锁定 10 分钟。 */
     private val joinAttemptLimiter = QuickJoinAttemptLimiter()
+
+    /** 断点续传分片仓库（cacheDir/quick_partial），失败保留、成功后删除。 */
+    private val partialStore = QuickPartialStore(File(appContext.cacheDir, QuickPartialStore.DIRECTORY_NAME))
+
+    init {
+        // 初始化时清理超过 7 天的孤儿分片，避免历史上传失败的分片长期占用 cache
+        scope.launch(Dispatchers.IO) {
+            runCatching { partialStore.cleanupExpired() }
+                .onFailure { Log.w(TAG, "清理过期下载分片失败", it) }
+        }
+    }
 
     // ------------------------------------------------------------ 局域网发现
 
@@ -517,6 +531,15 @@ class DefaultQuickReceiveManager(
         // 文件夹传输：保留远端相对目录结构；顶层文件 relativeDir 为 null，直接落到下载根目录
         val relativeDir = QuickFolderPaths.sanitizeRelativeDir(QuickFolderPaths.relativeDirOf(entry.path))
         val failureLabel = if (relativeDir != null) relativeDir + "/" + displayName else displayName
+
+        // 第一步：下载到 cacheDir 分片（失败/取消保留分片，下次重试可续传）
+        val partialFile = partialStore.partialFile(currentFileSystem.profile, entry)
+        val downloadResult = downloadToPartialLocked(
+            currentFileSystem, entry, partialFile, displayName, failureLabel, index, fileCount
+        )
+        if (downloadResult.isFailure) return downloadResult
+
+        // 第二步：把完整分片复制到系统下载目录的 pending 目标并提交，成功后删除分片
         val target = try {
             downloadSink.openInDir(displayName, relativeDir)
         } catch (e: Exception) {
@@ -528,46 +551,132 @@ class DefaultQuickReceiveManager(
             return Result.failure(IllegalStateException(message))
         }
         val totalBytes = if (entry.size > 0L) entry.size else -1L
-        val tracker = TransferProgressTracker()
-        publishProgress(displayName, QuickTransferProgress.Direction.RECEIVE, 0L, totalBytes, index, fileCount, 0L)
         try {
-            target.outputStream.use { sink ->
-                currentFileSystem.download(entry.path, sink) { transferred ->
-                    // 节流推送并附带滑动窗口瞬时速度，UI 据此显示速度与预计剩余时间
-                    val sample = tracker.sample(System.currentTimeMillis(), transferred, totalBytes)
-                    if (sample != null) {
-                        publishProgress(
-                            displayName,
-                            QuickTransferProgress.Direction.RECEIVE,
-                            transferred,
-                            totalBytes,
-                            index,
-                            fileCount,
-                            sample.bytesPerSecond
-                        )
-                    }
-                }
+            publishProgress(
+                displayName,
+                QuickTransferProgress.Direction.RECEIVE,
+                if (totalBytes > 0L) totalBytes else 0L,
+                totalBytes,
+                index,
+                fileCount
+            )
+            partialFile.inputStream().use { input ->
+                target.outputStream.use { output -> input.copyTo(output, PARTIAL_COPY_BUFFER_SIZE) }
             }
             val committed = target.commit()
             if (committed.isFailure) {
                 throw committed.exceptionOrNull() ?: IOException("保存下载文件失败")
             }
             val finalName = committed.getOrThrow()
+            partialStore.delete(currentFileSystem.profile, entry)
             mutableState.update {
                 it.copy(completedFiles = it.completedFiles + finalName, transfer = null)
             }
-            Log.i(TAG, "已接收文件：" + finalName + "（" + entry.path + "）")
+            Log.i(TAG, "已接收文件（断点续传分片已清理）：" + finalName + "（" + entry.path + "）")
             return Result.success(Unit)
         } catch (e: CancellationException) {
             runCatching { target.abort() }
             throw e
         } catch (e: Exception) {
+            // 提交/复制失败：保留分片，下次重试直接复用已下载的数据
             runCatching { target.abort() }
             val message = quickErrorMessage(e)
             mutableState.update {
                 it.copy(failedFiles = it.failedFiles + failureLabel, transfer = null, error = message)
             }
-            Log.w(TAG, "接收文件失败：" + entry.path, e)
+            Log.w(TAG, "接收文件失败（已保留断点分片）：" + entry.path, e)
+            return Result.failure(IllegalStateException(message))
+        }
+    }
+
+    /** 断点续传下载阶段：把远端文件写入分片，支持续传的协议从已有分片长度继续。 */
+    private suspend fun downloadToPartialLocked(
+        currentFileSystem: RemoteFileSystem,
+        entry: RemoteEntry,
+        partialFile: File,
+        displayName: String,
+        failureLabel: String,
+        index: Int,
+        fileCount: Int
+    ): Result<Unit> {
+        val totalBytes = if (entry.size > 0L) entry.size else -1L
+        val existingLength = if (partialFile.isFile) partialFile.length() else 0L
+        val decision = QuickPartialPlan.decide(existingLength, entry.size, currentFileSystem.supportsResume)
+        try {
+            if (decision.alreadyComplete) {
+                // 上次已下载完整、只是落盘失败：无需再走网络，直接复用完整分片
+                publishProgress(
+                    displayName,
+                    QuickTransferProgress.Direction.RECEIVE,
+                    totalBytes,
+                    totalBytes,
+                    index,
+                    fileCount
+                )
+                return Result.success(Unit)
+            }
+            partialFile.parentFile?.mkdirs()
+            if (decision.offset == 0L && partialFile.exists() && !partialFile.delete()) {
+                throw IOException("无法重置未完成的下载分片")
+            }
+            val tracker = TransferProgressTracker()
+            publishProgress(
+                displayName,
+                QuickTransferProgress.Direction.RECEIVE,
+                decision.offset,
+                totalBytes,
+                index,
+                fileCount
+            )
+            FileOutputStream(partialFile, decision.offset > 0L).use { sink ->
+                if (decision.offset > 0L) {
+                    // 协议约定：onProgress 的累计值已包含 startOffset，直接透传即可
+                    currentFileSystem.downloadPartial(entry.path, sink, decision.offset) { transferred ->
+                        val sample = tracker.sample(System.currentTimeMillis(), transferred, totalBytes)
+                        if (sample != null) {
+                            publishProgress(
+                                displayName,
+                                QuickTransferProgress.Direction.RECEIVE,
+                                transferred,
+                                totalBytes,
+                                index,
+                                fileCount,
+                                sample.bytesPerSecond
+                            )
+                        }
+                    }
+                } else {
+                    currentFileSystem.download(entry.path, sink) { transferred ->
+                        val sample = tracker.sample(System.currentTimeMillis(), transferred, totalBytes)
+                        if (sample != null) {
+                            publishProgress(
+                                displayName,
+                                QuickTransferProgress.Direction.RECEIVE,
+                                transferred,
+                                totalBytes,
+                                index,
+                                fileCount,
+                                sample.bytesPerSecond
+                            )
+                        }
+                    }
+                }
+            }
+            // 远端大小已知时必须完整下载；否则保留分片，下次自动续传
+            if (entry.size > 0L && partialFile.length() != entry.size) {
+                throw IOException(
+                    "下载不完整：分片 " + partialFile.length() + " / " + entry.size + " 字节，已保留以便续传"
+                )
+            }
+            return Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val message = quickErrorMessage(e)
+            mutableState.update {
+                it.copy(failedFiles = it.failedFiles + failureLabel, transfer = null, error = message)
+            }
+            Log.w(TAG, "下载分片失败（已保留分片）：" + entry.path, e)
             return Result.failure(IllegalStateException(message))
         }
     }
@@ -734,6 +843,9 @@ class DefaultQuickReceiveManager(
                 stopDiscovery()
                 closeActiveSession()
                 mutableState.value = QuickReceiveState()
+                // 会话结束顺手清理超过 7 天的孤儿分片（当前会话的分片保留，方便稍后重试续传）
+                runCatching { partialStore.cleanupExpired() }
+                    .onFailure { Log.w(TAG, "清理过期下载分片失败", it) }
                 Log.i(TAG, "已离开快捷接收会话")
             }
         }
@@ -759,6 +871,7 @@ class DefaultQuickReceiveManager(
 
     private companion object {
         const val TAG = "DefaultQuickReceiveManager"
+        const val PARTIAL_COPY_BUFFER_SIZE = 64 * 1024
         const val DISCOVERY_TTL_MS = 6_000L
         const val DISCOVERY_EXPIRY_CHECK_MS = 1_000L
         const val JOIN_TIMEOUT_MS = 20_000L

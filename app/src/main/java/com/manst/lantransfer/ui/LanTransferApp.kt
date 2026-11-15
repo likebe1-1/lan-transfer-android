@@ -46,6 +46,19 @@ object Routes {
     const val QUICK_SEND = "quick/send"
     const val QUICK_RECEIVE = "quick/receive"
 
+    /** 桌面快捷方式 Intent action（与 res/xml/shortcuts.xml、MainActivity 的 intent-filter 保持一致）。 */
+    const val ACTION_QUICK_SEND = "com.manst.lantransfer.action.QUICK_SEND"
+    const val ACTION_QUICK_RECEIVE = "com.manst.lantransfer.action.QUICK_RECEIVE"
+    const val ACTION_LOCAL_SERVER = "com.manst.lantransfer.action.LOCAL_SERVER"
+
+    /** 桌面快捷方式 action -> 应用内路由；非快捷方式 action 返回 null。 */
+    fun routeForShortcutAction(action: String?): String? = when (action) {
+        ACTION_QUICK_SEND -> QUICK_SEND
+        ACTION_QUICK_RECEIVE -> QUICK_RECEIVE
+        ACTION_LOCAL_SERVER -> SERVER
+        else -> null
+    }
+
     fun editor(profileId: String? = null): String =
         if (profileId.isNullOrBlank()) "editor" else "editor?profileId=${Uri.encode(profileId)}"
 
@@ -69,6 +82,15 @@ fun LanTransferApp(container: AppContainer) {
             navController.currentDestination?.route != Routes.QUICK_SEND
         ) {
             navController.navigate(Routes.QUICK_SEND) { launchSingleTop = true }
+        }
+    }
+    // 桌面快捷方式：MainActivity 把 action 解析成待处理路由，这里消费并导航
+    val pendingRoute by container.pendingRoute.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingRoute) {
+        val target = pendingRoute ?: return@LaunchedEffect
+        container.pendingRoute.value = null
+        if (navController.currentDestination?.route != target) {
+            navController.navigate(target) { launchSingleTop = true }
         }
     }
     // 首次启动提示：只在第一次打开应用时出现一次（偏好持久化，确认后不再打扰）

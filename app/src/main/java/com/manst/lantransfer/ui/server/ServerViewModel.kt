@@ -107,6 +107,7 @@ class ServerViewModel(
     private val saveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var saveJob: Job? = null
     private var startInFlight = false
+    private var silentRefreshJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -257,6 +258,18 @@ class ServerViewModel(
 
     fun refreshSharedFiles() {
         viewModelScope.launch { doRefreshSharedFiles(showError = true) }
+    }
+
+    /**
+     * 页面可见期间的静默自动刷新：不显示刷新按钮 loading、不弹错误提示，
+     * 已有刷新在进行时直接跳过，避免与手动刷新/上一次自动刷新叠加。
+     */
+    fun refreshSharedFilesSilently() {
+        if (_uiState.value.isLoadingFiles) return
+        if (silentRefreshJob?.isActive == true) return
+        silentRefreshJob = viewModelScope.launch {
+            doRefreshSharedFiles(showError = false, showLoading = false)
+        }
     }
 
     fun importFiles(uris: List<Uri>) {
@@ -419,8 +432,10 @@ class ServerViewModel(
         _uiState.update { it.copy(addresses = addresses) }
     }
 
-    private suspend fun doRefreshSharedFiles(showError: Boolean) {
-        _uiState.update { it.copy(isLoadingFiles = true) }
+    private suspend fun doRefreshSharedFiles(showError: Boolean, showLoading: Boolean = true) {
+        if (showLoading) {
+            _uiState.update { it.copy(isLoadingFiles = true) }
+        }
         try {
             shareRepository.refresh()
         } catch (e: CancellationException) {
@@ -432,7 +447,9 @@ class ServerViewModel(
                 Log.w(TAG, "刷新共享文件失败", e)
             }
         } finally {
-            _uiState.update { it.copy(isLoadingFiles = false) }
+            if (showLoading) {
+                _uiState.update { it.copy(isLoadingFiles = false) }
+            }
         }
     }
 

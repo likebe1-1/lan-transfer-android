@@ -50,6 +50,12 @@ class TransferService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_CANCEL_TRANSFERS) {
+            val active = transferManager.tasks.value.filter { it.isActive }
+            active.forEach { task -> runCatching { transferManager.cancel(task.id) } }
+            Log.i(TAG, "通知栏取消操作：已取消 " + active.size + " 个活动传输")
+            return START_NOT_STICKY
+        }
         val taskList = transferManager.tasks.value
         if (taskList.none { it.isActive }) {
             stopSelfSafely()
@@ -128,6 +134,9 @@ class TransferService : Service() {
     companion object {
         private const val TAG = "TransferService"
         private const val NOTIFICATION_UPDATE_INTERVAL_MILLIS = 400L
+
+        /** 通知栏「取消」按钮的 action：由服务统一取消所有活动传输。 */
+        const val ACTION_CANCEL_TRANSFERS = "com.manst.lantransfer.action.CANCEL_TRANSFERS"
 
         /** 启动前台传输服务；前台服务启动限制异常由调用方处理。 */
         fun start(context: Context) {

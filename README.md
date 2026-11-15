@@ -65,6 +65,11 @@
 - **快速传文件安全加固**：UDP 广播只携带设备名/IP/端口/协议，**不含接收码**；接收方需点击设备后输入接收码；同一设备连续 5 次接收码错误后锁定 10 分钟（应用内限流）。
 - **应用内更新**：启动时静默检查 `docs/update.json`（jsDelivr / GitHub raw / ghproxy 多源），有新版本弹窗展示更新日志；下载走 GitHub Releases 多镜像、校验 SHA-256 与 APK 签名后拉起系统安装；GitHub 不可用时提供**蓝奏云浏览器下载**兜底（链接与密码随清单下发）。
 - **中英文界面**：所有界面文案已抽取到 `strings.xml` 并配齐 `values-en/`（294 条），系统语言为英文时自动显示英文界面（中文环境保持中文）；动态提示（Snackbar/错误文案）暂时仍为中文。
+- **快速传文件接收断点续传**：接收端先写 App 私有分片，FTP/FTPS/SFTP 从断点续传，成功后复制到系统下载目录；失败/取消保留分片，重试自动续传，7 天孤儿分片自动清理（SCP 不支持偏移，仍整文件重传）。
+- **收到文件自动保留**：快速传文件会话结束时，对方发回的文件自动导出到系统「下载」目录（保留子目录结构），不再随会话目录删除；手动导出过的文件不会重复导出。
+- **共享目录自动刷新**：本机服务器页可见时每约 5 秒静默刷新，回到前台立即刷新，无需手动点「刷新」。
+- **通知栏操作**：传输进度通知新增「取消」按钮，一键取消全部活动传输；下载完成通知保留「打开」按钮。
+- **桌面快捷方式**：长按桌面图标可直接「发送文件 / 接收文件 / 启动服务器」，冷启动与 App 运行中都生效。
 - **下载完成通知打开文件**：下载完成通知带「打开」动作，点击直接打开已保存的文件（无 Uri 时回退打开 App）。
 
 ## v2.0 实用功能（P0）
@@ -77,6 +82,10 @@
 | 系统分享直达 | 任意 App 中选择文件 → 分享 → 局域网传输 → 自动进入发送会话 |
 | 扫码快速传输 | 发送页二维码；接收页「扫码加入」；二维码内容 = Base64(JSON) |
 | 通知打开文件 | 下载完成通知的「打开」动作直接打开文件 |
+| 通知取消传输 | 进度通知的「取消」按钮一键取消全部活动传输 |
+| 桌面快捷方式 | 长按图标进入发送/接收/本机服务器 |
+| 快速传文件续传 | 接收中断后从分片断点继续（FTP/FTPS/SFTP） |
+| 收到文件自动保留 | 会话结束自动把对方发回的文件保存到「下载」 |
 
 > 扫码二维码编码规则（v2.0）：会话信息先序列化为 UTF-8 JSON（字段 v/code/name/addrs/ftp/ftps/ssh/protocols），再整体做 Base64（URL-safe）编码后生成二维码；接收端扫码得到 Base64 → 解码 JSON → 用接收码派生临时凭据连接，不携带明文密码。
 
@@ -224,7 +233,7 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 ```
 
-**结果：249 个用例全部通过（0 失败）。** 覆盖：
+**结果：271 个用例全部通过（0 失败）。** 覆盖：
 
 - `core`：远端路径归一化 / 拼接 / 父目录，字节与速度格式化；
 - `data`：服务器配置 JSON 持久化（往返、损坏降级、并发写、删除/更新）；
@@ -233,7 +242,7 @@ cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 - `server/ftp`（19 个）：自实现 FTP/FTPS 服务端 + 真实客户端走线（LIST/NLST、PASV/EPSV、显式/隐式 TLS、PROT P 数据通道、上传临时文件原子替换、路径穿越 550 等）；
 - `server/ssh`（19 个）：MINA SSHD 服务端 SFTP/SCP 回环传输、SCP 元数据 shell 命令（ls -la/mkdir/mv/rm/rmdir）与 POSIX 引号解析、越界拒绝、主机密钥持久化；
 - `server` + `data`：共享目录导入/导出/删除、文件名清洗、本机服务器配置持久化；
-- `quick`（49 个）：接收码生成/规范化/凭据派生、局域网广播 v2（不含接收码）编解码与非法数据容错、接收码错误次数限流（5 次/10 分钟）、二维码 Base64 载荷编解码、会话文件名清洗/重名/忽略规则、文件夹相对路径映射、MediaStore 下载目标语义。
+- `quick`（60 个）：接收码生成/规范化/凭据派生、局域网广播 v2（不含接收码）编解码与非法数据容错、接收码错误次数限流（5 次/10 分钟）、二维码 Base64 载荷编解码、会话文件名清洗/重名/忽略规则、文件夹相对路径映射、MediaStore 下载目标语义、接收断点续传分片决策与孤儿清理。
 - `transfer`（48 个）：队列状态机、文件名清洗、进度节流、错误映射、传输任务 JSON 持久化（往返/损坏回退/历史上限）、自动重试策略与退避、文件夹路径清洗/穿越防护。
 - `protocol`（58 个）：真实 FTP/FTPS/SFTP/SCP 服务端上的下载/上传中断续传（REST/APPE、SFTP offset）、远端大小校验、SCP 不支持续传的回退行为。
 
@@ -277,7 +286,7 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manst.lantransfer.ui.AppSmokeTest --console=plain
 ```
 
-**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **47 个用例通过**（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间、`TransferPersistenceDeviceTest` 队列恢复/自动重试、`FolderTransferDeviceTest` 子目录落盘与通知打开、`QuickFolderTransferDeviceTest` 快捷传文件递归接收、`QuickScreenSmokeTest` 二维码按钮、`BrowserAndTransfersSmokeTest` 文件夹入口/历史清空）。
+**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **63 个用例通过**（新增快速传文件续传/自动保留、通知取消按钮、桌面快捷方式、共享目录自动刷新等用例）（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间、`TransferPersistenceDeviceTest` 队列恢复/自动重试、`FolderTransferDeviceTest` 子目录落盘与通知打开、`QuickFolderTransferDeviceTest` 快捷传文件递归接收、`QuickScreenSmokeTest` 二维码按钮、`BrowserAndTransfersSmokeTest` 文件夹入口/历史清空）。
 
 ### 5. Release（R8 混淆）运行时验证
 
@@ -367,11 +376,11 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 
 - **协议本身限制**：SCP 不提供断点续传（失败/中断后从 0 重传，应用会自动回退到 SFTP 优先）；SCP 的列目录/建目录/重命名/删除依赖远端 POSIX shell，无 shell 的服务器只能传输文件。
 - **本机服务器**：仅密码认证、单用户、单个共享目录；FTP 服务端仅支持被动模式（PASV/EPSV），不支持主动模式；FTPS 使用进程内生成的自签名证书，App 进程重启后证书会重新生成（客户端需重新信任）；用户名/密码以明文存储在应用私有目录（其他应用无法读取，但未做加密）。
-- **共享目录位置**：位于应用外部私有目录（Android/data/…/files/share），卸载 App 会随之删除；其他设备上传文件后需在页面手动「刷新」（页面可见时已每 2 秒自动刷新）。
+- **共享目录位置**：位于应用外部私有目录（Android/data/…/files/share），卸载 App 会随之删除；其他设备上传文件后页面可见时约每 5 秒自动刷新，回到前台也会立即刷新（也可手动点「刷新」）。
 - **快速传文件**：
   - 「附近设备」依赖同网段 UDP 广播，部分路由器开启 AP 隔离时发现不到；此时可用 **扫码加入**（二维码内含 IP/端口/接收码）或手动输入 IP + 接收码。
   - 广播不再包含接收码：附近设备列表只显示设备名/IP/端口与协议，点击后需输入发送方屏幕上的 6 位接收码才能连接；同一目标连续 5 次接收码错误后会被暂时锁定 10 分钟。
-  - 接收端不支持断点续传（中断后该文件重新传输）；单次最多 200 个文件；接收端会自动保存到系统下载目录，发送端收到的文件需在会话内导出。
+  - 接收端续传仅对 FTP/FTPS/SFTP 生效（SCP 无偏移能力，仍整文件重传）；断点分片存于 App 私有 cache，系统低存储时可能被清理；单次最多 200 个文件；接收端文件自动保存到系统下载目录，发送端收到的文件在会话结束时会自动导出（也会随会话目录一并清理）。
   - UDP 广播为明文（不含接收码），接收码通过屏幕/二维码传递；会话期间服务端仅做密码校验，无服务端级失败锁定（应用侧有 5 次限制）。
 - **SFTP/SCP 安全**：未做主机密钥指纹固定校验（首次连接直接信任），存在中间人风险；FTPS 默认允许信任自签名证书，可在服务器配置中关闭。
 - **平台/环境限制**：Android 10+ 分区存储使共享目录只能位于应用的私有外部目录；快速传文件的接收码为 6 位数字，仅适合可信局域网内的临时会话；UI 仪器测试在 MIUI 真机上受后台启动 Activity 限制无法自动运行（模拟器覆盖）。

@@ -75,6 +75,12 @@ class AppContainer(context: Context) {
      */
     val shareImports = MutableStateFlow<List<Uri>>(emptyList())
 
+    /**
+     * 桌面快捷方式待处理的应用内路由（[com.manst.lantransfer.ui.Routes] 中的路由字符串）。
+     * MainActivity 解析快捷方式 action 后写入；LanTransferApp 消费并导航后清空为 null。
+     */
+    val pendingRoute = MutableStateFlow<String?>(null)
+
     /** 应用内更新：检查 update.json（GitHub/镜像多源）+ 下载 APK + 拉起系统安装。 */
     val updateManager: UpdateManager by lazy {
         DefaultUpdateManager(appContext)

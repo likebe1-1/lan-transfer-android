@@ -44,6 +44,25 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+
+            <!-- 桌面快捷方式：发送文件 / 接收文件 / 启动服务器（隐式 action，兼容 debug 与 release 包名） -->
+            <intent-filter>
+                <action android:name="com.manst.lantransfer.action.QUICK_SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.manst.lantransfer.action.QUICK_RECEIVE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.manst.lantransfer.action.LOCAL_SERVER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- 长按桌面图标展示的快捷方式定义 -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <provider

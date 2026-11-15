@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        发送文件：打开「快速传文件」发送页。
+        这里只声明 action、由 MainActivity 的 intent-filter 接收，避免把 applicationId
+        写死（debug 包带 .debug 后缀，release 包没有后缀，隐式解析对两者都生效）。
+    -->
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message"
+        android:shortcutId="shortcut_quick_send"
+        android:shortcutLongLabel="@string/shortcut_quick_send_long"
+        android:shortcutShortLabel="@string/shortcut_quick_send_short">
+        <intent android:action="com.manst.lantransfer.action.QUICK_SEND" />
+    </shortcut>
+
+    <!-- 接收文件：打开「快速传文件」接收页 -->
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message"
+        android:shortcutId="shortcut_quick_receive"
+        android:shortcutLongLabel="@string/shortcut_quick_receive_long"
+        android:shortcutShortLabel="@string/shortcut_quick_receive_short">
+        <intent android:action="com.manst.lantransfer.action.QUICK_RECEIVE" />
+    </shortcut>
+
+    <!-- 启动服务器：打开本机服务器页 -->
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message"
+        android:shortcutId="shortcut_local_server"
+        android:shortcutLongLabel="@string/shortcut_local_server_long"
+        android:shortcutShortLabel="@string/shortcut_local_server_short">
+        <intent android:action="com.manst.lantransfer.action.LOCAL_SERVER" />
+    </shortcut>
+
+</shortcuts>

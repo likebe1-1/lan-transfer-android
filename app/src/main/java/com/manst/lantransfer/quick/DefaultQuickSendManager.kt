@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import android.util.Log
+import com.manst.lantransfer.data.ShareFileNames
 import com.manst.lantransfer.server.LanAddress
 import com.manst.lantransfer.server.LocalServerConfig
 import com.manst.lantransfer.server.LocalServerManager
@@ -39,14 +40,19 @@ import java.net.ServerSocket
  *    [SessionFileStore.importDirectory] 并保留子目录结构（QuickFile.relativePath）；
  * 4. 以会话目录为共享根目录、四协议全开启动 [LocalServerManager]，子目录可被对端浏览/下载；
  * 5. 每秒通过 [UdpBeaconBroadcaster] 在局域网广播 [QuickSessionInfo]；
- * 6. 每 2 秒递归扫描会话目录：把会话开始后新出现（或内容被覆盖）的文件归入 receivedFiles（含子目录），实现互传。
+ * 6. 每 2 秒递归扫描会话目录：把会话开始后新出现（或内容被覆盖）的文件归入 receivedFiles（含子目录），实现互传；
+ * 7. 会话结束前把 receivedFiles 自动保留到系统下载目录（保留相对子目录结构，已手动导出过的不重复导出），
+ *    之后再删除会话目录——避免对方上传的互传文件随会话结束丢失。
  *
  * 生命周期：同一时间只允许一个会话；[stopSession] 幂等，停止广播、停止服务器、删除会话目录并把状态复位。
  */
 class DefaultQuickSendManager(
     context: Context,
     private val localServerManager: LocalServerManager,
-    private val sessionFileStore: SessionFileStore
+    private val sessionFileStore: SessionFileStore,
+    /** 会话结束自动保留收到文件用的落盘目标（默认写系统下载目录；设备测试可注入假实现）。 */
+    private val autoExportSink: QuickDownloadSink =
+        MediaStoreQuickDownloadSink(context.applicationContext)
 ) : QuickSendManager {
 
     private val mutableState = MutableStateFlow(QuickSendState())
@@ -239,6 +245,12 @@ class DefaultQuickSendManager(
         beacon = null
         val directory = sessionDirectory
         if (directory != null) {
+            // 清理前先刷新一次并自动保留收到文件，避免对方上传的互传文件随会话目录一起被删
+            if (mutableState.value.phase == QuickSendPhase.WAITING) {
+                runCatching { scanReceivedFilesLocked() }
+                    .onFailure { Log.w(TAG, "会话结束前刷新收到文件失败", it) }
+                autoExportReceivedLocked(directory)
+            }
             runCatching { localServerManager.stop() }
                 .onFailure { Log.w(TAG, "停止快捷会话服务器失败", it) }
             sessionFileStore.clear(directory)
@@ -370,6 +382,58 @@ class DefaultQuickSendManager(
     private fun exportFailure(message: String): Result<String> =
         Result.failure(IllegalStateException(message))
 
+    // ------------------------------------------------------------ 自动保留收到文件
+
+    /**
+     * 会话结束前把「收到的文件」自动导出到系统下载目录（保留相对子目录结构）。
+     * - 用户已手动导出过的文件（exportedReceivedAt 有记录）不再重复导出；
+     * - 单个文件失败只记录日志，不阻塞停止会话；
+     * - 必须在清理会话目录之前调用，避免对方上传的互传文件丢失。
+     */
+    private suspend fun autoExportReceivedLocked(directory: File) {
+        if (mutableState.value.phase != QuickSendPhase.WAITING) return
+        val received = mutableState.value.receivedFiles
+        if (received.isEmpty()) return
+        var exported = 0
+        for (file in received) {
+            val key = fileKey(file)
+            if (exportedReceivedAt.containsKey(key)) continue
+            val relativePath = QuickFolderPaths.normalizeRelative(file.relativePath)
+            val relativeDir = QuickFolderPaths.sanitizeRelativeDir(QuickFolderPaths.relativeDirOf(relativePath))
+            val source = relativePath?.let { path ->
+                File(directory, path.replace('/', File.separatorChar))
+            } ?: File(directory, file.name)
+            if (!source.isFile) continue
+            try {
+                val target = autoExportSink.openInDir(ShareFileNames.sanitize(source.name), relativeDir)
+                try {
+                    source.inputStream().use { input ->
+                        target.outputStream.use { output ->
+                            input.copyTo(output, AUTO_EXPORT_BUFFER_SIZE)
+                        }
+                    }
+                    val committed = target.commit()
+                    if (committed.isFailure) {
+                        throw committed.exceptionOrNull() ?: IOException("保存下载文件失败")
+                    }
+                    exportedReceivedAt[key] = source.lastModified()
+                    exported++
+                    Log.i(TAG, "会话结束前自动保留收到文件：" + committed.getOrThrow() + "（" + key + "）")
+                } catch (e: Exception) {
+                    runCatching { target.abort() }
+                    throw e
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "自动保留收到文件失败（会话仍会结束）：" + key, e)
+            }
+        }
+        if (exported > 0) {
+            Log.i(TAG, "会话结束前已自动保留 " + exported + " 个收到文件到系统下载目录")
+        }
+    }
+
     // ------------------------------------------------------------ 会话目录递归扫描
 
     /** OpenDocumentTree 返回的目录树 Uri（普通文件/分享 Uri 不是 tree Uri）。 */
@@ -447,6 +511,7 @@ class DefaultQuickSendManager(
         const val MIN_PORT = 1024
         const val MAX_PORT = 65535
         const val RECEIVED_SCAN_INTERVAL_MS = 2_000L
+        const val AUTO_EXPORT_BUFFER_SIZE = 64 * 1024
 
         /** 数据层导入临时文件后缀（隐藏文件规则与 SessionFileNames 保持一致）。 */
         const val IMPORT_TEMP_SUFFIX = ".importing"

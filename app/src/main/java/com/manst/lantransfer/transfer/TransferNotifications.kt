@@ -102,6 +102,14 @@ internal object TransferNotifications {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setProgress(100, percent, indeterminate)
         if (active.size > 1) builder.setSubText("共 " + active.size + " 个活动任务")
+        // 通知栏操作：一键取消当前所有活动传输（服务收到 action 后统一取消并收起通知）
+        if (active.isNotEmpty()) {
+            builder.addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "取消",
+                buildCancelTransfersPendingIntent(context)
+            )
+        }
         return builder.build()
     }
 
@@ -142,6 +150,19 @@ internal object TransferNotifications {
         return builder.build()
     }
 
+    /** 通知栏「取消」操作：发送到传输前台服务取消所有活动任务。 */
+    private fun buildCancelTransfersPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, TransferService::class.java).apply {
+            action = TransferService.ACTION_CANCEL_TRANSFERS
+        }
+        return PendingIntent.getService(
+            context,
+            REQUEST_CODE_CANCEL_TRANSFERS,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     /** 构造「用其他应用打开下载文件」的 PendingIntent；无本地 Uri 时返回 null。 */
     private fun buildOpenFilePendingIntent(context: Context, task: TransferTask): PendingIntent? {
         val uriString = task.localUri ?: return null
@@ -164,6 +185,8 @@ internal object TransferNotifications {
             null
         }
     }
+
+    private const val REQUEST_CODE_CANCEL_TRANSFERS = 20_001
 
     private fun guessMimeType(displayName: String): String {
         val extension = displayName.substringAfterLast('.', "").lowercase(Locale.ROOT)

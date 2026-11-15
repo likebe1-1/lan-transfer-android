@@ -295,4 +295,11 @@
     <string name="update_lanzou_fallback_hint">如果 GitHub 无法访问，请使用蓝奏云浏览器下载（密码已复制到剪贴板）。</string>
     <string name="update_error_title">检查更新失败</string>
     <string name="update_no_update">当前已是最新版本</string>
+    <string name="shortcut_quick_send_short">发送文件</string>
+    <string name="shortcut_quick_send_long">快速发送文件到附近设备</string>
+    <string name="shortcut_quick_receive_short">接收文件</string>
+    <string name="shortcut_quick_receive_long">接收附近设备发来的文件</string>
+    <string name="shortcut_local_server_short">启动服务器</string>
+    <string name="shortcut_local_server_long">启动本机文件服务器</string>
+    <string name="shortcut_disabled_message">快捷方式暂不可用</string>
 </resources>

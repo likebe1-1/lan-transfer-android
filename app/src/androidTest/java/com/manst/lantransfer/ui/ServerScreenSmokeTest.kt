@@ -50,6 +50,39 @@ class ServerScreenSmokeTest {
         runCatching { shareDirectory.listFiles()?.forEach { file -> file.deleteRecursively() } }
     }
 
+    /**
+     * 共享目录自动刷新：页面可见期间每 4.5 秒静默刷新，新增文件无需手动点「刷新」即可出现。
+     */
+    @Test
+    fun sharedFiles_autoRefreshAfterNewFileAppears() {
+        val shareDirectory = File(targetContext.getExternalFilesDir(null), "share")
+        shareDirectory.mkdirs()
+        val newFile = File(shareDirectory, "auto-refresh-test.txt")
+        newFile.delete()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                composeRule.waitUntil(timeoutMillis = 10_000) {
+                    composeRule.onAllNodesWithText("LanLink").fetchSemanticsNodes().isNotEmpty()
+                }
+                composeRule.onNodeWithContentDescription("本机服务器").performClick()
+                composeRule.waitUntil(timeoutMillis = 10_000) {
+                    composeRule.onAllNodesWithText("服务器已停止").fetchSemanticsNodes().isNotEmpty()
+                }
+                composeRule.onNodeWithTag("server_screen_list")
+                    .performScrollToNode(hasText("还没有共享文件"))
+
+                // 页面停留期间新增文件：静默自动刷新应把新文件带进列表
+                newFile.writeText("auto refresh test")
+                composeRule.waitUntil(timeoutMillis = 15_000) {
+                    composeRule.onAllNodesWithText("auto-refresh-test.txt").fetchSemanticsNodes().isNotEmpty()
+                }
+                composeRule.onNodeWithText("auto-refresh-test.txt").assertIsDisplayed()
+            }
+        } finally {
+            newFile.delete()
+        }
+    }
+
     @Test
     fun openLocalServer_showsCoreSections() {
         ActivityScenario.launch(MainActivity::class.java).use {
