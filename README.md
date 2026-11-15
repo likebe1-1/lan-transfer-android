@@ -88,7 +88,7 @@ App 启动时会从以下来源依次拉取更新清单（任一可用即可）�
 2. `https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json`
 3. `https://ghproxy.net/…` / `https://ghfast.top/…` 镜像
 
-发现新版本后：下载 GitHub Release APK（自动尝试直连与镜像前缀）→ 校验大小/SHA-256/APK 签名（必须与已安装版本一致）→ 拉起系统安装器。下载中可查看进度；下载失败或 GitHub 无法访问时，可点「蓝奏云下载」在浏览器打开备用地址（当前为文件夹分享，密码 **1234**，密码会自动复制到剪贴板）。
+点击首页顶栏的「检查更新」会先弹出「正在检查更新…」对话框（可关闭），完成后提示新版本 / 已是最新 / 失败重试；发现新版本后：下载 GitHub Release APK（自动尝试直连与镜像前缀）→ 校验大小/SHA-256/APK 签名（必须与已安装版本一致）→ 拉起系统安装器。下载中可查看进度；下载失败或 GitHub 无法访问时，可点「蓝奏云下载」在浏览器打开备用地址（当前为文件夹分享，密码 **1234**，密码会自动复制到剪贴板）。
 
 > 发布新版本时需同步更新 `docs/update.json`：`versionCode`/`versionName`/`changelog`/各 ABI 的 `size`+`sha256`+`urls`（GitHub Release 直链），以及蓝奏云链接/密码。蓝奏云可先用 PC 端上传 APK（非会员手机端分享 APK 受限）。
 

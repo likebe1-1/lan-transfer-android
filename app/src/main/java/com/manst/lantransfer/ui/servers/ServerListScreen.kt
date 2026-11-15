@@ -217,7 +217,12 @@ fun ServerListScreen(
         )
     }
 
-    if (updateState.downloading || updateState.info != null || updateState.error != null) {
+    val showUpdateDialog =
+        updateState.downloading ||
+            updateState.info != null ||
+            updateState.error != null ||
+            (manualUpdateCheck && updateState.checking)
+    if (showUpdateDialog) {
         UpdateDialog(
             state = updateState,
             onDownload = { updateManager.downloadAndInstall() },

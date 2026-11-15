@@ -41,6 +41,23 @@ class UpdateDialogTest {
     )
 
     @Test
+    fun checkingDialog_showsProgressAndTitle() {
+        composeRule.setContent {
+            MaterialTheme {
+                UpdateDialog(
+                    state = UpdateUiState(checking = true),
+                    onDownload = {},
+                    onLanzou = {},
+                    onDismiss = {},
+                    onRetry = {}
+                )
+            }
+        }
+        composeRule.onNodeWithText("检查更新").assertIsDisplayed()
+        composeRule.onNodeWithText("正在检查更新…").assertIsDisplayed()
+    }
+
+    @Test
     fun availableDialog_showsVersionChangelogAndActions() {
         composeRule.setContent {
             MaterialTheme {

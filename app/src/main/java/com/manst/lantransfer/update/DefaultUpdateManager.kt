@@ -43,20 +43,34 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
 
     private val supportedAbis: List<String> = Build.SUPPORTED_ABIS.toList()
 
+    /** 自动检查进行中用户又点了「检查更新」：等本次结束后按手动方式展示错误。 */
+    @Volatile
+    private var manualCheckRequested = false
+
     override fun check(auto: Boolean) {
-        if (mutableState.value.checking || mutableState.value.downloading) return
-        if (!auto) mutableState.update { it.copy(dismissed = false) }
+        if (mutableState.value.downloading) return
+        if (mutableState.value.checking) {
+            if (!auto) manualCheckRequested = true
+            return
+        }
+        if (!auto) {
+            manualCheckRequested = false
+            mutableState.update { it.copy(dismissed = false) }
+        }
         mutableState.update { it.copy(checking = true, error = null) }
         scope.launch {
-            val found = UpdateManifestFetcher.fetchFirst(UpdateSources.manifestUrls, supportedAbis)
+            val found = fetchManifestInParallel()
             Log.i(TAG, "更新清单检查结果：" + if (found == null) "全部来源失败" else found.manifest.versionName)
             val currentCode = installedVersionCode()
             val newer = found != null && UpdateManifestParser.isNewer(found.manifest.versionCode, currentCode)
+            val manualPending = manualCheckRequested
+            manualCheckRequested = false
+            val shouldShowError = found == null && (!auto || manualPending)
             mutableState.update {
                 it.copy(
                     checking = false,
                     info = if (newer) found else null,
-                    error = if (found == null && !auto) "检查更新失败，请稍后重试，或使用蓝奏云下载" else null
+                    error = if (shouldShowError) "检查更新失败，请稍后重试，或使用蓝奏云下载" else null
                 )
             }
         }
@@ -135,6 +149,39 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
     }
 
     // ------------------------------------------------------------ 网络与校验
+
+    /**
+     * 多源并发拉取清单：任一来源成功即可，全部失败最多等约一个超时周期。
+     * 串行拉取在离线/被墙时可能累积 4 个来源 × 超时时间，导致「正在检查更新」停留过久。
+     */
+    private fun fetchManifestInParallel(): UpdateInfo? {
+        val urls = UpdateSources.manifestUrls
+        val result = java.util.concurrent.atomic.AtomicReference<UpdateInfo?>()
+        val latch = java.util.concurrent.CountDownLatch(urls.size)
+        urls.forEach { url ->
+            Thread {
+                try {
+                    val info = UpdateManifestFetcher.fetchFirst(
+                        urls = listOf(url),
+                        supportedAbis = supportedAbis,
+                        connectTimeoutMillis = 4_000,
+                        readTimeoutMillis = 4_000
+                    )
+                    if (info != null) result.compareAndSet(null, info)
+                } catch (e: Exception) {
+                    Log.w(TAG, "并发获取更新清单失败：" + url, e)
+                } finally {
+                    latch.countDown()
+                }
+            }.apply {
+                isDaemon = true
+                name = "update-manifest-fetch"
+                start()
+            }
+        }
+        latch.await()
+        return result.get()
+    }
 
     private fun candidateUrls(apk: UpdateApk): List<String> {
         val result = LinkedHashSet<String>()

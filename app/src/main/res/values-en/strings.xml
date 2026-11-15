@@ -279,6 +279,7 @@
     <string name="server_access_text_password">Password: %1$s</string>
     <string name="cd_check_update">Check for updates</string>
     <string name="update_checking">Checking for updates…</string>
+    <string name="update_dialog_title">Check for updates</string>
     <string name="update_available_title">New version %1$s available</string>
     <string name="update_download_install">Download and install</string>
     <string name="update_lanzou">Download from Lanzou Cloud</string>

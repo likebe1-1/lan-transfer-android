@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,6 +35,29 @@ fun UpdateDialog(
 ) {
     val info = state.info
     when {
+        state.checking && info == null && !state.downloading && state.error == null -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text(stringResource(R.string.update_dialog_title)) },
+                text = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.fillMaxWidth(0.12f))
+                        Text(
+                            text = stringResource(R.string.update_checking),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.update_close)) }
+                }
+            )
+        }
+
         state.downloading -> {
             AlertDialog(
                 onDismissRequest = onDismiss,
