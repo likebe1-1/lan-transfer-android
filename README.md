@@ -22,6 +22,10 @@
 | --- | --- |
 | ![首次启动提示](docs/screenshots/12_trusted_lan_notice.png) | ![传输进度](docs/screenshots/13_quick_transfer_progress.png) |
 
+| 英文界面（English UI） |
+| --- |
+| ![English UI](docs/screenshots/14_english_ui.png) |
+
 截图由仪器测试 [ScreenshotTourTest.kt](app/src/androidTest/java/com/manst/lantransfer/e2e/ScreenshotTourTest.kt) 在模拟器上用真实服务端数据生成。
 
 ## 下载安装包
@@ -60,6 +64,7 @@
 - **扫码快速传输**：发送页显示接收码二维码，接收页「扫码加入」用相机扫描自动连接；二维码外层载荷为 **Base64(UTF-8 JSON)**（JSON 含接收码、设备名、IP、端口、协议），不携带明文密码。
 - **快速传文件安全加固**：UDP 广播只携带设备名/IP/端口/协议，**不含接收码**；接收方需点击设备后输入接收码；同一设备连续 5 次接收码错误后锁定 10 分钟（应用内限流）。
 - **应用内更新**：启动时静默检查 `docs/update.json`（jsDelivr / GitHub raw / ghproxy 多源），有新版本弹窗展示更新日志；下载走 GitHub Releases 多镜像、校验 SHA-256 与 APK 签名后拉起系统安装；GitHub 不可用时提供**蓝奏云浏览器下载**兜底（链接与密码随清单下发）。
+- **中英文界面**：所有界面文案已抽取到 `strings.xml` 并配齐 `values-en/`（294 条），系统语言为英文时自动显示英文界面（中文环境保持中文）；动态提示（Snackbar/错误文案）暂时仍为中文。
 - **下载完成通知打开文件**：下载完成通知带「打开」动作，点击直接打开已保存的文件（无 Uri 时回退打开 App）。
 
 ## v2.0 实用功能（P0）
@@ -370,6 +375,7 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
   - UDP 广播为明文（不含接收码），接收码通过屏幕/二维码传递；会话期间服务端仅做密码校验，无服务端级失败锁定（应用侧有 5 次限制）。
 - **SFTP/SCP 安全**：未做主机密钥指纹固定校验（首次连接直接信任），存在中间人风险；FTPS 默认允许信任自签名证书，可在服务器配置中关闭。
 - **平台/环境限制**：Android 10+ 分区存储使共享目录只能位于应用的私有外部目录；快速传文件的接收码为 6 位数字，仅适合可信局域网内的临时会话；UI 仪器测试在 MIUI 真机上受后台启动 Activity 限制无法自动运行（模拟器覆盖）。
+- **多语言**：静态界面已支持中/英（跟随系统语言）；ViewModel/Snackbar 等动态提示暂未资源化（仍为中文）；未配置 Android 13+ 的 per-app language（应用内语言切换）与 `localeConfig`。
 ## 安全说明
 
 - 所有流量仅在局域网内传输，应用不收集、不上传任何数据；
