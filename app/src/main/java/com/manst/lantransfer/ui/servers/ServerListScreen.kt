@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -44,6 +45,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +63,8 @@ import com.manst.lantransfer.ui.common.EmptyState
 import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 import com.manst.lantransfer.ui.components.ProtocolChip
 import com.manst.lantransfer.ui.quick.QuickTransferCard
+import com.manst.lantransfer.ui.update.UpdateDialog
+import com.manst.lantransfer.update.UpdateManager
 
 /**
  * 服务器列表页：最近使用排序、协议标签、本机服务器与传输队列入口、新增/编辑/删除。
@@ -75,19 +79,45 @@ fun ServerListScreen(
     onOpenTransfers: () -> Unit,
     onOpenLocalServer: () -> Unit,
     onOpenQuickSend: () -> Unit,
-    onOpenQuickReceive: () -> Unit
+    onOpenQuickReceive: () -> Unit,
+    updateManager: UpdateManager
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<ServerProfile?>(null) }
+    val updateState by updateManager.state.collectAsStateWithLifecycle()
+    var manualUpdateCheck by remember { mutableStateOf(false) }
+    val noUpdateText = stringResource(R.string.update_no_update)
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
+
+    // 启动时静默检查一次更新（失败不打扰；有新版本才弹窗）
+    LaunchedEffect(Unit) { updateManager.check(auto = true) }
+
+    // 手动检查结束时：没有新版本也没有错误则提示「已是最新」
+    LaunchedEffect(updateState.checking, manualUpdateCheck) {
+        if (manualUpdateCheck && !updateState.checking &&
+            updateState.info == null && updateState.error == null && !updateState.downloading
+        ) {
+            manualUpdateCheck = false
+            snackbarHostState.showSnackbar(noUpdateText)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(text = stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) },
                 actions = {
+                    IconButton(onClick = {
+                        manualUpdateCheck = true
+                        updateManager.check(auto = false)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.SystemUpdate,
+                            contentDescription = stringResource(R.string.cd_check_update)
+                        )
+                    }
                     IconButton(onClick = onOpenLocalServer) {
                         Icon(
                             imageVector = Icons.Filled.WifiTethering,
@@ -184,6 +214,23 @@ fun ServerListScreen(
                 pendingDelete = null
             },
             onDismiss = { pendingDelete = null }
+        )
+    }
+
+    if (updateState.downloading || updateState.info != null || updateState.error != null) {
+        UpdateDialog(
+            state = updateState,
+            onDownload = { updateManager.downloadAndInstall() },
+            onLanzou = { updateManager.openLanzou() },
+            onDismiss = {
+                manualUpdateCheck = false
+                updateManager.dismiss()
+            },
+            onRetry = {
+                updateManager.clearError()
+                manualUpdateCheck = true
+                updateManager.check(auto = false)
+            }
         )
     }
 }

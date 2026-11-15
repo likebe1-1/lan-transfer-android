@@ -21,6 +21,8 @@ import com.manst.lantransfer.quick.SessionFileStore
 import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
+import com.manst.lantransfer.update.DefaultUpdateManager
+import com.manst.lantransfer.update.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -72,4 +74,9 @@ class AppContainer(context: Context) {
      * MainActivity 写入；快速传文件页创建 ViewModel 时消费并清空。
      */
     val shareImports = MutableStateFlow<List<Uri>>(emptyList())
+
+    /** 应用内更新：检查 update.json（GitHub/镜像多源）+ 下载 APK + 拉起系统安装。 */
+    val updateManager: UpdateManager by lazy {
+        DefaultUpdateManager(appContext)
+    }
 }

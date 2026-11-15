@@ -99,7 +99,8 @@ fun LanTransferApp(container: AppContainer) {
                 onOpenTransfers = { navController.navigate(Routes.TRANSFERS) },
                 onOpenLocalServer = { navController.navigate(Routes.SERVER) },
                 onOpenQuickSend = { navController.navigate(Routes.QUICK_SEND) },
-                onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) }
+                onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) },
+                updateManager = container.updateManager
             )
         }
 

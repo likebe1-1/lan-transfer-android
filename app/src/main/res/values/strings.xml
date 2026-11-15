@@ -277,4 +277,21 @@
     <string name="server_access_text_title">本机服务器访问信息</string>
     <string name="server_access_text_username">用户名：%1$s</string>
     <string name="server_access_text_password">密码：%1$s</string>
+    <string name="cd_check_update">检查更新</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_available_title">发现新版本 %1$s</string>
+    <string name="update_download_install">下载并安装</string>
+    <string name="update_lanzou">蓝奏云下载</string>
+    <string name="update_later">稍后</string>
+    <string name="update_hide">后台下载</string>
+    <string name="update_close">关闭</string>
+    <string name="update_retry">重试</string>
+    <string name="update_downloading_title">正在下载更新</string>
+    <string name="update_downloading_message">正在下载 LanLink %1$s 安装包…</string>
+    <string name="update_progress_text">%1$d%%（%2$s / %3$s）</string>
+    <string name="update_progress_unknown">正在下载…</string>
+    <string name="update_lanzou_hint">GitHub 下载不稳定？可用蓝奏云下载（浏览器打开，密码 %1$s，密码已复制）</string>
+    <string name="update_lanzou_fallback_hint">如果 GitHub 无法访问，请使用蓝奏云浏览器下载（密码已复制到剪贴板）。</string>
+    <string name="update_error_title">检查更新失败</string>
+    <string name="update_no_update">当前已是最新版本</string>
 </resources>

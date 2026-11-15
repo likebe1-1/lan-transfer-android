@@ -1,0 +1,34 @@
+{
+  "versionCode": 9,
+  "versionName": "2.1.1",
+  "changelog": "LanLink v2.1.1：按 ABI 拆分安装包并精简资源，下载体积更小（arm64 约 10.44 MiB）；快速传文件、断点续传、文件夹传输、历史记录、分享直达、扫码加入等功能保持不变。",
+  "releasePageUrl": "https://github.com/likebe1-1/lan-transfer-android/releases/tag/v2.1.1",
+  "lanzouUrl": "https://wwbds.lanzoum.com/b0139vopuf",
+  "lanzouPassword": "1234",
+  "apks": [
+    {
+      "abi": "arm64-v8a",
+      "size": 10949693,
+      "sha256": "158a51b30aa7ade05f687d605a3be1b90f5d3700e69982cd7c00c78668b1c585",
+      "urls": [
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk"
+      ]
+    },
+    {
+      "abi": "armeabi-v7a",
+      "size": 10946851,
+      "sha256": "37e69a9809df16b03dfc2829b2fd4e1ea0787537ca6973747749724e3e2c4e0a",
+      "urls": [
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk"
+      ]
+    },
+    {
+      "abi": "universal",
+      "size": 10999766,
+      "sha256": "baf926801da519533d91bd1c6aeca2b4cf786cfed52a122f8cc571ae3d850164",
+      "urls": [
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk"
+      ]
+    }
+  ]
+}

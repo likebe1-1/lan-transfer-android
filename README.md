@@ -59,6 +59,7 @@
 - **系统分享直达快速传**：在相册/文件管理器选择文件后「分享」到本应用，直接进入快速传文件发送页并用这些文件开启会话。
 - **扫码快速传输**：发送页显示接收码二维码，接收页「扫码加入」用相机扫描自动连接；二维码外层载荷为 **Base64(UTF-8 JSON)**（JSON 含接收码、设备名、IP、端口、协议），不携带明文密码。
 - **快速传文件安全加固**：UDP 广播只携带设备名/IP/端口/协议，**不含接收码**；接收方需点击设备后输入接收码；同一设备连续 5 次接收码错误后锁定 10 分钟（应用内限流）。
+- **应用内更新**：启动时静默检查 `docs/update.json`（jsDelivr / GitHub raw / ghproxy 多源），有新版本弹窗展示更新日志；下载走 GitHub Releases 多镜像、校验 SHA-256 与 APK 签名后拉起系统安装；GitHub 不可用时提供**蓝奏云浏览器下载**兜底（链接与密码随清单下发）。
 - **下载完成通知打开文件**：下载完成通知带「打开」动作，点击直接打开已保存的文件（无 Uri 时回退打开 App）。
 
 ## v2.0 实用功能（P0）
@@ -73,6 +74,18 @@
 | 通知打开文件 | 下载完成通知的「打开」动作直接打开文件 |
 
 > 扫码二维码编码规则（v2.0）：会话信息先序列化为 UTF-8 JSON（字段 v/code/name/addrs/ftp/ftps/ssh/protocols），再整体做 Base64（URL-safe）编码后生成二维码；接收端扫码得到 Base64 → 解码 JSON → 用接收码派生临时凭据连接，不携带明文密码。
+
+## 应用内更新
+
+App 启动时会从以下来源依次拉取更新清单（任一可用即可）：
+
+1. `https://cdn.jsdelivr.net/gh/likebe1-1/lan-transfer-android@master/docs/update.json`
+2. `https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json`
+3. `https://ghproxy.net/…` / `https://ghfast.top/…` 镜像
+
+发现新版本后：下载 GitHub Release APK（自动尝试直连与镜像前缀）→ 校验大小/SHA-256/APK 签名（必须与已安装版本一致）→ 拉起系统安装器。下载中可查看进度；下载失败或 GitHub 无法访问时，可点「蓝奏云下载」在浏览器打开备用地址（当前为文件夹分享，密码 **1234**，密码会自动复制到剪贴板）。
+
+> 发布新版本时需同步更新 `docs/update.json`：`versionCode`/`versionName`/`changelog`/各 ABI 的 `size`+`sha256`+`urls`（GitHub Release 直链），以及蓝奏云链接/密码。蓝奏云可先用 PC 端上传 APK（非会员手机端分享 APK 受限）。
 
 ## 体积优化（v2.1.1）
 
