@@ -342,3 +342,10 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 诊断：`LanSubnet.buildChecks()` 生成「已连接局域网 / 网关可达 / 发现其他设备 / LanLink 设备 / 疑似 AP 隔离」项（网关可达但无设备时提示 AP 隔离）；
 - 端口测试：任意 IP:端口 TCP 连接测试（2s 超时），用于排查对方服务是否启动；
 - 纯逻辑（网段计算、设备类型判定、诊断项）在 `net/LanModels.kt` 并用 JVM 单测覆盖；扫描/UI 在模拟器冒烟测试覆盖。
+## 16. 一键组网（热点二维码 / 应用级 Wi-Fi 加入）
+
+- 入口：网络工具页顶部「一键组网（热点）」卡片 → `ui/setup/NetworkSetupScreen`；
+- A（发送方）：`Intent("android.settings.WIFI_TETHER_SETTINGS")` 打开系统热点设置（逐级回退 WIFI_SETTINGS/SETTINGS）；`HotspotInfoProvider` 在 Android 11+ 用反射读取 `getSoftApConfiguration()` 预填 SSID/密码（失败时手动输入）；`WifiSetupQrCodec` 生成 `LANLINK-WIFI:` + Base64(JSON{ssid,password,security}) 二维码（二维码用现有 `QrCodeRenderer`）；
+- B（接收方）：扫码相机（zxing）→ `WifiSetupQrCodec.decode` → 请求 `NEARBY_WIFI_DEVICES`（API 33+）/`ACCESS_FINE_LOCATION`（≤32）与相机权限 → `WifiNetworkSpecifier.Builder().setSsid().setWpa2Passphrase()` + `ConnectivityManager.requestNetwork()`（30s 超时）；`onAvailable` 后 `bindProcessToNetwork(network)` 让后续快速传文件/网络工具走热点，断开/页面销毁时 `bindProcessToNetwork(null)`；
+- 连接为应用级 Wi-Fi：不修改系统 Wi-Fi 设置，其他 App 不受影响；页面提供「打开快速传文件（接收）」跳转；
+- 测试：`WifiSetupQrCodecTest` 覆盖编解码/非法载荷/开放网络/密码与 SSID 校验；`NetworkSetupSmokeTest` 覆盖入口与页面区块；实际加入热点需要两台真机验证。

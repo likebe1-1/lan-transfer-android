@@ -87,6 +87,8 @@ class QuickProgressTest {
         }.sessionInfo ?: error("缺少会话信息")
 
         var metricsVisible = false
+        var observedTransferredBytes = 0L
+        var observedCompletedFiles = 0
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.waitUntil(10_000L) {
                 composeRule.onAllNodesWithText("接收文件").fetchSemanticsNodes().isNotEmpty()
@@ -112,16 +114,22 @@ class QuickProgressTest {
             Log.e("E2EDIAG", "PROGRESS_METRICS visible=" + metricsVisible)
             Thread.sleep(300)
             capture("13_quick_transfer_progress")
+            // 必须在 Activity 关闭前抓取：关闭页面可能触发接收会话 leave() 并清空状态
+            val snapshot = app.container.quickReceiveManager.state.value
+            observedTransferredBytes = snapshot.transfer?.bytesTransferred ?: 0L
+            observedCompletedFiles = snapshot.completedFiles.size
+            Log.e(
+                "E2EDIAG",
+                "PROGRESS_SNAPSHOT bytes=" + observedTransferredBytes + " completed=" + observedCompletedFiles
+            )
         }
 
-        val transfer = app.container.quickReceiveManager.state.value.transfer
-        Log.e(
-            "E2EDIAG",
-            "PROGRESS_DONE transfer=" + transfer +
-                " completedFiles=" + app.container.quickReceiveManager.state.value.completedFiles
-        )
         assertTrue("接收界面应显示速度或预计剩余时间", metricsVisible)
-        assertTrue("传输中应已接收到部分字节", (transfer?.bytesTransferred ?: 0L) > 0L)
+        // 回环传输很快：抓取快照时可能已完成（transfer 已清空），此时 completedFiles 非空等价于“已收到字节”
+        assertTrue(
+            "传输应已开始（已收到部分字节或已完成）",
+            observedTransferredBytes > 0L || observedCompletedFiles > 0
+        )
     }
 
     private fun capture(name: String) {

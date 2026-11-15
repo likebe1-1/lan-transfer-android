@@ -22,9 +22,9 @@
 | --- | --- |
 | ![首次启动提示](docs/screenshots/12_trusted_lan_notice.png) | ![传输进度](docs/screenshots/13_quick_transfer_progress.png) |
 
-| 英文界面（English UI） | 网络工具 |
-| --- | --- |
-| ![English UI](docs/screenshots/14_english_ui.png) | ![网络工具](docs/screenshots/15_network_tools.png) |
+| 英文界面（English UI） | 网络工具 | 一键组网 |
+| --- | --- | --- |
+| ![English UI](docs/screenshots/14_english_ui.png) | ![网络工具](docs/screenshots/15_network_tools.png) | ![一键组网](docs/screenshots/16_network_setup.png) |
 
 截图由仪器测试 [ScreenshotTourTest.kt](app/src/androidTest/java/com/manst/lantransfer/e2e/ScreenshotTourTest.kt) 在模拟器上用真实服务端数据生成。
 
@@ -71,6 +71,7 @@
 - **通知栏操作**：传输进度通知新增「取消」按钮，一键取消全部活动传输；下载完成通知保留「打开」按钮。
 - **桌面快捷方式**：长按桌面图标可直接「发送文件 / 接收文件 / 启动服务器」，冷启动与 App 运行中都生效。
 - **网络工具（局域网雷达/诊断）**：首页顶栏进入；展示本机 IP/子网/网关，扫描同网段设备（IP、MAC、主机名、开放端口、设备类型），自动识别正在等待接收的 LanLink 设备；给出同网段/网关可达/设备发现/AP 隔离诊断，并支持任意 IP:端口 连通性测试。
+- **一键组网（热点二维码）**：没有路由器或 AP 隔离时，A 手机开热点并用 LanLink 生成「热点二维码」，B 手机在 LanLink 里扫码自动加入该热点，然后回到快速传文件互传；B 的加入是应用级 Wi-Fi 连接（不修改系统 Wi-Fi 设置），加入后 App 进程绑定热点网络。
 - **下载完成通知打开文件**：下载完成通知带「打开」动作，点击直接打开已保存的文件（无 Uri 时回退打开 App）。
 
 ## v2.0 实用功能（P0）
@@ -88,6 +89,7 @@
 | 快速传文件续传 | 接收中断后从分片断点继续（FTP/FTPS/SFTP） |
 | 收到文件自动保留 | 会话结束自动把对方发回的文件保存到「下载」 |
 | 网络工具 | 首页 → 网络工具：局域网设备雷达 + 网络诊断 + 端口测试 |
+| 一键组网 | 网络工具 → 一键组网：A 开热点生成二维码，B 扫码加入后传文件 |
 
 > 扫码二维码编码规则（v2.0）：会话信息先序列化为 UTF-8 JSON（字段 v/code/name/addrs/ftp/ftps/ssh/protocols），再整体做 Base64（URL-safe）编码后生成二维码；接收端扫码得到 Base64 → 解码 JSON → 用接收码派生临时凭据连接，不携带明文密码。
 
@@ -235,7 +237,7 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 cmd /c "scripts\gw.cmd" :app:testDebugUnitTest --console=plain
 ```
 
-**结果：257 个用例全部通过（0 失败）。** 覆盖：
+**结果：265 个用例全部通过（0 失败）。** 覆盖：
 
 - `core`：远端路径归一化 / 拼接 / 父目录，字节与速度格式化；
 - `data`：服务器配置 JSON 持久化（往返、损坏降级、并发写、删除/更新）；
@@ -288,7 +290,7 @@ cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumenta
 cmd /c "scripts\gw.cmd" :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.manst.lantransfer.ui.AppSmokeTest --console=plain
 ```
 
-**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **64 个用例通过**（新增网络工具、快速传文件续传/自动保留、通知取消按钮、桌面快捷方式、共享目录自动刷新等用例）（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间、`TransferPersistenceDeviceTest` 队列恢复/自动重试、`FolderTransferDeviceTest` 子目录落盘与通知打开、`QuickFolderTransferDeviceTest` 快捷传文件递归接收、`QuickScreenSmokeTest` 二维码按钮、`BrowserAndTransfersSmokeTest` 文件夹入口/历史清空）。
+**结果：通过**（含 `TrustedLanNoticeTest` 首次启动提示与持久化、`AppSmokeTest` 首屏/新增服务器、`ServerScreenSmokeTest` 本机服务器页、`QuickScreenSmokeTest` 快速传文件页、`ShareRepositoryTest` 共享目录、`ScreenshotTourTest` / `ServerScreenshotTest` / `QuickScreenshotTest` 截图巡游）。设备端全部共 **65 个用例通过**（新增一键组网、网络工具、快速传文件续传/自动保留、通知取消按钮、桌面快捷方式、共享目录自动刷新等用例）（含 `QuickProgressTest` 真实 64MB 传输中速度/剩余时间、`TransferPersistenceDeviceTest` 队列恢复/自动重试、`FolderTransferDeviceTest` 子目录落盘与通知打开、`QuickFolderTransferDeviceTest` 快捷传文件递归接收、`QuickScreenSmokeTest` 二维码按钮、`BrowserAndTransfersSmokeTest` 文件夹入口/历史清空）。
 
 ### 5. Release（R8 混淆）运行时验证
 
@@ -387,6 +389,7 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 - **SFTP/SCP 安全**：未做主机密钥指纹固定校验（首次连接直接信任），存在中间人风险；FTPS 默认允许信任自签名证书，可在服务器配置中关闭。
 - **平台/环境限制**：Android 10+ 分区存储使共享目录只能位于应用的私有外部目录；快速传文件的接收码为 6 位数字，仅适合可信局域网内的临时会话；UI 仪器测试在 MIUI 真机上受后台启动 Activity 限制无法自动运行（模拟器覆盖）。
 - **网络工具限制**：扫描基于 TCP 常见端口探测 + ARP/广播，未开放常见端口的设备可能漏报；大网段（如 /16）只扫描本机所在 /24；AP 隔离为启发式提示（网关可达但无设备），不能 100% 确诊；部分系统限制读取 `/proc/net/arp` 时无法显示 MAC；Android 10+ 不申请定位权限时不显示 Wi-Fi SSID。
+- **一键组网限制**：Android 不允许普通应用直接开关热点，A 需在系统设置中手动开启；热点 SSID/密码读取依赖系统版本与权限，失败时需手动填写；B 的加入使用应用级 Wi-Fi（`WifiNetworkSpecifier`，Android 10+），部分厂商 ROM 可能需要额外确认，Android 13+ 需授予「附近设备」权限、旧版本需定位权限；当前版本未实现 Wi-Fi Direct（P2P）自动组网，热点二维码方案兼容性更好。
 - **多语言**：静态界面已支持中/英（跟随系统语言）；ViewModel/Snackbar 等动态提示暂未资源化（仍为中文）；未配置 Android 13+ 的 per-app language（应用内语言切换）与 `localeConfig`。
 ## 安全说明
 

@@ -22,6 +22,8 @@ import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
 import com.manst.lantransfer.net.LanScanner
+import com.manst.lantransfer.setup.HotspotInfoProvider
+import com.manst.lantransfer.setup.WifiNetworkJoiner
 import com.manst.lantransfer.update.DefaultUpdateManager
 import com.manst.lantransfer.update.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,5 +92,14 @@ class AppContainer(context: Context) {
     /** 局域网扫描与诊断（网络工具页）。 */
     val lanScanner: LanScanner by lazy {
         LanScanner(appContext)
+    }
+
+    /** 一键组网：读取本机热点 + 扫码加入热点。 */
+    val hotspotInfoProvider: HotspotInfoProvider by lazy {
+        HotspotInfoProvider(appContext)
+    }
+
+    val wifiNetworkJoiner: WifiNetworkJoiner by lazy {
+        WifiNetworkJoiner(appContext)
     }
 }

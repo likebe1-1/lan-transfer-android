@@ -30,6 +30,8 @@ import com.manst.lantransfer.ui.quick.QuickReceiveViewModel
 import com.manst.lantransfer.ui.network.NetworkToolsScreen
 import com.manst.lantransfer.ui.network.NetworkToolsViewModel
 import com.manst.lantransfer.ui.quick.QuickSendScreen
+import com.manst.lantransfer.ui.setup.NetworkSetupScreen
+import com.manst.lantransfer.ui.setup.NetworkSetupViewModel
 import com.manst.lantransfer.ui.quick.QuickSendViewModel
 import com.manst.lantransfer.ui.servers.ServerListScreen
 import com.manst.lantransfer.ui.servers.ServerListViewModel
@@ -48,6 +50,7 @@ object Routes {
     const val QUICK_SEND = "quick/send"
     const val QUICK_RECEIVE = "quick/receive"
     const val NETWORK_TOOLS = "network/tools"
+    const val NETWORK_SETUP = "network/setup"
 
     /** 桌面快捷方式 Intent action（与 res/xml/shortcuts.xml、MainActivity 的 intent-filter 保持一致）。 */
     const val ACTION_QUICK_SEND = "com.manst.lantransfer.action.QUICK_SEND"
@@ -138,7 +141,24 @@ fun LanTransferApp(container: AppContainer) {
             )
             NetworkToolsScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenNetworkSetup = { navController.navigate(Routes.NETWORK_SETUP) }
+            )
+        }
+
+        composable(Routes.NETWORK_SETUP) {
+            val viewModel: NetworkSetupViewModel = viewModel(
+                factory = SimpleViewModelFactory {
+                    NetworkSetupViewModel(
+                        hotspotInfoProvider = container.hotspotInfoProvider,
+                        joiner = container.wifiNetworkJoiner
+                    )
+                }
+            )
+            NetworkSetupScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) }
             )
         }
 

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,7 +66,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun NetworkToolsScreen(
     viewModel: NetworkToolsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenNetworkSetup: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -97,6 +99,7 @@ fun NetworkToolsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item { NetworkSetupEntryCard(onOpenNetworkSetup) }
             item { CurrentNetworkCard(state.info, state.loading) }
             item {
                 ScanCard(
@@ -140,6 +143,24 @@ private fun copyIp(context: Context, ip: String) {
     runCatching {
         (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
             ?.setPrimaryClip(ClipData.newPlainText("IP", ip))
+    }
+}
+
+@Composable
+private fun NetworkSetupEntryCard(onOpen: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.setup_entry_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.setup_entry_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = onOpen) {
+                Icon(Icons.Filled.WifiTethering, contentDescription = null)
+                Text(stringResource(R.string.setup_title), modifier = Modifier.padding(start = 8.dp))
+            }
+        }
     }
 }
 
