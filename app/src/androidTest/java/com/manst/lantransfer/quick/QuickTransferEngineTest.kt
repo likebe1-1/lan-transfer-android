@@ -241,8 +241,11 @@ class QuickTransferEngineTest {
             Thread.sleep(300)
             broadcaster.start(expected)
             val actual = withTimeout(15_000L) { received.await() }
-            assertEquals(expected.code, actual.code)
+            // v2 广播不再携带接收码：附近设备只能发现设备名/地址/端口/协议
+            assertEquals("广播不应泄露接收码", "", actual.code)
+            assertFalse("广播会话不应带接收码", actual.hasCode)
             assertEquals(expected.deviceName, actual.deviceName)
+            assertEquals(expected.addresses, actual.addresses)
             assertEquals(expected.protocols, actual.protocols)
             assertEquals(expected.ftpPort, actual.ftpPort)
             assertEquals(expected.ftpsPort, actual.ftpsPort)

@@ -82,6 +82,8 @@ class QuickScreenSmokeTest {
 
             composeRule.onNodeWithText("接收文件").assertIsDisplayed()
             composeRule.onNodeWithText("附近设备").assertIsDisplayed()
+            // 广播不再携带接收码：附近设备提示改为「点击后输入接收码」
+            composeRule.onNodeWithText("点击后输入接收码", substring = true).assertExists()
 
             composeRule.onNodeWithTag("quick_receive_list")
                 .performScrollToNode(hasText("手动输入"))

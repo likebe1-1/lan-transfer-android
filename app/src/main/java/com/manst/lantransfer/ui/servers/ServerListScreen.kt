@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.servers
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -84,12 +86,12 @@ fun ServerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "LanLink", fontWeight = FontWeight.SemiBold) },
+                title = { Text(text = stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(onClick = onOpenLocalServer) {
                         Icon(
                             imageVector = Icons.Filled.WifiTethering,
-                            contentDescription = "本机服务器"
+                            contentDescription = stringResource(R.string.cd_local_server)
                         )
                     }
                     IconButton(onClick = onOpenTransfers) {
@@ -102,7 +104,7 @@ fun ServerListScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.SwapVert,
-                                contentDescription = "传输队列"
+                                contentDescription = stringResource(R.string.transfer_queue_title)
                             )
                         }
                     }
@@ -114,7 +116,7 @@ fun ServerListScreen(
             ExtendedFloatingActionButton(
                 onClick = onAddServer,
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("添加服务器") }
+                text = { Text(stringResource(R.string.action_add_server)) }
             )
         }
     ) { innerPadding ->
@@ -132,10 +134,10 @@ fun ServerListScreen(
                 )
                 EmptyState(
                     icon = Icons.Filled.Dns,
-                    title = "还没有服务器",
-                    description = "添加一台 FTP / FTPS / SFTP / SCP 服务器，\n在局域网内浏览目录并传输文件",
+                    title = stringResource(R.string.list_empty_title),
+                    description = stringResource(R.string.list_empty_description),
                     modifier = Modifier.weight(1f),
-                    actionLabel = "添加服务器",
+                    actionLabel = stringResource(R.string.action_add_server),
                     onAction = onAddServer
                 )
             }
@@ -155,7 +157,7 @@ fun ServerListScreen(
                 }
                 item {
                     Text(
-                        text = "共 ${state.servers.size} 台服务器 · 最近使用优先",
+                        text = stringResource(R.string.list_server_count, state.servers.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -175,8 +177,8 @@ fun ServerListScreen(
 
     pendingDelete?.let { profile ->
         ConfirmDialog(
-            title = "删除服务器",
-            message = "确定删除「${profile.name}」吗？该操作只删除本机保存的配置，不会影响远端文件。",
+            title = stringResource(R.string.list_delete_dialog_title),
+            message = stringResource(R.string.list_delete_dialog_message, profile.name),
             onConfirm = {
                 viewModel.delete(profile)
                 pendingDelete = null
@@ -252,7 +254,7 @@ private fun ServerCard(
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "「${profile.name}」更多操作"
+                        contentDescription = stringResource(R.string.cd_more_actions_for, profile.name)
                     )
                 }
                 DropdownMenu(
@@ -260,7 +262,7 @@ private fun ServerCard(
                     onDismissRequest = { menuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("编辑") },
+                        text = { Text(stringResource(R.string.action_edit)) },
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -268,7 +270,7 @@ private fun ServerCard(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.action_delete)) },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -281,5 +283,10 @@ private fun ServerCard(
     }
 }
 
+@Composable
 private fun lastUsedText(lastUsedAt: Long): String =
-    if (lastUsedAt <= 0L) "尚未连接过" else "最近使用：${Format.date(lastUsedAt)}"
+    if (lastUsedAt <= 0L) {
+        stringResource(R.string.list_never_used)
+    } else {
+        stringResource(R.string.list_last_used, Format.date(lastUsedAt))
+    }

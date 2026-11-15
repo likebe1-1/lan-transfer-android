@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.browser
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -115,7 +117,7 @@ fun BrowserScreen(
                 title = {
                     Column {
                         Text(
-                            text = state.profile?.name ?: "远程浏览",
+                            text = state.profile?.name ?: stringResource(R.string.browser_title_fallback),
                             style = MaterialTheme.typography.titleMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -131,7 +133,7 @@ fun BrowserScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (!viewModel.navigateUp()) onExit() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 actions = {
@@ -139,7 +141,7 @@ fun BrowserScreen(
                         onClick = viewModel::downloadCurrentFolder,
                         enabled = state.profile != null && !state.isBusy
                     ) {
-                        Icon(Icons.Filled.FolderZip, contentDescription = "下载当前文件夹")
+                        Icon(Icons.Filled.FolderZip, contentDescription = stringResource(R.string.cd_download_folder))
                     }
                     UploadMenu(
                         enabled = state.profile != null && !state.isBusy,
@@ -150,7 +152,7 @@ fun BrowserScreen(
                         onClick = viewModel::refresh,
                         enabled = state.profile != null && !state.isBusy
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cd_refresh))
                     }
                     BrowserOverflowMenu(
                         enabled = state.profile != null,
@@ -181,15 +183,15 @@ fun BrowserScreen(
             when {
                 state.profileMissing -> EmptyState(
                     icon = Icons.Filled.FolderOpen,
-                    title = "服务器配置不存在",
-                    description = "这台服务器可能已被删除，请返回列表重新选择",
-                    actionLabel = "返回",
+                    title = stringResource(R.string.browser_profile_missing_title),
+                    description = stringResource(R.string.browser_profile_missing_desc),
+                    actionLabel = stringResource(R.string.action_back),
                     onAction = onExit
                 )
 
                 state.profile == null -> LoadingState()
 
-                state.isLoading && state.entries.isEmpty() -> LoadingState(message = "正在读取目录…")
+                state.isLoading && state.entries.isEmpty() -> LoadingState(message = stringResource(R.string.browser_loading_directory))
 
                 errorMessage != null -> ErrorState(
                     message = errorMessage,
@@ -198,9 +200,9 @@ fun BrowserScreen(
 
                 state.entries.isEmpty() -> EmptyState(
                     icon = Icons.Filled.FolderOpen,
-                    title = "此目录为空",
-                    description = "点击右上角上传文件或文件夹，或新建一个文件夹",
-                    actionLabel = "上传文件",
+                    title = stringResource(R.string.browser_empty_title),
+                    description = stringResource(R.string.browser_empty_description),
+                    actionLabel = stringResource(R.string.action_upload_file),
                     onAction = { uploadLauncher.launch(arrayOf("*/*")) }
                 )
 
@@ -245,11 +247,15 @@ fun BrowserScreen(
 
     deleteTarget?.let { target ->
         ConfirmDialog(
-            title = if (target.isDirectory) "删除文件夹" else "删除文件",
-            message = if (target.isDirectory) {
-                "确定删除文件夹「${target.name}」吗？仅支持删除空文件夹。"
+            title = if (target.isDirectory) {
+                stringResource(R.string.browser_delete_folder_title)
             } else {
-                "确定删除文件「${target.name}」吗？此操作无法撤销。"
+                stringResource(R.string.browser_delete_file_title)
+            },
+            message = if (target.isDirectory) {
+                stringResource(R.string.browser_delete_folder_message, target.name)
+            } else {
+                stringResource(R.string.browser_delete_file_message, target.name)
             },
             onConfirm = {
                 viewModel.delete(target)
@@ -270,11 +276,11 @@ private fun UploadMenu(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }, enabled = enabled) {
-            Icon(Icons.Filled.UploadFile, contentDescription = "上传")
+            Icon(Icons.Filled.UploadFile, contentDescription = stringResource(R.string.cd_upload))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text("上传文件") },
+                text = { Text(stringResource(R.string.action_upload_file)) },
                 leadingIcon = { Icon(Icons.Filled.UploadFile, contentDescription = null) },
                 onClick = {
                     expanded = false
@@ -282,7 +288,7 @@ private fun UploadMenu(
                 }
             )
             DropdownMenuItem(
-                text = { Text("上传文件夹") },
+                text = { Text(stringResource(R.string.action_upload_folder)) },
                 leadingIcon = { Icon(Icons.Filled.DriveFolderUpload, contentDescription = null) },
                 onClick = {
                     expanded = false
@@ -303,11 +309,11 @@ private fun BrowserOverflowMenu(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }, enabled = enabled) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "更多操作")
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_options))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text("新建文件夹") },
+                text = { Text(stringResource(R.string.action_new_folder)) },
                 leadingIcon = { Icon(Icons.Filled.CreateNewFolder, contentDescription = null) },
                 onClick = {
                     expanded = false
@@ -315,7 +321,7 @@ private fun BrowserOverflowMenu(
                 }
             )
             DropdownMenuItem(
-                text = { Text("传输队列") },
+                text = { Text(stringResource(R.string.transfer_queue_title)) },
                 leadingIcon = { Icon(Icons.Filled.SwapVert, contentDescription = null) },
                 onClick = {
                     expanded = false
@@ -332,7 +338,8 @@ private fun BrowserBreadcrumbBar(
     enabled: Boolean,
     onNavigate: (String) -> Unit
 ) {
-    val breadcrumbs = remember(path) { buildBreadcrumbs(path) }
+    val rootLabel = stringResource(R.string.browser_breadcrumb_root)
+    val breadcrumbs = remember(path, rootLabel) { buildBreadcrumbs(path, rootLabel) }
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -425,7 +432,7 @@ private fun BrowserEntryRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (isDirectory) "文件夹" else Format.bytes(entry.size),
+                    text = if (isDirectory) stringResource(R.string.browser_entry_folder) else Format.bytes(entry.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -439,7 +446,7 @@ private fun BrowserEntryRow(
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "「${entry.name}」操作"
+                        contentDescription = stringResource(R.string.cd_entry_actions, entry.name)
                     )
                 }
                 DropdownMenu(
@@ -448,7 +455,7 @@ private fun BrowserEntryRow(
                 ) {
                     if (!isDirectory) {
                         DropdownMenuItem(
-                            text = { Text("下载") },
+                            text = { Text(stringResource(R.string.action_download)) },
                             leadingIcon = { Icon(Icons.Filled.Download, contentDescription = null) },
                             onClick = {
                                 menuExpanded = false
@@ -457,7 +464,7 @@ private fun BrowserEntryRow(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("重命名") },
+                        text = { Text(stringResource(R.string.action_rename)) },
                         leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -465,7 +472,7 @@ private fun BrowserEntryRow(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.action_delete)) },
                         leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -487,12 +494,12 @@ private fun NewFolderDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) 
     var folderName by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建文件夹") },
+        title = { Text(stringResource(R.string.action_new_folder)) },
         text = {
             OutlinedTextField(
                 value = folderName,
                 onValueChange = { folderName = it },
-                label = { Text("文件夹名称") },
+                label = { Text(stringResource(R.string.label_folder_name)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -502,11 +509,11 @@ private fun NewFolderDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) 
                 onClick = { onConfirm(folderName) },
                 enabled = folderName.isNotBlank()
             ) {
-                Text("创建")
+                Text(stringResource(R.string.action_create))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }
@@ -520,11 +527,11 @@ private fun RenameDialog(
     var newName by remember(target) { mutableStateOf(target.name) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("重命名") },
+        title = { Text(stringResource(R.string.action_rename)) },
         text = {
             Column {
                 Text(
-                    text = "当前名称：${target.name}",
+                    text = stringResource(R.string.browser_rename_current_name, target.name),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -532,7 +539,7 @@ private fun RenameDialog(
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it },
-                    label = { Text("新名称") },
+                    label = { Text(stringResource(R.string.label_new_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -543,20 +550,20 @@ private fun RenameDialog(
                 onClick = { onConfirm(newName) },
                 enabled = newName.isNotBlank() && newName.trim() != target.name
             ) {
-                Text("保存")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }
 
 private data class Breadcrumb(val label: String, val path: String)
 
-private fun buildBreadcrumbs(path: String): List<Breadcrumb> {
+private fun buildBreadcrumbs(path: String, rootLabel: String): List<Breadcrumb> {
     val normalized = RemotePath.normalize(path)
-    val result = mutableListOf(Breadcrumb(label = "根目录", path = RemotePath.ROOT))
+    val result = mutableListOf(Breadcrumb(label = rootLabel, path = RemotePath.ROOT))
     if (normalized == RemotePath.ROOT) return result
     var current = ""
     normalized.trim('/').split('/').forEach { segment ->

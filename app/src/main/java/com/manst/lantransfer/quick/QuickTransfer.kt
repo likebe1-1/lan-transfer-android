@@ -74,9 +74,14 @@ object QuickSessionCode {
     }
 }
 
-/** 发送端通过局域网广播出来的会话信息。 */
+/**
+ * 发送端公开的会话信息。
+ *
+ * 局域网广播中**不再携带接收码**（防止同网段设备随意看到接收码）；
+ * 接收方通过发送方屏幕输入、或扫描发送页二维码获取接收码后再连接。
+ */
 data class QuickSessionInfo(
-    val code: String,
+    val code: String = "",
     val deviceName: String,
     val addresses: List<String>,
     val ftpPort: Int = QuickTransferDefaults.DEFAULT_FTP_PORT,
@@ -86,6 +91,9 @@ data class QuickSessionInfo(
     /** 本地收到的时间戳（毫秒），用于过期清理。 */
     val receivedAt: Long = System.currentTimeMillis()
 ) {
+    /** 该会话信息是否附带接收码（广播为 false；二维码/发送端本地状态为 true）。 */
+    val hasCode: Boolean get() = QuickSessionCode.normalize(code) != null
+
     val primaryHost: String get() = addresses.firstOrNull().orEmpty()
 
     fun portFor(protocol: TransferProtocol): Int = when (protocol) {

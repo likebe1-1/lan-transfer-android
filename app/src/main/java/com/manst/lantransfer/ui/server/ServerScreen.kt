@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.server
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -119,13 +121,17 @@ fun ServerScreen(viewModel: ServerViewModel, onBack: () -> Unit) {
         }
     }
 
+    // 非 Composable 回调（Snackbar）使用的文案提前取好
+    val copiedConnectionTip = stringResource(R.string.server_copied_connection)
+    val copiedSharePathTip = stringResource(R.string.server_copied_share_path)
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("本机服务器") },
+                title = { Text(stringResource(R.string.server_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -152,7 +158,7 @@ fun ServerScreen(viewModel: ServerViewModel, onBack: () -> Unit) {
                 item(key = "access") {
                     AccessInfoCard(
                         state = state,
-                        onCopy = { text -> copyToClipboard(text, "已复制连接信息") }
+                        onCopy = { text -> copyToClipboard(text, copiedConnectionTip) }
                     )
                 }
             }
@@ -177,7 +183,7 @@ fun ServerScreen(viewModel: ServerViewModel, onBack: () -> Unit) {
                     state = state,
                     onImport = { importLauncher.launch(arrayOf("*/*")) },
                     onRefresh = viewModel::refreshSharedFiles,
-                    onCopyPath = { path -> copyToClipboard(path, "已复制共享目录路径") }
+                    onCopyPath = { path -> copyToClipboard(path, copiedSharePathTip) }
                 )
             }
 
@@ -199,8 +205,8 @@ fun ServerScreen(viewModel: ServerViewModel, onBack: () -> Unit) {
 
     pendingDelete?.let { file ->
         ConfirmDialog(
-            title = "删除共享文件",
-            message = "确定删除「${file.name}」吗？删除后其他设备将无法再下载该文件。",
+            title = stringResource(R.string.server_share_delete_title),
+            message = stringResource(R.string.server_share_delete_message, file.name),
             onConfirm = {
                 viewModel.deleteSharedFile(file)
                 pendingDelete = null
@@ -255,17 +261,17 @@ private fun StatusCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = when {
-                            state.isRunning -> "服务器运行中"
-                            state.isStarting -> "正在启动服务器…"
-                            else -> "服务器已停止"
+                            state.isRunning -> stringResource(R.string.server_status_running)
+                            state.isStarting -> stringResource(R.string.server_status_starting)
+                            else -> stringResource(R.string.server_status_stopped)
                         },
                         style = MaterialTheme.typography.titleLarge
                     )
                     Text(
                         text = when {
-                            state.isRunning -> "其他设备可通过局域网连接并传输文件"
-                            state.isStarting -> "正在监听端口，请稍候"
-                            else -> "启动后其他设备即可连接本机收发文件"
+                            state.isRunning -> stringResource(R.string.server_status_running_hint)
+                            state.isStarting -> stringResource(R.string.server_status_starting_hint)
+                            else -> stringResource(R.string.server_status_stopped_hint)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -296,7 +302,7 @@ private fun StatusCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "部分协议启动失败：$error",
+                            text = stringResource(R.string.server_partial_failure, error),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -316,7 +322,7 @@ private fun StatusCard(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("正在启动…")
+                        Text(stringResource(R.string.server_button_starting))
                     }
                 }
 
@@ -335,7 +341,7 @@ private fun StatusCard(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("正在停止…")
+                            Text(stringResource(R.string.server_button_stopping))
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.Stop,
@@ -343,7 +349,7 @@ private fun StatusCard(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("停止服务器")
+                            Text(stringResource(R.string.action_stop_server))
                         }
                     }
                 }
@@ -360,14 +366,14 @@ private fun StatusCard(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("开始服务器")
+                        Text(stringResource(R.string.action_start_server))
                     }
                 }
             }
 
             if (state.isRunning && state.startedAt > 0L) {
                 Text(
-                    text = "启动时间：${Format.date(state.startedAt)}",
+                    text = stringResource(R.string.server_started_at, Format.date(state.startedAt)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -386,7 +392,7 @@ private fun ProtocolEndpointRow(row: ProtocolStatusRow) {
             ProtocolChip(protocol = row.protocol)
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "端口 ${row.port}",
+                text = stringResource(R.string.label_port_with_value, row.port),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
@@ -435,10 +441,10 @@ private fun AccessInfoCard(state: ServerUiState, onCopy: (String) -> Unit) {
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("访问信息", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.server_access_title), style = MaterialTheme.typography.titleMedium)
             }
             Text(
-                text = "确保另一台设备与本机连接同一个 Wi-Fi / 局域网。",
+                text = stringResource(R.string.server_access_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -460,7 +466,7 @@ private fun AccessInfoCard(state: ServerUiState, onCopy: (String) -> Unit) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "未检测到局域网地址，请连接 Wi-Fi",
+                            text = stringResource(R.string.common_no_lan_address),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -474,13 +480,13 @@ private fun AccessInfoCard(state: ServerUiState, onCopy: (String) -> Unit) {
                     AddressBlock(
                         state = state,
                         address = address,
-                        onCopy = { onCopy(buildAccessText(state, address)) }
+                        onCopy = onCopy
                     )
                 }
             }
 
             Text(
-                text = "其他设备上传的文件会保存到共享目录：${state.shareDirectoryPath}",
+                text = stringResource(R.string.server_share_dir_hint, state.shareDirectoryPath),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -489,8 +495,9 @@ private fun AccessInfoCard(state: ServerUiState, onCopy: (String) -> Unit) {
 }
 
 @Composable
-private fun AddressBlock(state: ServerUiState, address: String, onCopy: () -> Unit) {
+private fun AddressBlock(state: ServerUiState, address: String, onCopy: (String) -> Unit) {
     val form = state.form
+    val copyText = buildAccessText(state, address)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -499,7 +506,7 @@ private fun AddressBlock(state: ServerUiState, address: String, onCopy: () -> Un
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onCopy) { Text("复制") }
+            TextButton(onClick = { onCopy(copyText) }) { Text(stringResource(R.string.action_copy)) }
         }
         AccessLine(label = "FTP", value = "ftp://$address:${portFor(state, TransferProtocol.FTP)}", enabled = form.enableFtp)
         AccessLine(
@@ -518,7 +525,11 @@ private fun AddressBlock(state: ServerUiState, address: String, onCopy: () -> Un
             enabled = form.enableScp
         )
         Text(
-            text = "用户名：${form.username.ifBlank { "—" }} · 密码：${form.password.ifBlank { "—" }}",
+            text = stringResource(
+                R.string.server_access_credentials,
+                form.username.ifBlank { "—" },
+                form.password.ifBlank { "—" }
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -535,7 +546,7 @@ private fun AccessLine(label: String, value: String, enabled: Boolean) {
             modifier = Modifier.width(44.dp)
         )
         Text(
-            text = if (enabled) value else "$value（未启用）",
+            text = if (enabled) value else stringResource(R.string.server_access_disabled, value),
             style = MaterialTheme.typography.bodySmall,
             fontFamily = FontFamily.Monospace,
             color = if (enabled) {
@@ -580,7 +591,7 @@ private fun ConfigCard(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("服务器设置", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.server_settings_title), style = MaterialTheme.typography.titleMedium)
             }
 
             if (!editable) {
@@ -589,7 +600,7 @@ private fun ConfigCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "服务器运行中，如需修改设置请先停止服务器。",
+                        text = stringResource(R.string.server_settings_locked_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(10.dp)
@@ -599,7 +610,7 @@ private fun ConfigCard(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-            Text("协议", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.label_protocol), style = MaterialTheme.typography.labelLarge)
             SERVER_PROTOCOLS.forEach { protocol ->
                 ProtocolSwitchRow(
                     protocol = protocol,
@@ -619,9 +630,9 @@ private fun ConfigCard(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-            Text("端口", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.label_port), style = MaterialTheme.typography.labelLarge)
             Text(
-                text = "范围 1024-65535；SFTP 与 SCP 共用 SSH 端口",
+                text = stringResource(R.string.server_ports_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -654,9 +665,9 @@ private fun ConfigCard(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-            Text("帐号", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.server_account_title), style = MaterialTheme.typography.labelLarge)
             Text(
-                text = "其他设备连接本机服务器时需要输入该用户名与密码",
+                text = stringResource(R.string.server_account_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -664,7 +675,7 @@ private fun ConfigCard(
                 value = form.username,
                 onValueChange = onUsernameChange,
                 enabled = editable,
-                label = { Text("用户名") },
+                label = { Text(stringResource(R.string.label_username)) },
                 singleLine = true,
                 isError = usernameError != null,
                 supportingText = if (usernameError != null) {
@@ -678,7 +689,7 @@ private fun ConfigCard(
                 value = form.password,
                 onValueChange = onPasswordChange,
                 enabled = editable,
-                label = { Text("密码") },
+                label = { Text(stringResource(R.string.label_password)) },
                 singleLine = true,
                 isError = passwordError != null,
                 visualTransformation = if (passwordVisible) {
@@ -691,7 +702,11 @@ private fun ConfigCard(
                     IconButton(onClick = onTogglePasswordVisible) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
+                            contentDescription = if (passwordVisible) {
+                                stringResource(R.string.cd_hide_password)
+                            } else {
+                                stringResource(R.string.cd_show_password)
+                            }
                         )
                     }
                 },
@@ -705,7 +720,7 @@ private fun ConfigCard(
 
             if (form.enableFtps) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Text("FTPS 加密模式", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.label_ftps_mode), style = MaterialTheme.typography.labelLarge)
                 FtpsMode.entries.forEach { mode ->
                     Row(
                         modifier = Modifier
@@ -723,7 +738,7 @@ private fun ConfigCard(
                             Text(text = mode.label, style = MaterialTheme.typography.bodyMedium)
                             if (mode == FtpsMode.IMPLICIT) {
                                 Text(
-                                    text = "隐式模式通常使用 990 端口",
+                                    text = stringResource(R.string.hint_ftps_implicit),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -735,7 +750,7 @@ private fun ConfigCard(
 
             if (editable) {
                 Text(
-                    text = "设置会在修改后自动保存",
+                    text = stringResource(R.string.server_settings_autosave),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -822,12 +837,12 @@ private fun ShareHeaderCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "共享文件",
+                    text = stringResource(R.string.server_share_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "共 ${state.sharedFiles.size} 个",
+                    text = stringResource(R.string.server_share_count, state.sharedFiles.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -835,7 +850,7 @@ private fun ShareHeaderCard(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "共享目录：",
+                    text = stringResource(R.string.server_share_dir_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -854,7 +869,7 @@ private fun ShareHeaderCard(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ContentCopy,
-                        contentDescription = "复制共享目录路径",
+                        contentDescription = stringResource(R.string.cd_copy_share_path),
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -869,7 +884,7 @@ private fun ShareHeaderCard(
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("导入中…")
+                        Text(stringResource(R.string.server_importing))
                     } else {
                         Icon(
                             imageVector = Icons.Filled.UploadFile,
@@ -877,14 +892,14 @@ private fun ShareHeaderCard(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("导入文件")
+                        Text(stringResource(R.string.action_import_files))
                     }
                 }
                 OutlinedButton(onClick = onRefresh, enabled = !state.isLoadingFiles) {
                     if (state.isLoadingFiles) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("刷新中…")
+                        Text(stringResource(R.string.server_refreshing))
                     } else {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
@@ -892,13 +907,13 @@ private fun ShareHeaderCard(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("刷新")
+                        Text(stringResource(R.string.action_refresh))
                     }
                 }
             }
 
             Text(
-                text = "其他设备连接本机服务器后可下载这些文件；对方上传的文件也会出现在这里。",
+                text = stringResource(R.string.server_share_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -922,14 +937,14 @@ private fun ShareEmptyCard(onImport: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(32.dp)
             )
-            Text(text = "还没有共享文件", style = MaterialTheme.typography.titleSmall)
+            Text(text = stringResource(R.string.server_share_empty_title), style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "导入文件后其他设备即可下载；对方上传的文件也会出现在这里。",
+                text = stringResource(R.string.server_share_empty_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            OutlinedButton(onClick = onImport) { Text("导入文件") }
+            OutlinedButton(onClick = onImport) { Text(stringResource(R.string.action_import_files)) }
         }
     }
 }
@@ -977,13 +992,13 @@ private fun ShareFileRow(
             IconButton(onClick = onExport) {
                 Icon(
                     imageVector = Icons.Filled.FileDownload,
-                    contentDescription = "导出到下载"
+                    contentDescription = stringResource(R.string.cd_export_to_download)
                 )
             }
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
-                    contentDescription = "删除共享文件"
+                    contentDescription = stringResource(R.string.server_share_delete_title)
                 )
             }
         }
@@ -1007,6 +1022,7 @@ private data class ProtocolStatusRow(
 }
 
 /** 状态卡里展示的协议行：运行中用真实端点状态，停止时按开关展示配置端口。 */
+@Composable
 private fun protocolStatusRows(state: ServerUiState): List<ProtocolStatusRow> {
     val form = state.form
     val enabledProtocols = buildList {
@@ -1022,9 +1038,9 @@ private fun protocolStatusRows(state: ServerUiState): List<ProtocolStatusRow> {
                 protocol = protocol,
                 port = endpoint.port,
                 label = when {
-                    endpoint.running -> "运行中"
-                    endpoint.error != null -> "启动失败"
-                    else -> "未启动"
+                    endpoint.running -> stringResource(R.string.status_running)
+                    endpoint.error != null -> stringResource(R.string.status_start_failed)
+                    else -> stringResource(R.string.status_not_started)
                 },
                 running = endpoint.running,
                 error = endpoint.error
@@ -1033,7 +1049,11 @@ private fun protocolStatusRows(state: ServerUiState): List<ProtocolStatusRow> {
             ProtocolStatusRow(
                 protocol = protocol,
                 port = portFor(state, protocol),
-                label = if (state.isStarting) "启动中…" else "未启动",
+                label = if (state.isStarting) {
+                    stringResource(R.string.status_starting)
+                } else {
+                    stringResource(R.string.status_not_started)
+                },
                 running = false
             )
         }
@@ -1057,29 +1077,32 @@ private fun isProtocolEnabled(form: ServerConfigForm, protocol: TransferProtocol
     TransferProtocol.SCP -> form.enableScp
 }
 
+@Composable
 private fun protocolDescription(protocol: TransferProtocol): String = when (protocol) {
-    TransferProtocol.FTP -> "标准 FTP，兼容性最好（明文传输）"
-    TransferProtocol.FTPS -> "FTP over TLS，加密传输"
-    TransferProtocol.SFTP -> "SSH 文件传输，加密且通用"
-    TransferProtocol.SCP -> "SSH 复制协议，与 SFTP 共用端口"
+    TransferProtocol.FTP -> stringResource(R.string.server_protocol_desc_ftp)
+    TransferProtocol.FTPS -> stringResource(R.string.server_protocol_desc_ftps)
+    TransferProtocol.SFTP -> stringResource(R.string.server_protocol_desc_sftp)
+    TransferProtocol.SCP -> stringResource(R.string.server_protocol_desc_scp)
 }
 
+@Composable
 private fun ftpsModeShortLabel(mode: FtpsMode): String = when (mode) {
-    FtpsMode.EXPLICIT -> "显式 TLS"
-    FtpsMode.IMPLICIT -> "隐式 TLS"
+    FtpsMode.EXPLICIT -> stringResource(R.string.server_ftps_explicit)
+    FtpsMode.IMPLICIT -> stringResource(R.string.server_ftps_implicit)
 }
 
 /** 复制给用户的连接信息（多行文本）。 */
+@Composable
 private fun buildAccessText(state: ServerUiState, address: String): String {
     val form = state.form
     return buildString {
-        appendLine("本机服务器访问信息")
+        appendLine(stringResource(R.string.server_access_text_title))
         appendLine("FTP   ftp://$address:${portFor(state, TransferProtocol.FTP)}")
         appendLine("FTPS  ftps://$address:${portFor(state, TransferProtocol.FTPS)}（${ftpsModeShortLabel(form.ftpsMode)}）")
         appendLine("SFTP  sftp://$address:${portFor(state, TransferProtocol.SFTP)}")
         appendLine("SCP   scp -P ${portFor(state, TransferProtocol.SCP)} ${form.username}@$address:${state.shareDirectoryPath}")
-        appendLine("用户名：${form.username}")
-        append("密码：${form.password}")
+        appendLine(stringResource(R.string.server_access_text_username, form.username))
+        append(stringResource(R.string.server_access_text_password, form.password))
     }
 }
 

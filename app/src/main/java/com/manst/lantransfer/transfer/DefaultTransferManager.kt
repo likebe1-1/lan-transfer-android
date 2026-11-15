@@ -974,6 +974,13 @@ class DefaultTransferManager(
     }
 
     private fun ensureForegroundService() {
+        // 无界面时（仪器测试/后台恢复）不启动前台服务：系统可能拒绝后台 startForegroundService，
+        // 且主线程被测试占用时服务无法及时 startForeground，会触发 FGS 超时崩溃。
+        val application = appContext as? com.manst.lantransfer.LanTransferApplication
+        if (application != null && !application.hasForegroundActivity) {
+            Log.i(TAG, "应用当前无前台界面，跳过启动传输前台服务")
+            return
+        }
         try {
             TransferService.start(appContext)
         } catch (e: RuntimeException) {

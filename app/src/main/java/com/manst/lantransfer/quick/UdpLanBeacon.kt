@@ -17,14 +17,17 @@ import java.nio.charset.StandardCharsets
  * 快捷传输广播报文的编解码（纯 JVM 逻辑，org.json 在 Android 运行时与 JVM 测试里都可用）。
  *
  * 报文是单行 JSON，字段固定为：
- * v（协议版本，当前 1）、code（6 位接收码）、name（设备名）、addrs（本机 IPv4 数组）、
+ * v（协议版本，当前 2）、name（设备名）、addrs（本机 IPv4 数组）、
  * ftp / ftps / ssh（三种监听端口，SFTP 与 SCP 共用 ssh）、protocols（协议名数组）、ts（发送时间戳）。
- * 解码对非法/未知/缺字段的报文一律返回 null，绝不抛异常；端口非法时回退到默认端口。
+ *
+ * v2 起广播**不携带接收码**：附近设备只能看到设备名/IP/端口/协议，连接时仍需发送方屏幕上的
+ * 6 位接收码（或扫描发送页二维码）。解码对非法/未知/缺字段的报文一律返回 null，绝不抛异常；
+ * 端口非法时回退到默认端口；旧版 v1 报文（携带接收码）一律忽略。
  */
 internal object QuickBeaconCodec {
 
-    /** 当前广播报文版本；版本不一致的报文直接忽略，避免旧版本互相干扰。 */
-    const val VERSION = 1
+    /** 当前广播报文版本；版本不一致的报文直接忽略（v1 报文携带接收码，v2 起不再携带）。 */
+    const val VERSION = 2
 
     /** 单个 UDP 报文最大长度，超出视为非法报文。 */
     const val MAX_PACKET_BYTES = 4096
@@ -32,12 +35,11 @@ internal object QuickBeaconCodec {
     private const val MIN_PORT = 1024
     private const val MAX_PORT = 65535
 
-    /** 会话信息 -> JSON 文本；编码失败时返回 null（调用方跳过本次广播）。 */
+    /** 会话信息 -> JSON 文本；编码失败时返回 null（调用方跳过本次广播）。广播不输出接收码。 */
     fun encode(info: QuickSessionInfo): String? {
         return try {
             val json = JSONObject()
                 .put("v", VERSION)
-                .put("code", info.code)
                 .put("name", info.deviceName)
                 .put("addrs", JSONArray(info.addresses))
                 .put("ftp", info.ftpPort)
@@ -52,7 +54,7 @@ internal object QuickBeaconCodec {
         }
     }
 
-    /** JSON 文本 -> 会话信息；非法/不完整报文返回 null。 */
+    /** JSON 文本 -> 会话信息；非法/不完整报文返回 null。v2 广播不含接收码，解码结果 code 恒为空。 */
     fun decode(payload: String?): QuickSessionInfo? {
         val text = payload?.trim().orEmpty()
         if (text.isEmpty() || text.length > MAX_PACKET_BYTES) return null
@@ -61,16 +63,17 @@ internal object QuickBeaconCodec {
         } catch (e: Exception) {
             return null
         }
+        // 只接受当前版本：v1 报文携带接收码，旧客户端会据此自动连接，必须忽略
         if (json.optInt("v", 0) != VERSION) return null
 
-        val code = QuickSessionCode.normalize(json.optString("code", "")) ?: return null
         val protocols = decodeProtocols(json) ?: return null
         val addresses = decodeAddresses(json) ?: return null
         if (addresses.isEmpty()) return null
 
         val deviceName = json.optString("name", "").trim().ifBlank { "附近设备" }
         return QuickSessionInfo(
-            code = code,
+            // 不读取 payload 里的 code（即使伪造的 v2 报文带了 code 也不采信）
+            code = "",
             deviceName = deviceName,
             addresses = addresses,
             ftpPort = validPort(json.optInt("ftp", QuickTransferDefaults.DEFAULT_FTP_PORT), QuickTransferDefaults.DEFAULT_FTP_PORT),

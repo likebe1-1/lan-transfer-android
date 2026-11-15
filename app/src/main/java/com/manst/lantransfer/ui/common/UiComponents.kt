@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.common
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,7 +84,7 @@ fun EmptyState(
 
 /** 加载状态。 */
 @Composable
-fun LoadingState(modifier: Modifier = Modifier, message: String = "正在加载…") {
+fun LoadingState(modifier: Modifier = Modifier, message: String? = null) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -90,7 +92,7 @@ fun LoadingState(modifier: Modifier = Modifier, message: String = "正在加载�
         ) {
             CircularProgressIndicator()
             Text(
-                text = message,
+                text = message ?: stringResource(R.string.common_loading_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -125,14 +127,14 @@ fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifi
                     )
                 }
             }
-            Text(text = "加载失败", style = MaterialTheme.typography.titleMedium)
+            Text(text = stringResource(R.string.common_loading_failed), style = MaterialTheme.typography.titleMedium)
             Text(
-                text = message,
+                text = message ?: stringResource(R.string.common_loading_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Button(onClick = onRetry) { Text("重试") }
+            Button(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
         }
     }
 }
@@ -155,7 +157,7 @@ fun ConfirmDialog(
     message: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    confirmLabel: String = "删除"
+    confirmLabel: String? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -166,11 +168,11 @@ fun ConfirmDialog(
                 onClick = onConfirm,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Text(confirmLabel)
+                Text(confirmLabel ?: stringResource(R.string.action_delete))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }

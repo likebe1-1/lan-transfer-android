@@ -314,3 +314,23 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 结果：v2.1.0 universal 11.77 MiB → v2.1.1 arm64 10.44 MiB（约 -11.3%），universal 10.49 MiB；
 - 注意：App 原生库仅约 40 KB（androidx graphics path），ABI 拆分实际收益约 50 KB；主要收益来自资源精简。dex（SSHD/BouncyCastle/JSch/Compose）仍是主要体积来源，后续可发布 AAB 或改用内置静态证书移除 BouncyCastle；
 - 验证：236 JVM 单测全绿；设备端 `ServerModeDeviceTest`（含 FTPS 自签证书 + 四协议回环）与 `DownloadRootPathTest` 通过；x86_64 拆分 APK 在模拟器安装启动正常。
+## 14. 下个版本改进（未发布，2026-11）
+
+### 14.1 快速传文件广播安全加固
+
+- **广播不再携带接收码**：`QuickBeaconCodec.VERSION = 2`，`encode` 只输出 `v/name/addrs/ftp/ftps/ssh/protocols/ts`；`decode` 只接受 v2，code 恒为空（即使伪造报文带 code 也不采信），v1 旧报文忽略；
+- **接收码来源**：发送方屏幕显示 + 发送页二维码（`QuickQrCodec` 仍是 Base64(JSON) 且含 code），或用户手动输入；
+- **附近设备交互**：接收页附近设备卡片只显示设备名/IP/端口/协议，点击后弹窗要求输入 6 位接收码再连接；
+- **错误次数限制**：新增 `QuickJoinAttemptLimiter`（纯 JVM，key = host+三端口）：连续 5 次认证失败后锁定 10 分钟，成功连接清除记录；`DefaultQuickReceiveManager.join` 前置检查并在认证失败时按一次失败计数（协议自动回退不重复计数），锁定期间直接返回中文提示；
+- **测试**：JVM 单测新增广播 v2 编码不含 code/v1 忽略、限流器 5 次/10 分钟/成功清除/目标隔离等；设备端 beacon 回环测试改为断言 code 为空且 `hasCode=false`。
+
+### 14.2 UI 文案资源化（strings.xml）
+
+- 所有 Compose 界面用户可见中文文案抽取到 `res/values/strings.xml`（277 条，按模块前缀命名，带参数的用 `%1$s/%1$d` 占位），Compose 使用 `stringResource(...)`；
+- 原有文案逐字保留（UI 测试断言不受影响）；ViewModel/Snackbar 动态文案暂未抽取，后续可再做一次注入改造。
+
+### 14.3 前台服务启动顺序修复
+
+- `TransferService.onCreate` 先立即 `startForeground`（空任务通知），再初始化 `TransferManager` 并刷新通知；
+- 传输引擎仅在**存在前台 Activity** 时启动传输前台服务（`LanTransferApplication` 通过 Activity 生命周期计数），避免无界面/仪器测试场景 startForegroundService 超时导致 `ForegroundServiceDidNotStartInTimeException`；真实场景中服务一旦在界面前台时启动，离开界面后仍持续运行；
+- 该问题在设备测试中由 `TransferPersistenceDeviceTest` 的恢复+自动重试用例暴露并修复。

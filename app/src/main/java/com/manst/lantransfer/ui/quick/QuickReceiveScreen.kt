@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.quick
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WifiFind
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -84,6 +87,7 @@ import com.manst.lantransfer.core.RemoteEntry
 import com.manst.lantransfer.core.TransferProtocol
 import com.manst.lantransfer.quick.QuickJoinTarget
 import com.manst.lantransfer.quick.QuickQrCodec
+import com.manst.lantransfer.quick.QuickSessionCode
 import com.manst.lantransfer.quick.QuickSessionInfo
 import com.manst.lantransfer.quick.QuickTransferDefaults
 import com.manst.lantransfer.quick.QuickTransferProgress
@@ -110,19 +114,33 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var disconnectThenExit by remember { mutableStateOf(false) }
     var exitAfterLeave by remember { mutableStateOf(false) }
+    // 广播不再携带接收码：点击附近设备后弹窗输入对方屏幕上的 6 位接收码
+    var pendingJoinInfo by remember { mutableStateOf<QuickSessionInfo?>(null) }
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
+
+    // 非 Composable 回调（Snackbar / 扫码提示）使用的文案提前取好
+    val scanPrompt = stringResource(R.string.quick_scan_prompt)
+    val scanCancelledMessage = stringResource(R.string.quick_scan_cancelled)
+    val scanInvalidMessage = stringResource(R.string.quick_scan_invalid)
+    val scanNoPermissionMessage = stringResource(R.string.quick_scan_no_permission)
+    val scanLaunchFailedMessage = stringResource(R.string.quick_scan_launch_failed)
+    val maxFilesMessage = stringResource(
+        R.string.quick_max_files_message,
+        QuickTransferDefaults.MAX_FILES,
+        QuickTransferDefaults.MAX_FILES
+    )
 
     // 扫码加入：zxing-android-embedded 的扫描界面，识别发送端二维码里的会话信息
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         val contents = result.contents
         if (contents.isNullOrBlank()) {
-            scope.launch { snackbarHostState.showSnackbar("已取消扫码") }
+            scope.launch { snackbarHostState.showSnackbar(scanCancelledMessage) }
         } else {
             val info = QuickQrCodec.decode(contents)
             if (info == null) {
                 scope.launch {
-                    snackbarHostState.showSnackbar("二维码无法识别，请对准发送端「快速传文件」页面的二维码")
+                    snackbarHostState.showSnackbar(scanInvalidMessage)
                 }
             } else {
                 viewModel.joinScanned(info)
@@ -134,10 +152,10 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            scanLauncher.launch(buildScanOptions())
+            scanLauncher.launch(buildScanOptions(scanPrompt))
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar("未授予相机权限，无法扫码；请手动输入 IP 和接收码")
+                snackbarHostState.showSnackbar(scanNoPermissionMessage)
             }
         }
     }
@@ -147,9 +165,9 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
             PackageManager.PERMISSION_GRANTED
         ) {
             try {
-                scanLauncher.launch(buildScanOptions())
+                scanLauncher.launch(buildScanOptions(scanPrompt))
             } catch (e: Exception) {
-                scope.launch { snackbarHostState.showSnackbar("无法启动扫码，请手动输入 IP 和接收码") }
+                scope.launch { snackbarHostState.showSnackbar(scanLaunchFailedMessage) }
             }
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
@@ -161,7 +179,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
         val opened = FileOpener.openDownloadedFile(context, name)
         if (!opened) {
             scope.launch {
-                snackbarHostState.showSnackbar("无法打开「$name」，文件可能已被移动或删除")
+                snackbarHostState.showSnackbar(context.getString(R.string.quick_recv_open_failed, name))
             }
         }
     }
@@ -173,9 +191,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
             val limited = uris.take(QuickTransferDefaults.MAX_FILES)
             if (uris.size > QuickTransferDefaults.MAX_FILES) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(
-                        "一次最多选择 ${QuickTransferDefaults.MAX_FILES} 个文件，已选择前 ${QuickTransferDefaults.MAX_FILES} 个"
-                    )
+                    snackbarHostState.showSnackbar(maxFilesMessage)
                 }
             }
             viewModel.sendFiles(limited)
@@ -203,10 +219,10 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("接收文件") },
+                title = { Text(stringResource(R.string.quick_recv_title)) },
                 navigationIcon = {
                     IconButton(onClick = requestBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -234,7 +250,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
             } else {
                 DiscoveryContent(
                     state = state,
-                    onJoinDiscovered = viewModel::joinDiscovered,
+                    onJoinDiscovered = { info -> pendingJoinInfo = info },
                     onRestartDiscovery = viewModel::restartDiscovery,
                     onHostChange = viewModel::onHostChange,
                     onCodeChange = viewModel::onCodeChange,
@@ -249,13 +265,21 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
 
     if (showDisconnectDialog) {
         ConfirmDialog(
-            title = if (disconnectThenExit) "断开连接并返回？" else "断开连接？",
-            message = if (disconnectThenExit) {
-                "返回将断开与「${state.joinedDeviceName}」的连接，已完成的文件不会受影响。"
+            title = if (disconnectThenExit) {
+                stringResource(R.string.quick_recv_disconnect_exit_title)
             } else {
-                "断开后可以重新搜索附近设备，已完成的文件不会受影响。"
+                stringResource(R.string.quick_recv_disconnect_title)
             },
-            confirmLabel = if (disconnectThenExit) "断开并返回" else "断开",
+            message = if (disconnectThenExit) {
+                stringResource(R.string.quick_recv_disconnect_exit_message, state.joinedDeviceName)
+            } else {
+                stringResource(R.string.quick_recv_disconnect_message)
+            },
+            confirmLabel = if (disconnectThenExit) {
+                stringResource(R.string.quick_recv_disconnect_exit_confirm)
+            } else {
+                stringResource(R.string.action_disconnect)
+            },
             onConfirm = {
                 showDisconnectDialog = false
                 viewModel.leave()
@@ -264,6 +288,69 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
             onDismiss = { showDisconnectDialog = false }
         )
     }
+
+    pendingJoinInfo?.let { info ->
+        ReceiveCodeDialog(
+            deviceName = info.deviceName.ifBlank { stringResource(R.string.quick_recv_nearby_title) },
+            onDismiss = { pendingJoinInfo = null },
+            onConfirm = { code ->
+                viewModel.joinDiscovered(info, code)
+                pendingJoinInfo = null
+            }
+        )
+    }
+}
+
+/** 点击附近设备后输入对方屏幕上的 6 位接收码（广播已不再携带接收码）。 */
+@Composable
+private fun ReceiveCodeDialog(
+    deviceName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var code by remember { mutableStateOf("") }
+    val normalized = QuickSessionCode.normalize(code)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.quick_recv_code_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.quick_recv_code_dialog_message),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(R.string.quick_recv_code_dialog_device, deviceName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { input ->
+                        code = input.filter { it.isDigit() }.take(QuickTransferDefaults.CODE_LENGTH)
+                    },
+                    label = { Text(stringResource(R.string.label_six_digit_code)) },
+                    placeholder = { Text("123456") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("quick_nearby_code_input")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { normalized?.let { onConfirm(it) } },
+                enabled = normalized != null
+            ) {
+                Text(stringResource(R.string.action_connect))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
 }
 
 // ---------------------------------------------------------------------------- 发现 / 手动连接
@@ -316,8 +403,8 @@ private fun DiscoveryContent(
         if (state.isFailed) {
             item(key = "failed") {
                 QuickErrorCard(
-                    message = state.receive.error ?: "连接失败，请重试",
-                    retryLabel = "重试连接",
+                    message = state.receive.error ?: stringResource(R.string.quick_recv_join_failed),
+                    retryLabel = stringResource(R.string.action_retry_join),
                     onRetry = onRetryJoin
                 )
             }
@@ -329,11 +416,11 @@ private fun DiscoveryContent(
 @Composable
 private fun DiscoveryHeaderCard(state: QuickReceiveUiState, onRestartDiscovery: () -> Unit) {
     QuickSectionCard(
-        title = "附近设备",
+        title = stringResource(R.string.quick_recv_nearby_title),
         icon = Icons.Filled.WifiFind,
         trailing = {
             IconButton(onClick = onRestartDiscovery) {
-                Icon(Icons.Filled.Refresh, contentDescription = "重新搜索附近设备")
+                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cd_restart_discovery))
             }
         }
     ) {
@@ -344,15 +431,15 @@ private fun DiscoveryHeaderCard(state: QuickReceiveUiState, onRestartDiscovery: 
             }
             Text(
                 text = if (state.receive.discovered.isEmpty()) {
-                    "正在搜索附近设备…"
+                    stringResource(R.string.quick_recv_searching)
                 } else {
-                    "已发现 ${state.receive.discovered.size} 台设备"
+                    stringResource(R.string.quick_recv_found_count, state.receive.discovered.size)
                 },
                 style = MaterialTheme.typography.bodyMedium
             )
         }
         Text(
-            text = "确保两台设备连接同一 Wi-Fi；对方打开「发送文件」会话后会自动出现在这里，点击即可连接。",
+            text = stringResource(R.string.quick_recv_nearby_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -365,8 +452,8 @@ private fun NoDeviceCard() {
         Column(modifier = Modifier.padding(16.dp)) {
             QuickEmptyHint(
                 icon = Icons.Filled.WifiFind,
-                title = "未发现附近设备",
-                description = "请确认对方已开启发送会话，或使用下方「手动输入」连接。"
+                title = stringResource(R.string.quick_recv_no_device_title),
+                description = stringResource(R.string.quick_recv_no_device_desc)
             )
         }
     }
@@ -402,17 +489,22 @@ private fun DiscoveredDeviceCard(info: QuickSessionInfo, onClick: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = info.deviceName.ifBlank { "附近设备" },
+                    text = info.deviceName.ifBlank { stringResource(R.string.quick_recv_nearby_title) },
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = "接收码 ${formatSessionCode(info.code)}",
+                    text = info.primaryHost,
                     style = MaterialTheme.typography.labelMedium,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "${info.primaryHost} · FTP ${info.ftpPort} / FTPS ${info.ftpsPort} / SSH ${info.sshPort}",
+                    text = stringResource(
+                        R.string.quick_recv_ports_line,
+                        info.ftpPort,
+                        info.ftpsPort,
+                        info.sshPort
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -441,11 +533,11 @@ private fun ManualJoinCard(
 ) {
     val hostError = state.hostError
     val codeError = state.codeError
-    QuickSectionCard(title = "手动输入", icon = Icons.Filled.Link) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_manual_title), icon = Icons.Filled.Link) {
         OutlinedTextField(
             value = state.host,
             onValueChange = onHostChange,
-            label = { Text("对方 IP 地址") },
+            label = { Text(stringResource(R.string.label_peer_ip)) },
             placeholder = { Text("192.168.1.10") },
             singleLine = true,
             isError = hostError != null,
@@ -463,7 +555,7 @@ private fun ManualJoinCard(
             OutlinedTextField(
                 value = state.code,
                 onValueChange = onCodeChange,
-                label = { Text("6 位接收码") },
+                label = { Text(stringResource(R.string.label_six_digit_code)) },
                 placeholder = { Text("123456") },
                 singleLine = true,
                 isError = codeError != null,
@@ -484,7 +576,7 @@ private fun ManualJoinCard(
             )
         }
         Text(
-            text = "「自动」会按加密优先尝试 SFTP → SCP → FTPS → FTP",
+            text = stringResource(R.string.quick_recv_protocol_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -501,7 +593,7 @@ private fun ManualJoinCard(
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text("扫码加入")
+            Text(stringResource(R.string.action_scan_qr))
         }
         Button(
             onClick = onJoinManual,
@@ -517,7 +609,7 @@ private fun ManualJoinCard(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("连接中…")
+                Text(stringResource(R.string.quick_connecting))
             } else {
                 Icon(
                     imageVector = Icons.Filled.Link,
@@ -525,7 +617,7 @@ private fun ManualJoinCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("连接")
+                Text(stringResource(R.string.action_connect))
             }
         }
     }
@@ -552,7 +644,7 @@ private fun QuickProtocolDropdown(
             onValueChange = {},
             readOnly = true,
             singleLine = true,
-            label = { Text("协议") },
+            label = { Text(stringResource(R.string.label_protocol)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -585,10 +677,14 @@ private fun ConnectingCard(target: QuickJoinTarget?) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text(text = "正在连接…", style = MaterialTheme.typography.titleSmall)
+                Text(text = stringResource(R.string.quick_recv_connecting_title), style = MaterialTheme.typography.titleSmall)
                 target?.let {
                     Text(
-                        text = "${it.host} · 接收码 ${formatSessionCode(it.code)}",
+                        text = stringResource(
+                            R.string.quick_recv_connecting_detail,
+                            it.host,
+                            formatSessionCode(it.code)
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -657,14 +753,18 @@ private fun ConnectedHeaderCard(
     onDownloadAll: () -> Unit,
     onDisconnect: () -> Unit
 ) {
-    QuickSectionCard(title = "已连接", icon = Icons.Filled.CheckCircle) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_connected_title), icon = Icons.Filled.CheckCircle) {
         Text(
-            text = "已通过 ${state.activeProtocolLabel.ifBlank { "自动" }} 连接 · ${state.joinedDeviceName}",
+            text = stringResource(
+                R.string.quick_recv_connected_detail,
+                state.activeProtocolLabel.ifBlank { stringResource(R.string.quick_protocol_auto_short) },
+                state.joinedDeviceName
+            ),
             style = MaterialTheme.typography.bodyMedium
         )
         state.receive.joined?.primaryHost?.takeIf { it.isNotBlank() }?.let { host ->
             Text(
-                text = "对方地址：$host",
+                text = stringResource(R.string.quick_recv_peer_address, host),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -683,7 +783,7 @@ private fun ConnectedHeaderCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("断开连接")
+                Text(stringResource(R.string.action_disconnect_full))
             }
             Button(
                 onClick = onDownloadAll,
@@ -696,7 +796,7 @@ private fun ConnectedHeaderCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("全部接收")
+                Text(stringResource(R.string.action_receive_all))
             }
         }
     }
@@ -706,7 +806,11 @@ private fun ConnectedHeaderCard(
 private fun TransferProgressCard(progress: QuickTransferProgress) {
     val isReceive = progress.direction == QuickTransferProgress.Direction.RECEIVE
     QuickSectionCard(
-        title = if (isReceive) "正在接收" else "正在发送",
+        title = if (isReceive) {
+            stringResource(R.string.quick_recv_receiving)
+        } else {
+            stringResource(R.string.quick_recv_sending)
+        },
         icon = if (isReceive) Icons.Filled.FileDownload else Icons.Filled.FileUpload
     ) {
         Text(
@@ -728,15 +832,29 @@ private fun TransferProgressCard(progress: QuickTransferProgress) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${Format.bytes(progress.bytesTransferred)} / " +
-                    if (progress.totalBytes > 0L) Format.bytes(progress.totalBytes) else "未知大小",
+                text = if (progress.totalBytes > 0L) {
+                    stringResource(
+                        R.string.quick_recv_progress_with_total,
+                        Format.bytes(progress.bytesTransferred),
+                        Format.bytes(progress.totalBytes)
+                    )
+                } else {
+                    stringResource(
+                        R.string.quick_recv_progress_unknown_total,
+                        Format.bytes(progress.bytesTransferred)
+                    )
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
             if (progress.fileCount > 0 && progress.fileIndex in 1..progress.fileCount) {
                 Text(
-                    text = "第 ${progress.fileIndex}/${progress.fileCount} 个",
+                    text = stringResource(
+                        R.string.quick_recv_file_progress,
+                        progress.fileIndex,
+                        progress.fileCount
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -778,12 +896,12 @@ private fun RemoteFilesCard(
     transferring: Boolean,
     onDownload: (RemoteEntry) -> Unit
 ) {
-    QuickSectionCard(title = "对方文件（${files.size}）", icon = Icons.Filled.Folder) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_remote_files, files.size), icon = Icons.Filled.Folder) {
         if (files.isEmpty()) {
             QuickEmptyHint(
                 icon = Icons.Filled.Folder,
-                title = "对方没有可下载的文件",
-                description = "对方在发送会话中还没有选择文件"
+                title = stringResource(R.string.quick_recv_remote_empty),
+                description = stringResource(R.string.quick_recv_remote_empty_desc)
             )
         } else {
             files.forEach { entry ->
@@ -795,7 +913,7 @@ private fun RemoteFilesCard(
                         onClick = { onDownload(entry) },
                         enabled = !transferring
                     ) {
-                        Text("接收")
+                        Text(stringResource(R.string.action_receive))
                     }
                 }
             }
@@ -805,10 +923,10 @@ private fun RemoteFilesCard(
 
 @Composable
 private fun CompletedFilesCard(names: List<String>, onOpen: (String) -> Unit) {
-    QuickSectionCard(title = "已保存（${names.size}）", icon = Icons.Filled.CheckCircle) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_saved_count, names.size), icon = Icons.Filled.CheckCircle) {
         if (names.isEmpty()) {
             Text(
-                text = "还没有完成的文件，点「全部接收」开始下载。",
+                text = stringResource(R.string.quick_recv_saved_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -835,12 +953,12 @@ private fun CompletedFilesCard(names: List<String>, onOpen: (String) -> Unit) {
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "已保存到系统下载目录",
+                            text = stringResource(R.string.quick_recv_saved_hint),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    TextButton(onClick = { onOpen(name) }) { Text("打开") }
+                    TextButton(onClick = { onOpen(name) }) { Text(stringResource(R.string.action_open)) }
                 }
             }
         }
@@ -849,7 +967,7 @@ private fun CompletedFilesCard(names: List<String>, onOpen: (String) -> Unit) {
 
 @Composable
 private fun FailedFilesCard(names: List<String>, onRetry: (String) -> Unit) {
-    QuickSectionCard(title = "失败（${names.size}）", icon = Icons.Filled.ErrorOutline) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_failed_count, names.size), icon = Icons.Filled.ErrorOutline) {
         names.forEach { name ->
             Row(
                 modifier = Modifier
@@ -871,7 +989,7 @@ private fun FailedFilesCard(names: List<String>, onRetry: (String) -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = { onRetry(name) }) { Text("重试") }
+                TextButton(onClick = { onRetry(name) }) { Text(stringResource(R.string.action_retry)) }
             }
         }
     }
@@ -879,9 +997,9 @@ private fun FailedFilesCard(names: List<String>, onRetry: (String) -> Unit) {
 
 @Composable
 private fun SendBackCard(state: QuickReceiveUiState, onSendFiles: () -> Unit) {
-    QuickSectionCard(title = "发送文件给对方", icon = Icons.Filled.FileUpload) {
+    QuickSectionCard(title = stringResource(R.string.quick_recv_send_back), icon = Icons.Filled.FileUpload) {
         Text(
-            text = "对方也能收到你选择的文件，实现双向互传。",
+            text = stringResource(R.string.quick_recv_send_back_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -896,12 +1014,12 @@ private fun SendBackCard(state: QuickReceiveUiState, onSendFiles: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text("发送文件给对方")
+            Text(stringResource(R.string.quick_recv_send_back))
         }
         if (state.receive.sentFiles.isNotEmpty()) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             Text(
-                text = "已发送（${state.receive.sentFiles.size}）",
+                text = stringResource(R.string.quick_recv_sent_count, state.receive.sentFiles.size),
                 style = MaterialTheme.typography.labelMedium
             )
             state.receive.sentFiles.forEach { name ->
@@ -931,9 +1049,9 @@ private fun SendBackCard(state: QuickReceiveUiState, onSendFiles: () -> Unit) {
 }
 
 /** 扫码界面配置：只识别二维码、中文提示、关闭提示音。 */
-private fun buildScanOptions(): ScanOptions = ScanOptions().apply {
+private fun buildScanOptions(prompt: String): ScanOptions = ScanOptions().apply {
     setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-    setPrompt("扫描发送端二维码")
+    setPrompt(prompt)
     setBeepEnabled(false)
 }
 

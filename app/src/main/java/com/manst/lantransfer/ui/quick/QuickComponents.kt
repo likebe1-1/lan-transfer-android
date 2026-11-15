@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.quick
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,8 +47,9 @@ fun formatSessionCode(code: String): String {
 }
 
 /** 手动连接的协议选项文案；null 表示自动选择。 */
+@Composable
 fun protocolOptionLabel(protocol: TransferProtocol?): String =
-    if (protocol == null) "自动（优先 SFTP）" else protocol.label
+    if (protocol == null) stringResource(R.string.quick_protocol_auto) else protocol.label
 
 /** 首页入口卡片：两台设备同一 Wi-Fi 一键互传。 */
 @Composable
@@ -74,14 +77,14 @@ fun QuickTransferCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "快速传文件",
+                    text = stringResource(R.string.quick_entry_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
             Text(
-                text = "两台设备连同一 Wi-Fi，直接互传文件（FTP/FTPS/SFTP/SCP），无需配置服务器。",
+                text = stringResource(R.string.quick_entry_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -96,7 +99,7 @@ fun QuickTransferCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("发送文件")
+                    Text(stringResource(R.string.quick_action_send))
                 }
                 OutlinedButton(
                     onClick = onReceive,
@@ -111,7 +114,7 @@ fun QuickTransferCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("接收文件")
+                    Text(stringResource(R.string.quick_action_receive))
                 }
             }
         }
@@ -207,7 +210,7 @@ fun QuickFileRow(
 fun QuickErrorCard(
     message: String,
     modifier: Modifier = Modifier,
-    retryLabel: String = "重试",
+    retryLabel: String? = null,
     onRetry: (() -> Unit)? = null
 ) {
     Card(
@@ -229,7 +232,7 @@ fun QuickErrorCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "操作失败",
+                    text = stringResource(R.string.common_error_title),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -247,7 +250,7 @@ fun QuickErrorCard(
                         contentColor = MaterialTheme.colorScheme.onError
                     )
                 ) {
-                    Text(retryLabel)
+                    Text(retryLabel ?: stringResource(R.string.action_retry))
                 }
             }
         }
@@ -301,9 +304,9 @@ fun QuickEmptyHint(
 }
 
 /** 协议「四种已开启」说明文案。 */
+@Composable
 fun protocolSummaryText(protocolCount: Int): String = when (protocolCount) {
-    4 -> "四种协议已开启"
-    0 -> "暂无可用协议"
-    else -> "${protocolCount} 种协议已开启"
+    4 -> stringResource(R.string.quick_protocols_all)
+    0 -> stringResource(R.string.quick_protocols_none)
+    else -> stringResource(R.string.quick_protocols_count, protocolCount)
 }
-

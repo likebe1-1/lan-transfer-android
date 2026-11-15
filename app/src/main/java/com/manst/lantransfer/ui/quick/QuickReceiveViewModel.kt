@@ -122,7 +122,36 @@ class QuickReceiveViewModel(
         )
     }
 
-    /** 点击附近设备直接连接（协议自动选择，加密优先）。 */
+    /**
+     * 点击附近设备后（广播不再携带接收码）用用户输入的 6 位接收码连接；
+     * 协议自动选择，加密优先。
+     */
+    fun joinDiscovered(info: QuickSessionInfo, code: String) {
+        if (_uiState.value.isJoining || _uiState.value.isConnected) return
+        val host = info.primaryHost
+        if (host.isBlank()) {
+            _messages.trySend("该设备没有可用的局域网地址")
+            return
+        }
+        val normalizedCode = QuickSessionCode.normalize(code)
+        if (normalizedCode == null) {
+            _messages.trySend("请输入 6 位数字接收码")
+            return
+        }
+        joinTarget(
+            QuickJoinTarget(
+                code = normalizedCode,
+                host = host,
+                deviceName = info.deviceName,
+                protocol = null,
+                ftpPort = info.ftpPort,
+                ftpsPort = info.ftpsPort,
+                sshPort = info.sshPort
+            )
+        )
+    }
+
+    /** 扫码解析出完整会话信息（含接收码）后直接连接（协议自动选择，加密优先）。 */
     fun joinDiscovered(info: QuickSessionInfo) {
         if (_uiState.value.isJoining || _uiState.value.isConnected) return
         val host = info.primaryHost

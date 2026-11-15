@@ -37,9 +37,13 @@ class TransferService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        transferManager = (application as LanTransferApplication).container.transferManager
         TransferNotifications.ensureChannel(this)
-        foregroundStarted = startForegroundSafely(transferManager.tasks.value)
+        // 先立即进入前台（不等待 TransferManager 初始化），避免 startForegroundService 后
+        // 因懒加载/恢复任务耗时导致 5 秒内未调用 startForeground 而被系统判为
+        // ForegroundServiceDidNotStartInTimeException（进程崩溃）。
+        foregroundStarted = startForegroundSafely(emptyList())
+        transferManager = (application as LanTransferApplication).container.transferManager
+        refreshNotification(transferManager.tasks.value, force = true)
         scope.launch {
             transferManager.tasks.collect { taskList -> refreshNotification(taskList) }
         }

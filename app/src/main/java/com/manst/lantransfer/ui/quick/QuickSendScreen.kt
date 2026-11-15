@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.quick
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -107,6 +109,14 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
 
+    // 非 Composable 回调（Snackbar）使用的文案提前取好
+    val maxFilesMessage = stringResource(
+        R.string.quick_max_files_message,
+        QuickTransferDefaults.MAX_FILES,
+        QuickTransferDefaults.MAX_FILES
+    )
+    val codeCopiedMessage = stringResource(R.string.quick_send_code_copied)
+
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
@@ -114,9 +124,7 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
             val limited = uris.take(QuickTransferDefaults.MAX_FILES)
             if (uris.size > QuickTransferDefaults.MAX_FILES) {
                 scope.launch {
-                    snackbarHostState.showSnackbar(
-                        "一次最多选择 ${QuickTransferDefaults.MAX_FILES} 个文件，已选择前 ${QuickTransferDefaults.MAX_FILES} 个"
-                    )
+                    snackbarHostState.showSnackbar(maxFilesMessage)
                 }
             }
             viewModel.startSession(limited)
@@ -149,10 +157,10 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("快速传文件") },
+                title = { Text(stringResource(R.string.quick_entry_title)) },
                 navigationIcon = {
                     IconButton(onClick = requestBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -165,12 +173,12 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
                 .padding(innerPadding)
         ) {
             when {
-                state.isStoppingPhase -> LoadingState(message = "正在结束会话…")
+                state.isStoppingPhase -> LoadingState(message = stringResource(R.string.quick_send_stopping))
                 state.isActive -> SendSessionContent(
                     state = state,
                     onCopyCode = {
                         clipboard.setText(AnnotatedString(state.codeDisplay))
-                        scope.launch { snackbarHostState.showSnackbar("接收码已复制") }
+                        scope.launch { snackbarHostState.showSnackbar(codeCopiedMessage) }
                     },
                     onShowFullscreenCode = { showFullscreenCode = true },
                     onShowQrCode = { showQrCode = true },
@@ -178,7 +186,7 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
                     onStopSession = { showStopConfirm = true }
                 )
 
-                state.isPreparing -> LoadingState(message = "正在准备文件…")
+                state.isPreparing -> LoadingState(message = stringResource(R.string.quick_send_preparing))
                 else -> SendIdleContent(
                     state = state,
                     onPickFiles = { filePicker.launch(arrayOf("*/*")) },
@@ -207,9 +215,9 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
 
     if (showStopConfirm) {
         ConfirmDialog(
-            title = "结束会话？",
-            message = "结束后对方将立即断开连接，已发送或已接收的文件不受影响。",
-            confirmLabel = "结束会话",
+            title = stringResource(R.string.quick_send_stop_dialog_title),
+            message = stringResource(R.string.quick_send_stop_dialog_message),
+            confirmLabel = stringResource(R.string.action_end_session),
             onConfirm = {
                 showStopConfirm = false
                 viewModel.stopSession()
@@ -220,9 +228,9 @@ fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
 
     if (showExitConfirm) {
         ConfirmDialog(
-            title = "结束会话并返回？",
-            message = "返回会结束当前会话，对方将立即断开连接。",
-            confirmLabel = "结束并返回",
+            title = stringResource(R.string.quick_send_exit_dialog_title),
+            message = stringResource(R.string.quick_send_exit_dialog_message),
+            confirmLabel = stringResource(R.string.quick_send_exit_confirm),
             onConfirm = {
                 showExitConfirm = false
                 viewModel.stopSession()
@@ -270,12 +278,12 @@ private fun SendIdleContent(
                         }
                     }
                     Text(
-                        text = "把文件发给附近的设备",
+                        text = stringResource(R.string.quick_send_idle_title),
                         style = MaterialTheme.typography.titleLarge,
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "无需配置服务器：选择文件后会自动开启 FTP / FTPS / SFTP / SCP 服务，对方输入 6 位接收码即可连接。",
+                        text = stringResource(R.string.quick_send_idle_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -292,10 +300,10 @@ private fun SendIdleContent(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("选择要发送的文件")
+                        Text(stringResource(R.string.quick_send_pick_files))
                     }
                     Text(
-                        text = "一次最多选择 ${QuickTransferDefaults.MAX_FILES} 个文件",
+                        text = stringResource(R.string.quick_send_max_files, QuickTransferDefaults.MAX_FILES),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -307,7 +315,7 @@ private fun SendIdleContent(
             item(key = "error") {
                 QuickErrorCard(
                     message = error,
-                    retryLabel = "重试",
+                    retryLabel = stringResource(R.string.action_retry),
                     onRetry = if (state.lastSelectedCount > 0) onRetry else null
                 )
             }
@@ -319,16 +327,16 @@ private fun SendIdleContent(
                     onClick = onRetry,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("使用上次选择的 ${state.lastSelectedCount} 个文件重试")
+                    Text(stringResource(R.string.quick_send_retry_last, state.lastSelectedCount))
                 }
             }
         }
 
         item(key = "steps") {
-            QuickSectionCard(title = "使用步骤", icon = Icons.Filled.Router) {
-                StepRow("1", "在本机选择要发送的文件")
-                StepRow("2", "让对方打开「快速传文件 → 接收文件」，输入本页显示的 6 位接收码")
-                StepRow("3", "对方接收后文件会保存到其系统下载目录；对方也可以把文件发回给你")
+            QuickSectionCard(title = stringResource(R.string.quick_send_steps_title), icon = Icons.Filled.Router) {
+                StepRow("1", stringResource(R.string.quick_send_step_1))
+                StepRow("2", stringResource(R.string.quick_send_step_2))
+                StepRow("3", stringResource(R.string.quick_send_step_3))
             }
         }
     }
@@ -408,7 +416,7 @@ private fun SendSessionContent(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("结束会话")
+                Text(stringResource(R.string.action_end_session))
             }
         }
         item(key = "bottom") { Spacer(modifier = Modifier.height(8.dp)) }
@@ -437,7 +445,7 @@ private fun CodeCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "接收码",
+                text = stringResource(R.string.quick_code_label),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -463,7 +471,7 @@ private fun CodeCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("复制")
+                    Text(stringResource(R.string.action_copy))
                 }
                 OutlinedButton(
                     onClick = onShowFullscreen,
@@ -477,7 +485,7 @@ private fun CodeCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("全屏显示")
+                    Text(stringResource(R.string.quick_send_fullscreen))
                 }
             }
             OutlinedButton(
@@ -493,10 +501,10 @@ private fun CodeCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("二维码")
+                Text(stringResource(R.string.quick_send_qr_button))
             }
             Text(
-                text = "在另一台设备的「接收文件」中输入该接收码，或从附近设备列表中选择「${deviceName.ifBlank { "本机" }}」。",
+                text = stringResource(R.string.quick_send_peer_hint, deviceName.ifBlank { stringResource(R.string.label_this_device) }),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 textAlign = TextAlign.Center
@@ -508,9 +516,9 @@ private fun CodeCard(
 @Composable
 private fun DeviceInfoCard(state: QuickSendUiState) {
     val session = state.session
-    QuickSectionCard(title = "本机连接信息", icon = Icons.Filled.Router) {
+    QuickSectionCard(title = stringResource(R.string.quick_send_device_info), icon = Icons.Filled.Router) {
         Text(
-            text = "设备名：${session.deviceName.ifBlank { "本机" }}",
+            text = stringResource(R.string.quick_send_device_name, session.deviceName.ifBlank { stringResource(R.string.label_this_device) }),
             style = MaterialTheme.typography.bodyMedium
         )
         if (session.addresses.isEmpty()) {
@@ -530,7 +538,7 @@ private fun DeviceInfoCard(state: QuickSendUiState) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "未检测到局域网地址，请连接 Wi-Fi",
+                        text = stringResource(R.string.common_no_lan_address),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -550,7 +558,7 @@ private fun DeviceInfoCard(state: QuickSendUiState) {
 
         if (session.endpoints.isEmpty()) {
             Text(
-                text = "端口信息准备中…",
+                text = stringResource(R.string.quick_send_ports_preparing),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -565,14 +573,14 @@ private fun DeviceInfoCard(state: QuickSendUiState) {
                     Text(
                         text = session.addresses.firstOrNull()
                             ?.let { address -> "$address:${endpoint.port}" }
-                            ?: "端口 ${endpoint.port}",
+                            ?: stringResource(R.string.label_port_with_value, endpoint.port),
                         style = MaterialTheme.typography.labelMedium,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = if (endpoint.running) "运行中" else (endpoint.error ?: "未启动"),
+                        text = if (endpoint.running) stringResource(R.string.status_running) else (endpoint.error ?: stringResource(R.string.status_not_started)),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (endpoint.running) {
                             successColor()
@@ -599,14 +607,14 @@ private fun DeviceInfoCard(state: QuickSendUiState) {
 @Composable
 private fun SendingFilesCard(files: List<QuickFile>) {
     QuickSectionCard(
-        title = "待发送文件（${files.size}）",
+        title = stringResource(R.string.quick_send_pending_files, files.size),
         icon = Icons.Filled.FileUpload
     ) {
         if (files.isEmpty()) {
             QuickEmptyHint(
                 icon = Icons.Filled.FileUpload,
-                title = "没有待发送文件",
-                description = "会话目录为空，可结束会话后重新选择"
+                title = stringResource(R.string.quick_send_pending_empty),
+                description = stringResource(R.string.quick_send_pending_empty_desc)
             )
         } else {
             files.forEach { file ->
@@ -622,14 +630,14 @@ private fun SendingFilesCard(files: List<QuickFile>) {
 @Composable
 private fun ReceivedFilesCard(files: List<QuickFile>, onExport: (String) -> Unit) {
     QuickSectionCard(
-        title = "收到的文件（${files.size}）",
+        title = stringResource(R.string.quick_send_received_files, files.size),
         icon = Icons.Filled.FileDownload
     ) {
         if (files.isEmpty()) {
             QuickEmptyHint(
                 icon = Icons.Filled.FileDownload,
-                title = "还没有收到文件",
-                description = "对方也可以把文件发给你，收到后会自动出现在这里"
+                title = stringResource(R.string.quick_send_received_empty),
+                description = stringResource(R.string.quick_send_received_empty_desc)
             )
         } else {
             files.forEach { file ->
@@ -640,7 +648,7 @@ private fun ReceivedFilesCard(files: List<QuickFile>, onExport: (String) -> Unit
                     IconButton(onClick = { onExport(file.name) }) {
                         Icon(
                             imageVector = Icons.Filled.FileDownload,
-                            contentDescription = "导出「${file.name}」到下载"
+                            contentDescription = stringResource(R.string.cd_export_file, file.name)
                         )
                     }
                 }
@@ -674,7 +682,7 @@ private fun FullscreenCodeDialog(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "接收码",
+                    text = stringResource(R.string.quick_code_label),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -691,24 +699,24 @@ private fun FullscreenCodeDialog(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "在另一台设备的「接收文件」中输入此接收码",
+                    text = stringResource(R.string.quick_send_fullscreen_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "设备：${deviceName.ifBlank { "本机" }}",
+                    text = stringResource(R.string.quick_send_dialog_device, deviceName.ifBlank { stringResource(R.string.label_this_device) }),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    text = "IP：${address ?: "—"}",
+                    text = stringResource(R.string.quick_send_dialog_ip, address ?: "—"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(40.dp))
-                Button(onClick = onDismiss) { Text("关闭") }
+                Button(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
             }
         }
     }
@@ -735,20 +743,20 @@ private fun QrCodeDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "扫码连接",
+                    text = stringResource(R.string.quick_qr_dialog_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.Black
                 )
                 if (qrBitmap != null) {
                     Image(
                         bitmap = qrBitmap,
-                        contentDescription = "快速传文件二维码",
+                        contentDescription = stringResource(R.string.cd_quick_qr),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.size(260.dp)
                     )
                 } else {
                     Text(
-                        text = "二维码生成失败，请让对方手动输入接收码",
+                        text = stringResource(R.string.quick_qr_failed),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.Black
                     )
@@ -763,12 +771,12 @@ private fun QrCodeDialog(
                     color = Color.Black
                 )
                 Text(
-                    text = "让对方扫一扫，自动连接",
+                    text = stringResource(R.string.quick_qr_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.DarkGray
                 )
                 TextButton(onClick = onDismiss) {
-                    Text(text = "关闭", color = Color.Black)
+                    Text(text = stringResource(R.string.action_close), color = Color.Black)
                 }
             }
         }

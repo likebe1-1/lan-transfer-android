@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.common
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -32,22 +34,20 @@ fun TrustedLanNoticeDialog(onConfirm: () -> Unit) {
             )
         },
         title = {
-            Text(text = "请在你信任的局域网下使用", style = MaterialTheme.typography.titleLarge)
+            Text(text = stringResource(R.string.trusted_lan_dialog_title), style = MaterialTheme.typography.titleLarge)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "本应用会在当前局域网内，使用 FTP / FTPS / SFTP / SCP 协议在你的设备之间传输文件。",
+                    text = stringResource(R.string.trusted_lan_dialog_message),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "• 建议仅在家庭、公司等可信的 Wi-Fi 下使用；\n" +
-                        "• 公共 Wi-Fi 可能存在被监听、被伪造设备的风险；\n" +
-                        "• FTP 为明文协议，自动协商时会优先使用加密协议。",
+                    text = stringResource(R.string.trusted_lan_dialog_bullets),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "继续使用即表示你了解上述风险，并对传输的文件负责。",
+                    text = stringResource(R.string.trusted_lan_dialog_footer),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -56,7 +56,7 @@ fun TrustedLanNoticeDialog(onConfirm: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(text = "我已知晓")
+                Text(text = stringResource(R.string.trusted_lan_dialog_confirm))
             }
         }
     )

@@ -60,10 +60,13 @@ class TwoPhoneReceiveTest {
         var discoveredFound = false
         withTimeoutOrNull(12_000L) {
             while (true) {
-                val found = receive.state.value.discovered.any { it.code == code }
-                if (found) {
+                // 广播已不再携带接收码：按 host/IP 判断是否发现发送端
+                val found = receive.state.value.discovered.firstOrNull { info ->
+                    info.primaryHost == host || info.addresses.contains(host)
+                }
+                if (found != null) {
                     discoveredFound = true
-                    log("DISCOVERY_FOUND device=" + receive.state.value.discovered.first { it.code == code }.deviceName)
+                    log("DISCOVERY_FOUND device=" + found.deviceName + " host=" + found.primaryHost)
                     break
                 }
                 delay(300L)
@@ -71,8 +74,8 @@ class TwoPhoneReceiveTest {
             @Suppress("UNREACHABLE_CODE")
             Unit
         }
-        val discoveredCodes = receive.state.value.discovered.map { it.code }
-        log("DISCOVERY result=" + discoveredFound + " codes=" + discoveredCodes)
+        val discoveredDevices = receive.state.value.discovered.map { it.deviceName + "@" + it.primaryHost }
+        log("DISCOVERY result=" + discoveredFound + " devices=" + discoveredDevices)
         receive.stopDiscovery()
 
         val target = QuickJoinTarget(

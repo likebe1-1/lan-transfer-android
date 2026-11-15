@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.editor
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -88,10 +90,18 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (state.isNew) "新增服务器" else "编辑服务器") },
+                title = {
+                    Text(
+                        if (state.isNew) {
+                            stringResource(R.string.editor_title_new)
+                        } else {
+                            stringResource(R.string.editor_title_edit)
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 }
             )
@@ -116,9 +126,9 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                         if (state.isTesting) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("连接中…")
+                            Text(stringResource(R.string.editor_testing))
                         } else {
-                            Text("测试连接")
+                            Text(stringResource(R.string.editor_test_connection))
                         }
                     }
                     Button(
@@ -135,9 +145,9 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("保存中…")
+                            Text(stringResource(R.string.editor_saving))
                         } else {
-                            Text("保存")
+                            Text(stringResource(R.string.action_save))
                         }
                     }
                 }
@@ -152,13 +162,13 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionHeader("连接信息")
+            SectionHeader(stringResource(R.string.section_connection))
 
             OutlinedTextField(
                 value = state.name,
                 onValueChange = viewModel::onNameChange,
-                label = { Text("服务器名称") },
-                placeholder = { Text("例如：家里 NAS") },
+                label = { Text(stringResource(R.string.label_server_name)) },
+                placeholder = { Text(stringResource(R.string.hint_server_name)) },
                 singleLine = true,
                 isError = nameError != null,
                 supportingText = if (nameError != null) {
@@ -178,7 +188,7 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                 OutlinedTextField(
                     value = state.host,
                     onValueChange = viewModel::onHostChange,
-                    label = { Text("主机地址") },
+                    label = { Text(stringResource(R.string.label_host)) },
                     placeholder = { Text("192.168.1.10") },
                     singleLine = true,
                     isError = hostError != null,
@@ -193,7 +203,7 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                 OutlinedTextField(
                     value = state.port,
                     onValueChange = viewModel::onPortChange,
-                    label = { Text("端口") },
+                    label = { Text(stringResource(R.string.label_port)) },
                     singleLine = true,
                     isError = portError != null,
                     supportingText = if (portError != null) {
@@ -209,7 +219,7 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = state.username,
                 onValueChange = viewModel::onUsernameChange,
-                label = { Text("用户名") },
+                label = { Text(stringResource(R.string.label_username)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                 modifier = Modifier.fillMaxWidth()
@@ -218,7 +228,7 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = state.password,
                 onValueChange = viewModel::onPasswordChange,
-                label = { Text("密码") },
+                label = { Text(stringResource(R.string.label_password)) },
                 singleLine = true,
                 visualTransformation = if (passwordVisible) {
                     VisualTransformation.None
@@ -230,7 +240,11 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                            contentDescription = if (passwordVisible) "隐藏密码" else "显示密码"
+                            contentDescription = if (passwordVisible) {
+                                stringResource(R.string.cd_hide_password)
+                            } else {
+                                stringResource(R.string.cd_show_password)
+                            }
                         )
                     }
                 },
@@ -240,20 +254,20 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = state.initialPath,
                 onValueChange = viewModel::onInitialPathChange,
-                label = { Text("初始路径") },
+                label = { Text(stringResource(R.string.label_initial_path)) },
                 placeholder = { Text("/") },
                 singleLine = true,
-                supportingText = { Text("连接后默认打开该目录，留空表示根目录") },
+                supportingText = { Text(stringResource(R.string.hint_initial_path)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             if (state.showPassiveOption) {
-                SectionHeader("连接选项")
+                SectionHeader(stringResource(R.string.section_connection_options))
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                         SwitchRow(
-                            title = "被动模式（PASV）",
-                            description = "局域网与防火墙环境下建议开启；关闭后使用主动模式",
+                            title = stringResource(R.string.label_passive_mode),
+                            description = stringResource(R.string.hint_passive_mode),
                             checked = state.passiveMode,
                             onCheckedChange = viewModel::onPassiveModeChange
                         )
@@ -262,11 +276,11 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
             }
 
             if (state.showFtpsOptions) {
-                SectionHeader("FTPS 选项")
+                SectionHeader(stringResource(R.string.section_ftps_options))
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text(
-                            text = "加密模式",
+                            text = stringResource(R.string.editor_ftps_mode),
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
@@ -286,7 +300,7 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                                     Text(text = mode.label, style = MaterialTheme.typography.bodyMedium)
                                     if (mode == FtpsMode.IMPLICIT) {
                                         Text(
-                                            text = "隐式模式通常使用 990 端口",
+                                            text = stringResource(R.string.hint_ftps_implicit),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -296,8 +310,8 @@ fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
                         }
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         SwitchRow(
-                            title = "信任自签名证书",
-                            description = "局域网设备常见自签名证书；关闭后按系统 CA 严格校验",
+                            title = stringResource(R.string.label_trust_cert),
+                            description = stringResource(R.string.hint_trust_cert),
                             checked = state.allowInsecureTls,
                             onCheckedChange = viewModel::onAllowInsecureTlsChange
                         )
@@ -326,7 +340,7 @@ private fun ProtocolDropdown(
             value = protocol.label,
             onValueChange = {},
             readOnly = true,
-            label = { Text("协议") },
+            label = { Text(stringResource(R.string.label_protocol)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -342,7 +356,7 @@ private fun ProtocolDropdown(
                         Column {
                             Text(item.label, style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                text = "默认端口 ${item.defaultPort}",
+                                text = stringResource(R.string.editor_default_port, item.defaultPort),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

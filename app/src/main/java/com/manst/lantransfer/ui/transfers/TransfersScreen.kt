@@ -1,5 +1,7 @@
 package com.manst.lantransfer.ui.transfers
 
+import com.manst.lantransfer.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +81,7 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
         )
         if (!opened) {
             scope.launch {
-                snackbarHostState.showSnackbar("无法打开「${task.displayName}」，文件可能已被移动或删除")
+                snackbarHostState.showSnackbar(context.getString(R.string.transfer_open_failed, task.displayName))
             }
         }
     }
@@ -87,10 +89,10 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("传输队列") },
+                title = { Text(stringResource(R.string.transfer_queue_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 actions = {
@@ -98,7 +100,7 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
                         onClick = viewModel::clearHistory,
                         enabled = state.finished.isNotEmpty()
                     ) {
-                        Icon(Icons.Filled.DeleteSweep, contentDescription = "清空历史")
+                        Icon(Icons.Filled.DeleteSweep, contentDescription = stringResource(R.string.cd_clear_history))
                     }
                 }
             )
@@ -108,10 +110,10 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
         if (state.isEmpty) {
             EmptyState(
                 icon = Icons.Filled.SwapVert,
-                title = "队列为空",
-                description = "在服务器浏览页下载或上传文件后，任务会出现在这里",
+                title = stringResource(R.string.transfer_empty_title),
+                description = stringResource(R.string.transfer_empty_desc),
                 modifier = Modifier.padding(innerPadding),
-                actionLabel = "返回",
+                actionLabel = stringResource(R.string.action_back),
                 onAction = onBack
             )
         } else {
@@ -124,7 +126,7 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
             ) {
                 if (state.active.isNotEmpty()) {
                     item(key = "active-header") {
-                        SectionHeader("进行中（${state.active.size}）")
+                        SectionHeader(stringResource(R.string.transfer_active_count, state.active.size))
                     }
                     items(items = state.active, key = { it.id }) { task ->
                         TransferTaskCard(
@@ -138,7 +140,7 @@ fun TransfersScreen(viewModel: TransfersViewModel, onBack: () -> Unit) {
                 }
                 if (state.finished.isNotEmpty()) {
                     item(key = "finished-header") {
-                        SectionHeader("历史记录（${state.finished.size}）")
+                        SectionHeader(stringResource(R.string.transfer_history_count, state.finished.size))
                     }
                     items(items = state.finished, key = { it.id }) { task ->
                         TransferTaskCard(
@@ -195,7 +197,11 @@ private fun TransferTaskCard(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (isUpload) Icons.Filled.Upload else Icons.Filled.Download,
-                            contentDescription = if (isUpload) "上传" else "下载",
+                            contentDescription = if (isUpload) {
+                                stringResource(R.string.cd_upload)
+                            } else {
+                                stringResource(R.string.cd_download)
+                            },
                             tint = directionColor.second
                         )
                     }
@@ -223,9 +229,9 @@ private fun TransferTaskCard(
                     if (task.attempts > 0) {
                         Text(
                             text = if (task.state == TransferState.FAILED || task.state == TransferState.CANCELLED) {
-                                "已重试 ${task.attempts} 次"
+                                stringResource(R.string.transfer_retried_times, task.attempts)
                             } else {
-                                "重试中 (${task.attempts}/3)"
+                                stringResource(R.string.transfer_retrying, task.attempts)
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.tertiary
@@ -273,9 +279,9 @@ private fun TransferTaskCard(
             if (task.direction == TransferDirection.DOWNLOAD && task.state != TransferState.COMPLETED) {
                 Text(
                     text = when {
-                        !task.resumable -> "不支持断点续传（SCP）"
-                        task.attempts > 0 && task.transferredBytes > 0L -> "已续传 · 支持断点续传"
-                        else -> "支持断点续传"
+                        !task.resumable -> stringResource(R.string.transfer_no_resume_scp)
+                        task.attempts > 0 && task.transferredBytes > 0L -> stringResource(R.string.transfer_resumed)
+                        else -> stringResource(R.string.transfer_supports_resume)
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (task.resumable) {
@@ -289,7 +295,7 @@ private fun TransferTaskCard(
             if (task.state == TransferState.RUNNING) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "进度 " + (task.progress * 100f).toInt() + "%",
+                        text = stringResource(R.string.transfer_progress_percent, (task.progress * 100f).toInt()),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -319,7 +325,7 @@ private fun TransferTaskCard(
                 task.localDisplayName != null
             ) {
                 Text(
-                    text = "已保存为 ${task.localDisplayName}",
+                    text = stringResource(R.string.transfer_saved_as, task.localDisplayName ?: ""),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -340,16 +346,16 @@ private fun TaskActionButtons(
         when (task.state) {
             TransferState.QUEUED, TransferState.RUNNING -> {
                 IconButton(onClick = onCancel) {
-                    Icon(Icons.Filled.Close, contentDescription = "取消任务")
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_cancel_task))
                 }
             }
 
             TransferState.FAILED, TransferState.CANCELLED -> {
                 IconButton(onClick = onRetry) {
-                    Icon(Icons.Filled.Replay, contentDescription = "重试任务")
+                    Icon(Icons.Filled.Replay, contentDescription = stringResource(R.string.cd_retry_task))
                 }
                 IconButton(onClick = onRemove) {
-                    Icon(Icons.Filled.Close, contentDescription = "移除任务")
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_remove_task))
                 }
             }
 
@@ -358,12 +364,12 @@ private fun TaskActionButtons(
                     IconButton(onClick = { onOpen(task) }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "打开文件"
+                            contentDescription = stringResource(R.string.cd_open_file)
                         )
                     }
                 }
                 IconButton(onClick = onRemove) {
-                    Icon(Icons.Filled.Close, contentDescription = "移除任务")
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_remove_task))
                 }
             }
         }
@@ -399,22 +405,48 @@ private fun TransferStateBadge(state: TransferState) {
     }
 }
 
+@Composable
 private fun stateLabel(state: TransferState): String = when (state) {
-    TransferState.QUEUED -> "排队中"
-    TransferState.RUNNING -> "传输中"
-    TransferState.COMPLETED -> "已完成"
-    TransferState.FAILED -> "失败"
-    TransferState.CANCELLED -> "已取消"
+    TransferState.QUEUED -> stringResource(R.string.transfer_state_queued)
+    TransferState.RUNNING -> stringResource(R.string.transfer_state_running)
+    TransferState.COMPLETED -> stringResource(R.string.transfer_state_completed)
+    TransferState.FAILED -> stringResource(R.string.transfer_state_failed)
+    TransferState.CANCELLED -> stringResource(R.string.transfer_state_cancelled)
 }
 
+@Composable
 private fun progressSummary(task: TransferTask): String {
     val transferred = Format.bytes(task.transferredBytes)
     val total = if (task.totalBytes > 0L) Format.bytes(task.totalBytes) else null
     return when (task.state) {
-        TransferState.QUEUED -> "等待中${if (total != null) " · 共 $total" else ""}"
-        TransferState.RUNNING -> if (total != null) "$transferred / $total" else "已传输 $transferred"
-        TransferState.COMPLETED -> if (total != null) "共 $total" else "传输完成"
-        TransferState.FAILED -> if (total != null) "$transferred / $total" else "已传输 $transferred"
-        TransferState.CANCELLED -> "已取消${if (total != null) " · $transferred / $total" else ""}"
+        TransferState.QUEUED -> if (total != null) {
+            stringResource(R.string.transfer_progress_queued_with_total, total)
+        } else {
+            stringResource(R.string.transfer_progress_queued)
+        }
+
+        TransferState.RUNNING -> if (total != null) {
+            stringResource(R.string.transfer_progress_bytes, transferred, total)
+        } else {
+            stringResource(R.string.transfer_progress_sent, transferred)
+        }
+
+        TransferState.COMPLETED -> if (total != null) {
+            stringResource(R.string.transfer_progress_total, total)
+        } else {
+            stringResource(R.string.transfer_progress_completed)
+        }
+
+        TransferState.FAILED -> if (total != null) {
+            stringResource(R.string.transfer_progress_bytes, transferred, total)
+        } else {
+            stringResource(R.string.transfer_progress_sent, transferred)
+        }
+
+        TransferState.CANCELLED -> if (total != null) {
+            stringResource(R.string.transfer_progress_cancelled_detail, transferred, total)
+        } else {
+            stringResource(R.string.transfer_progress_cancelled)
+        }
     }
 }

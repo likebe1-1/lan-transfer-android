@@ -5,6 +5,7 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.provider.OpenableColumns
 import android.util.Log
+import com.manst.lantransfer.core.AuthenticationException
 import com.manst.lantransfer.core.FtpsMode
 import com.manst.lantransfer.core.RemoteEntry
 import com.manst.lantransfer.core.RemotePath
@@ -48,6 +49,7 @@ import java.io.IOException
  * - 接收：[downloadAll] / [download] 顺序下载到 [QuickDownloadSink]：文件夹传输时用
  *   [QuickDownloadSink.openInDir] 在系统下载目录下保留相对子目录结构，提交成功才计入完成；
  * - 互传：[sendFiles] 用同一个连接把本机文件上传到对方根目录；
+ * - 限流：同一目标连续 5 次接收码错误后锁定 10 分钟（[QuickJoinAttemptLimiter]），成功连接即清除；
  * - 所有网络操作在 Dispatchers.IO 上、由同一把 Mutex 串行；同一时刻只允许一个会话。
  */
 class DefaultQuickReceiveManager(
@@ -78,6 +80,9 @@ class DefaultQuickReceiveManager(
     private var autoDownloadJob: Job? = null
 
     private var fileSystem: RemoteFileSystem? = null
+
+    /** 接收码错误次数限制：按目标（host + 三端口）连续 5 次认证失败后锁定 10 分钟。 */
+    private val joinAttemptLimiter = QuickJoinAttemptLimiter()
 
     // ------------------------------------------------------------ 局域网发现
 
@@ -194,6 +199,17 @@ class DefaultQuickReceiveManager(
             ?: return joinFailure("接收码必须是 6 位数字")
         val host = target.host.trim()
         if (host.isEmpty()) return joinFailure("请输入对方的 IP 地址")
+        // 同一目标连续接收码错误会被限流：锁定期间直接拒绝，避免继续暴力尝试
+        val attemptKey = QuickJoinAttemptLimiter.keyFor(
+            host,
+            target.ftpPort,
+            target.ftpsPort,
+            target.sshPort
+        )
+        val lockedSeconds = joinAttemptLimiter.lockedRemainingSeconds(attemptKey)
+        if (lockedSeconds > 0L) {
+            return joinFailure(joinLockedMessage(lockedSeconds))
+        }
         closeActiveSession()
 
         val candidates = target.protocol?.let { protocol -> listOf(protocol) }
@@ -212,6 +228,8 @@ class DefaultQuickReceiveManager(
         }
 
         val failures = ArrayList<String>(candidates.size)
+        // 自动回退会依次尝试多种协议，但同一个接收码错误只计 1 次失败
+        var authenticationFailed = false
         for (protocol in candidates) {
             val port = target.portFor(protocol)
             val candidate = RemoteFileSystems.create(
@@ -244,6 +262,7 @@ class DefaultQuickReceiveManager(
                         message = "已通过 " + protocol.label + " 连接对方设备"
                     )
                 }
+                joinAttemptLimiter.recordSuccess(attemptKey)
                 Log.i(
                     TAG,
                     "已通过 " + protocol.label + " 连接 " + host + ":" + port +
@@ -259,10 +278,19 @@ class DefaultQuickReceiveManager(
                 throw e
             } catch (e: Exception) {
                 runCatching { candidate.close() }
+                if (e is AuthenticationException) authenticationFailed = true
                 failures += protocol.label + "：" + quickErrorMessage(e)
             }
         }
 
+        if (authenticationFailed) {
+            joinAttemptLimiter.recordFailure(attemptKey)
+            val remaining = joinAttemptLimiter.lockedRemainingSeconds(attemptKey)
+            if (remaining > 0L) {
+                // 第 5 次错误会触发锁定，直接返回剩余锁定时间提示
+                return joinFailure(joinLockedMessage(remaining))
+            }
+        }
         val summary = "无法连接对方设备（已尝试 " + candidates.joinToString("/") { it.label } + "）：" +
             failures.joinToString("；")
         return joinFailure(summary)
@@ -285,6 +313,12 @@ class DefaultQuickReceiveManager(
         passiveMode = true,
         allowInsecureTls = true
     )
+
+    /** 限流提示：剩余锁定秒数换算成分钟（向上取整，至少 1 分钟）。 */
+    private fun joinLockedMessage(remainingSeconds: Long): String {
+        val minutes = ((remainingSeconds + 59L) / 60L).coerceAtLeast(1L)
+        return "接收码错误次数过多，请 " + minutes + " 分钟后再试"
+    }
 
     private fun joinFailure(message: String): Result<Unit> {
         mutableState.update { current ->

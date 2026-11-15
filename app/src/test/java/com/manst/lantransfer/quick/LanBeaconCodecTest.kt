@@ -4,12 +4,13 @@ import com.manst.lantransfer.core.TransferProtocol
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** [QuickBeaconCodec] 的 JVM 单元测试：报文编解码、字段校验与非法数据容错。 */
+/** [QuickBeaconCodec] 的 JVM 单元测试：v2 广播不携带接收码、字段编解码与非法数据容错。 */
 class LanBeaconCodecTest {
 
     private fun sampleInfo(
@@ -31,12 +32,21 @@ class LanBeaconCodecTest {
     )
 
     @Test
-    fun encode_containsAllContractFields() {
+    fun version_isTwoAndEncodeDoesNotCarryCode() {
+        assertEquals(2, QuickBeaconCodec.VERSION)
+        val info = sampleInfo(code = "123456")
+        val encoded = requireNotNull(QuickBeaconCodec.encode(info))
+        val json = JSONObject(encoded)
+        assertEquals(2, json.getInt("v"))
+        assertFalse("v2 广播报文不能包含 code 字段", json.has("code"))
+        assertFalse("v2 广播报文不能包含接收码明文", encoded.contains("123456"))
+    }
+
+    @Test
+    fun encode_containsAllPublicFields() {
         val encoded = QuickBeaconCodec.encode(sampleInfo())
         assertNotNull(encoded)
         val json = JSONObject(requireNotNull(encoded))
-        assertEquals(QuickBeaconCodec.VERSION, json.getInt("v"))
-        assertEquals("123456", json.getString("code"))
         assertEquals("Pixel 4", json.getString("name"))
         val addrs = json.getJSONArray("addrs")
         assertEquals(2, addrs.length())
@@ -46,12 +56,11 @@ class LanBeaconCodecTest {
         assertEquals(2222, json.getInt("ssh"))
         val protocols = json.getJSONArray("protocols")
         assertEquals(4, protocols.length())
-        assertTrue(protocols.getString(0) == "FTP")
         assertTrue(json.getLong("ts") > 0L)
     }
 
     @Test
-    fun decode_roundTripsEncodedSession() {
+    fun decode_roundTripsEncodedSessionWithoutCode() {
         val original = sampleInfo(
             code = "987654",
             deviceName = "小米手机",
@@ -64,7 +73,8 @@ class LanBeaconCodecTest {
         val decoded = QuickBeaconCodec.decode(QuickBeaconCodec.encode(original))
         assertNotNull(decoded)
         requireNotNull(decoded)
-        assertEquals(original.code, decoded.code)
+        assertEquals("广播解码不能得到接收码", "", decoded.code)
+        assertFalse(decoded.hasCode)
         assertEquals(original.deviceName, decoded.deviceName)
         assertEquals(original.addresses, decoded.addresses)
         assertEquals(original.ftpPort, decoded.ftpPort)
@@ -79,10 +89,9 @@ class LanBeaconCodecTest {
     }
 
     @Test
-    fun decode_acceptsManualJsonAndNormalizesOptionalFields() {
+    fun decode_acceptsManualJsonWithoutCodeAndToleratesOptionalFields() {
         val manual = JSONObject()
-            .put("v", 1)
-            .put("code", "123-456")
+            .put("v", 2)
             .put("addrs", JSONArray(listOf(" 192.168.1.9 ", "", "192.168.1.9")))
             .put("ftp", 0)
             .put("ftps", 70000)
@@ -91,7 +100,8 @@ class LanBeaconCodecTest {
         val decoded = QuickBeaconCodec.decode(manual)
         assertNotNull(decoded)
         requireNotNull(decoded)
-        assertEquals("123456", decoded.code)
+        assertEquals("", decoded.code)
+        assertFalse(decoded.hasCode)
         assertEquals(listOf("192.168.1.9"), decoded.addresses)
         assertEquals(QuickTransferDefaults.DEFAULT_FTP_PORT, decoded.ftpPort)
         assertEquals(QuickTransferDefaults.DEFAULT_FTPS_PORT, decoded.ftpsPort)
@@ -101,15 +111,46 @@ class LanBeaconCodecTest {
     }
 
     @Test
+    fun decode_ignoresCodeFieldEvenIfPresent() {
+        // 防御性：即使伪造的 v2 报文带了 code，也不采信（广播协议本身不传接收码）
+        val forged = JSONObject()
+            .put("v", 2)
+            .put("code", "222333")
+            .put("name", "伪造设备")
+            .put("addrs", JSONArray(listOf("192.168.0.2")))
+            .toString()
+        val decoded = QuickBeaconCodec.decode(forged)
+        assertNotNull(decoded)
+        requireNotNull(decoded)
+        assertEquals("", decoded.code)
+        assertFalse(decoded.hasCode)
+        assertEquals("伪造设备", decoded.deviceName)
+    }
+
+    @Test
     fun decode_defaultsToAllProtocolsWhenFieldMissing() {
         val manual = JSONObject()
-            .put("v", 1)
-            .put("code", "123456")
+            .put("v", 2)
             .put("addrs", JSONArray(listOf("192.168.0.2")))
             .toString()
         val decoded = QuickBeaconCodec.decode(manual)
         assertNotNull(decoded)
         assertEquals(QuickTransferDefaults.PROTOCOLS, requireNotNull(decoded).protocols)
+    }
+
+    @Test
+    fun decode_rejectsLegacyV1PayloadEvenIfValidElsewhere() {
+        // 旧版 v1 报文携带接收码：旧客户端会据此自动连接，新版必须一律忽略
+        val legacy = JSONObject()
+            .put("v", 1)
+            .put("code", "123456")
+            .put("name", "旧设备")
+            .put("addrs", JSONArray(listOf("192.168.1.10")))
+            .put("ftp", 2121)
+            .put("ftps", 2122)
+            .put("ssh", 2222)
+            .toString()
+        assertNull(QuickBeaconCodec.decode(legacy))
     }
 
     @Test
@@ -120,36 +161,33 @@ class LanBeaconCodecTest {
         assertNull(QuickBeaconCodec.decode("not json"))
         assertNull(QuickBeaconCodec.decode("[]"))
         assertNull(QuickBeaconCodec.decode("{}"))
-        assertNull(QuickBeaconCodec.decode("{\"v\":1}"))
+        assertNull(QuickBeaconCodec.decode("{\"v\":2}"))
         assertNull(QuickBeaconCodec.decode("x".repeat(QuickBeaconCodec.MAX_PACKET_BYTES + 1)))
     }
 
     @Test
     fun decode_rejectsWrongVersionAndInvalidCoreFields() {
-        fun payload(code: String, addrs: JSONArray?, protocols: JSONArray?, version: Int = 1): String =
+        fun payload(addrs: JSONArray?, protocols: JSONArray?, version: Int = 2): String =
             JSONObject()
                 .apply {
                     put("v", version)
-                    put("code", code)
-                    if (addrs == null) put("addrs", JSONArray(emptyList<String>())) else put("addrs", addrs)
-                    if (protocols == null) put("protocols", JSONArray(emptyList<String>())) else put("protocols", protocols)
+                    put("addrs", addrs ?: JSONArray(emptyList<String>()))
+                    put("protocols", protocols ?: JSONArray(emptyList<String>()))
                 }
                 .toString()
 
         val addrs = JSONArray(listOf("192.168.1.1"))
         val protocols = JSONArray(listOf("FTP"))
-        assertNull("版本不一致必须忽略", QuickBeaconCodec.decode(payload("123456", addrs, protocols, version = 2)))
-        assertNull("接收码非法必须忽略", QuickBeaconCodec.decode(payload("12345", addrs, protocols)))
-        assertNull("接收码非数字必须忽略", QuickBeaconCodec.decode(payload("abcdef", addrs, protocols)))
-        assertNull("没有可用地址必须忽略", QuickBeaconCodec.decode(payload("123456", JSONArray(listOf("  ", "")), protocols)))
-        assertNull("协议全部不认识必须忽略", QuickBeaconCodec.decode(payload("123456", addrs, JSONArray(listOf("FOO")))))
+        assertNull("版本不一致必须忽略", QuickBeaconCodec.decode(payload(addrs, protocols, version = 1)))
+        assertNull("版本不一致必须忽略", QuickBeaconCodec.decode(payload(addrs, protocols, version = 3)))
+        assertNull("没有可用地址必须忽略", QuickBeaconCodec.decode(payload(JSONArray(listOf("  ", "")), protocols)))
+        assertNull("协议全部不认识必须忽略", QuickBeaconCodec.decode(payload(addrs, JSONArray(listOf("FOO")))))
     }
 
     @Test
     fun decode_acceptsPartialProtocolList() {
         val partial = JSONObject()
-            .put("v", 1)
-            .put("code", "222333")
+            .put("v", 2)
             .put("addrs", JSONArray(listOf("10.1.2.3")))
             .put("protocols", JSONArray(listOf("FTP")))
             .toString()
