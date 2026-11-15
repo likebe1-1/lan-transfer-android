@@ -1,5 +1,7 @@
 # LanLink（局域网传输）
 
+**官网 / 在线下载页**：https://likebe1-1.github.io/lan-transfer-android/ （由 GitHub Pages + GitHub REST API 提供，实时读取 Releases）
+
 **LanLink** 是一个 **Android 局域网文件传输** 应用：用手机连接同一局域网内的服务器，通过 **FTP / FTPS / SFTP / SCP** 四种协议浏览远端目录，并上传、下载文件。
 
 > GitHub 仓库：[likebe1-1/lan-transfer-android](https://github.com/likebe1-1/lan-transfer-android)

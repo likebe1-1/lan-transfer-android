@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LanLink · 局域网文件传输</title>
+<meta name="description" content="LanLink 是一款纯局域网的 Android 文件传输工具：支持 FTP / FTPS / SFTP / SCP，手机直接开服务器，快速传文件、网络工具、一键组网，无需登录、不上传云端。" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" type="image/svg+xml" href="site/logo.svg" />
+<link rel="canonical" href="https://likebe1-1.github.io/lan-transfer-android/" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="LanLink · 局域网文件传输" />
+<meta property="og:description" content="纯局域网的 Android 文件传输工具：FTP / FTPS / SFTP / SCP、快速传文件、网络工具、一键组网。无需登录，不上传云端。" />
+<meta property="og:image" content="https://likebe1-1.github.io/lan-transfer-android/screenshots/01_server_list.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="LanLink · 局域网文件传输" />
+<meta name="twitter:description" content="纯局域网的 Android 文件传输工具：FTP / FTPS / SFTP / SCP、快速传文件、网络工具、一键组网。" />
+<link rel="stylesheet" href="site/style.css" />
+</head>
+<body>
+<div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="site-header" id="top">
+  <div class="container header-inner">
+    <a class="brand" href="#top" aria-label="LanLink 首页">
+      <img src="site/logo.svg" alt="" width="34" height="34" />
+      <span>LanLink</span>
+    </a>
+    <nav class="nav" id="siteNav" aria-label="主导航">
+      <a href="#features">功能</a>
+      <a href="#screenshots">截图</a>
+      <a href="#download">下载</a>
+      <a href="#releases">版本历史</a>
+      <a href="#faq">常见问题</a>
+      <a class="nav-github" href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="切换深浅色主题" title="切换深浅色主题">
+        <span class="theme-icon" aria-hidden="true">◐</span>
+      </button>
+      <button class="icon-btn menu-btn" id="menuToggle" type="button" aria-label="打开菜单" aria-expanded="false">
+        <span aria-hidden="true">☰</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero container">
+    <div class="hero-copy">
+      <div class="badge" id="versionBadge">
+        <span class="dot"></span><span id="versionText">正在读取最新版本…</span>
+      </div>
+      <h1>把文件，<br><span class="grad">直接送到另一台设备。</span></h1>
+      <p class="lead">LanLink 是一款纯局域网的 Android 文件传输工具：FTP / FTPS / SFTP / SCP 四种协议、手机一键开服务器、快速传文件、网络工具与一键组网。无需登录、不上传云端、不收集数据。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="heroDownload" href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">
+          <span aria-hidden="true">↓</span> 下载最新版
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">
+          <span aria-hidden="true">★</span> 在 GitHub 查看
+        </a>
+      </div>
+      <div class="hero-meta">
+        <div><strong id="statVersion">—</strong><span>最新版本</span></div>
+        <div><strong id="statUpdated">—</strong><span>最近更新</span></div>
+        <div><strong id="statStars">—</strong><span>GitHub Stars</span></div>
+      </div>
+      <p class="hero-note" id="apiStatus" role="status" aria-live="polite"></p>
+    </div>
+    <div class="hero-visual">
+      <div class="phone">
+        <div class="phone-screen">
+          <img src="screenshots/01_server_list.png" alt="LanLink 首页截图" width="720" height="1600" />
+        </div>
+      </div>
+      <div class="float-card float-a"><strong>🔒 纯局域网</strong><span>不经过云端</span></div>
+      <div class="float-card float-b"><strong>⚡ 四协议</strong><span>FTP / SFTP / SCP</span></div>
+    </div>
+  </section>
+
+  <section class="notice container" id="upgradeNotice">
+    <div class="notice-inner">
+      <strong>从 v2.1.1 或更早版本升级？</strong>
+      <span>旧版本没有内置更新，本次需要手动安装一次；从 v2.2.0 起即可在 App 内直接更新。</span>
+      <a href="#download">查看下载方式 ↓</a>
+    </div>
+  </section>
+
+  <section class="section container" id="features">
+    <div class="section-head">
+      <p class="eyebrow">FEATURES</p>
+      <h2>局域网里需要的，它都有</h2>
+      <p class="section-sub">不只是一个传文件工具，而是把同网设备连接起来的一整套小工具。</p>
+    </div>
+    <div class="feature-grid">
+      <article class="feature">
+        <div class="feature-icon">⇄</div>
+        <h3>四种协议</h3>
+        <p>FTP / FTPS / SFTP / SCP 客户端，连接 NAS、路由器、电脑或任意服务器，浏览、上传、下载。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">📱</div>
+        <h3>手机就是文件站</h3>
+        <p>App 内一键启动 FTP / FTPS / SFTP / SCP 服务端，电脑或其他手机用任意客户端访问共享目录。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">⚡</div>
+        <h3>快速传文件</h3>
+        <p>两台手机同一 Wi-Fi，输入 6 位接收码或扫码即可互传；支持文件夹、断点续传、收到文件自动保留。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🧭</div>
+        <h3>网络工具</h3>
+        <p>局域网设备雷达 + 网络诊断：同网段、网关可达、AP 隔离提示、IP:端口测试，快速定位「为什么连不上」。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">📶</div>
+        <h3>一键组网</h3>
+        <p>没有路由器或 AP 隔离？A 开热点生成二维码，B 扫码自动加入，再直接传文件。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🔄</div>
+        <h3>应用内更新</h3>
+        <p>在 App 内检查并下载新版本，校验 SHA-256 与签名；GitHub 访问不便时可用蓝奏云兜底。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🗂️</div>
+        <h3>断点续传 · 文件夹</h3>
+        <p>大文件中断后从断点继续；支持远端文件夹递归下载、本地目录递归上传，保留目录结构。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🌐</div>
+        <h3>中英双语</h3>
+        <p>界面文案完整中英文；系统语言为英文时自动切换，动态提示后续逐步完善。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section container" id="screenshots">
+    <div class="section-head">
+      <p class="eyebrow">SCREENSHOTS</p>
+      <h2>看看它长什么样</h2>
+      <p class="section-sub">全部截图来自真实运行的 App。</p>
+    </div>
+    <div class="shots" id="shotsTrack">
+      <figure class="shot"><img loading="lazy" src="screenshots/08_quick_entry.png" alt="快速传文件入口" /><figcaption>快速传文件</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/09_quick_receive.png" alt="接收文件页面" /><figcaption>接收文件</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/11_quick_send_session.png" alt="发送会话与二维码" /><figcaption>扫码 / 接收码</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/13_quick_transfer_progress.png" alt="传输进度" /><figcaption>速度 / 剩余时间</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/02_remote_browser.png" alt="远程目录浏览" /><figcaption>远程浏览</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/04_transfer_queue.png" alt="传输队列" /><figcaption>传输队列</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/15_network_tools.png" alt="网络工具" /><figcaption>网络工具</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/16_network_setup.png" alt="一键组网" /><figcaption>一键组网</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/06_server_running.png" alt="本机服务器运行中" /><figcaption>本机服务器</figcaption></figure>
+      <figure class="shot"><img loading="lazy" src="screenshots/14_english_ui.png" alt="英文界面" /><figcaption>English UI</figcaption></figure>
+    </div>
+    <div class="shots-nav"><button class="btn btn-ghost btn-sm" id="shotsPrev" type="button">← 上一张</button><button class="btn btn-ghost btn-sm" id="shotsNext" type="button">下一张 →</button></div>
+  </section>
+
+  <section class="section container" id="download">
+    <div class="section-head">
+      <p class="eyebrow">DOWNLOAD</p>
+      <h2 id="downloadTitle">下载 LanLink</h2>
+      <p class="section-sub" id="downloadSub">从 GitHub Releases 获取最新版；如果 GitHub 访问不便，可使用蓝奏云备用下载。</p>
+    </div>
+    <div class="download-layout">
+      <div class="download-main">
+        <div class="download-head">
+          <div>
+            <div class="badge" id="latestBadge"><span class="dot"></span><span id="latestTag">最新版本</span></div>
+            <p class="muted" id="latestDate"></p>
+          </div>
+          <a class="btn btn-ghost btn-sm" id="releaseLink" href="https://github.com/likebe1-1/lan-transfer-android/releases/latest" target="_blank" rel="noopener">全部版本 ↗</a>
+        </div>
+        <div class="asset-list" id="assetList">
+          <div class="asset skeleton"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+        </div>
+        <div class="install-steps">
+          <h3>安装步骤</h3>
+          <ol>
+            <li>下载对应架构的 APK（不确定就选 <strong>universal</strong> 或 arm64-v8a）。</li>
+            <li>首次安装时允许「安装未知应用」。</li>
+            <li>覆盖安装即可保留服务器配置、历史记录和设置。</li>
+          </ol>
+          <p class="muted small">系统要求：Android 10（API 29）及以上。安装包使用同一签名证书，可直接覆盖升级。</p>
+        </div>
+      </div>
+      <aside class="fallback-card">
+        <h3>蓝奏云备用下载</h3>
+        <p>GitHub 访问慢或无法访问时，可在浏览器打开蓝奏云文件夹下载。</p>
+        <a class="btn btn-primary btn-block" href="https://wwbds.lanzoum.com/b0139vopuf" target="_blank" rel="noopener">打开蓝奏云 ↗</a>
+        <div class="copy-row">
+          <span>密码</span><code id="lanzouPassword">1234</code>
+          <button class="copy-btn" data-copy="1234" type="button">复制</button>
+        </div>
+        <div class="divider"></div>
+        <h3>更新清单</h3>
+        <p class="muted small">应用内更新会读取 <code>docs/update.json</code>，并校验 APK 的 SHA-256 与签名。</p>
+        <a class="link-arrow" href="https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json" target="_blank" rel="noopener">查看 update.json ↗</a>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section container" id="releases">
+    <div class="section-head">
+      <p class="eyebrow">RELEASES</p>
+      <h2>版本历史</h2>
+      <p class="section-sub">通过 GitHub 公共 API 实时读取；按发布时间排序。</p>
+    </div>
+    <div class="release-list" id="releaseList">
+      <div class="release skeleton"><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>
+    </div>
+    <p class="api-hint" id="releaseHint"></p>
+  </section>
+
+  <section class="section container" id="faq">
+    <div class="section-head">
+      <p class="eyebrow">FAQ</p>
+      <h2>常见问题</h2>
+    </div>
+    <div class="faq-list">
+      <details><summary>两台手机同一个 Wi-Fi，为什么搜不到对方？</summary><p>路由器可能开启了 AP 隔离/客户端隔离。可以先用「网络工具 → 扫描局域网」诊断；如果提示疑似 AP 隔离，可关闭路由器的隔离设置，或使用「一键组网」：一台开热点、另一台扫码加入后再传。</p></details>
+      <details><summary>应用提示「安装未知应用」怎么办？</summary><p>在系统设置中允许当前浏览器/文件管理器安装应用即可；这是 Android 对非商店安装包的安全限制。LanLink 的 Release APK 已签名，SHA-256 校验值见版本说明。</p></details>
+      <details><summary>为什么从旧版本升级没有自动提示更新？</summary><p>应用内更新是 v2.2.0 才加入的功能，v2.1.1 及更早版本没有更新代码，因此需要手动安装一次 v2.2.0；之后的版本会正常收到更新提示。</p></details>
+      <details><summary>LAN 传输需要联网吗？</summary><p>不需要互联网，只需要两台设备在同一局域网（或同一热点）。LanLink 不上传文件到云端，也不要求登录账号。</p></details>
+      <details><summary>支持哪些协议？</summary><p>客户端支持 FTP、FTPS、SFTP、SCP；本机服务器同样四种协议都支持。SCP 不支持断点续传，其他三种支持。</p></details>
+      <details><summary>源码在哪里？</summary><p>GitHub：<a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">likebe1-1/lan-transfer-android</a>。欢迎提交 Issue 与 PR。</p></details>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand" href="#top"><img src="site/logo.svg" alt="" width="28" height="28" /><span>LanLink</span></a>
+      <p class="muted small">纯局域网文件传输 · 无需登录 · 不上传云端</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">源码</a>
+    </div>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" type="button" aria-label="回到顶部">↑</button>
+<script src="site/app.js" defer></script>
+</body>
+</html>
