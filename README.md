@@ -34,7 +34,8 @@
 
 | 版本 | 说明 | 直接下载 |
 | --- | --- | --- |
-| **v2.1.1（最新）** | **ABI 拆分 + 资源精简：arm64 包 10.44 MiB**（原 11.77 MiB） | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk) |
+| **v2.2.0（最新）** | **应用内更新 / 快速传文件安全加固 / 中英文界面 / 网络工具 / 一键组网** | 见下方按 ABI 下载 |
+| v2.1.1 | ABI 拆分 + 资源精简：arm64 包 10.44 MiB | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk) |
 | v2.1.0 | LanLink 品牌版 + 断点续传 / 文件夹 / 历史 / 分享 / 扫码快传 | [LanLink-v2.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.0/LanLink-v2.1.0.apk) |
 | v2.0.0 | 断点续传 / 文件夹传输 / 历史记录 / 分享直达 / 扫码快传 | [LanTransfer-v2.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.0.0/LanTransfer-v2.0.0.apk) |
 | v1.3.1 | 下载直接写入系统下载根目录 | [LanTransfer-v1.3.1.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.3.1/LanTransfer-v1.3.1.apk) |
@@ -44,7 +45,17 @@
 | v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
 | v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
 
-> APK 与 `v1.0.0` ~ `v2.1.1` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+> APK 与 `v1.0.0` ~ `v2.2.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+
+**v2.2.0 分 ABI 下载**（GitHub Releases）：
+
+| 架构 | 直接下载 |
+| --- | --- |
+| arm64-v8a（推荐） | [LanLink-v2.2.0-arm64-v8a.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-arm64-v8a.apk) |
+| armeabi-v7a | [LanLink-v2.2.0-armeabi-v7a.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-armeabi-v7a.apk) |
+| universal | [LanLink-v2.2.0-universal.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-universal.apk) |
+
+发布说明：[docs/RELEASE_NOTES_v2.2.0.md](docs/RELEASE_NOTES_v2.2.0.md) · 蓝奏云备用：https://wwbds.lanzoum.com/b0139vopuf （密码 1234）
 
 ## 功能
 

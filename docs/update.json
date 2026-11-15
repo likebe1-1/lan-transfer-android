@@ -1,33 +1,33 @@
 {
-  "versionCode": 9,
-  "versionName": "2.1.1",
-  "changelog": "LanLink v2.1.1：按 ABI 拆分安装包并精简资源，下载体积更小（arm64 约 10.44 MiB）；快速传文件、断点续传、文件夹传输、历史记录、分享直达、扫码加入等功能保持不变。",
-  "releasePageUrl": "https://github.com/likebe1-1/lan-transfer-android/releases/tag/v2.1.1",
+  "versionCode": 10,
+  "versionName": "2.2.0",
+  "changelog": "LanLink v2.2.0：应用内更新（GitHub 多镜像 + 蓝奏云兜底）、快速传文件安全加固、中英文界面、接收断点续传/收到文件自动保留/共享目录自动刷新/通知取消/桌面快捷方式、网络工具、一键组网（热点二维码）。",
+  "releasePageUrl": "https://github.com/likebe1-1/lan-transfer-android/releases/tag/v2.2.0",
   "lanzouUrl": "https://wwbds.lanzoum.com/b0139vopuf",
   "lanzouPassword": "1234",
   "apks": [
     {
       "abi": "arm64-v8a",
-      "size": 10949693,
-      "sha256": "158a51b30aa7ade05f687d605a3be1b90f5d3700e69982cd7c00c78668b1c585",
+      "size": 11119049,
+      "sha256": "ef9bc0c76316e05924d20ede54d1b7079e53bfea866e11c07765ff7bd52f980b",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-arm64-v8a.apk"
       ]
     },
     {
       "abi": "armeabi-v7a",
-      "size": 10946851,
-      "sha256": "37e69a9809df16b03dfc2829b2fd4e1ea0787537ca6973747749724e3e2c4e0a",
+      "size": 11116207,
+      "sha256": "745f36fe865655cb68d3c108774ac5b31fbfcc6b71717a569352567dd295e497",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-armeabi-v7a.apk"
       ]
     },
     {
       "abi": "universal",
-      "size": 10999766,
-      "sha256": "baf926801da519533d91bd1c6aeca2b4cf786cfed52a122f8cc571ae3d850164",
+      "size": 11169122,
+      "sha256": "56a44fe2adc16547661c980b466e7562a35bd2b9afc5ad012e26b6b19a8eb4ee",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-universal.apk"
       ]
     }
   ]
