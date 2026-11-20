@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LanLink 文件下载 · GitHub Releases 多镜像</title>
+<meta name="description" content="LanLink 各版本文件下载页：数据来自 GitHub Releases，内置多个国内可用镜像，下载失败可一键切换镜像。" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" type="image/svg+xml" href="site/logo.svg" />
+<link rel="stylesheet" href="site/style.css" />
+<link rel="stylesheet" href="site/download.css" />
+</head>
+<body>
+<div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html">
+      <img src="site/logo.svg" alt="" width="34" height="34" />
+      <span>LanLink <em class="brand-sub">文件下载</em></span>
+    </a>
+    <nav class="nav" id="siteNav" aria-label="主导航">
+      <a href="#files">文件列表</a>
+      <a href="#mirrors">镜像设置</a>
+      <a href="index.html">返回官网</a>
+      <a class="nav-github" href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">GitHub Releases ↗</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="切换深浅色主题"><span class="theme-icon">◐</span></button>
+      <button class="icon-btn menu-btn" id="menuToggle" type="button" aria-label="打开菜单" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="dl-hero">
+    <h1>文件下载</h1>
+    <p class="lead">所有文件来自 <a href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">GitHub Releases</a>，页面为每个文件生成多个镜像下载链接；镜像失效时自动换下一个（也可手动切换）。</p>
+    <div class="stats" id="stats">
+      <div><strong id="statFiles">—</strong><span>个文件</span></div>
+      <div><strong id="statVersions">—</strong><span>个版本</span></div>
+      <div><strong id="statSize">—</strong><span>总体积</span></div>
+      <div><strong id="statMirror">—</strong><span>可用镜像</span></div>
+    </div>
+    <p class="api-hint" id="dataStatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="dl-toolbar">
+    <input id="searchInput" type="search" placeholder="搜索文件名 / 版本…" aria-label="搜索文件" autocomplete="off" />
+    <select id="kindFilter" aria-label="按类型筛选">
+      <option value="all">全部类型</option>
+      <option value="apk">APK</option>
+      <option value="zip">压缩包</option>
+      <option value="doc">文档</option>
+      <option value="image">图片</option>
+      <option value="video">视频</option>
+      <option value="other">其他</option>
+    </select>
+    <select id="sortSelect" aria-label="排序方式">
+      <option value="new">最新发布</option>
+      <option value="old">最早发布</option>
+      <option value="sizeDesc">体积从大到小</option>
+      <option value="sizeAsc">体积从小到大</option>
+      <option value="downloads">下载次数最多</option>
+      <option value="name">文件名 A-Z</option>
+    </select>
+    <label class="toggle"><input id="groupToggle" type="checkbox" checked /> 按版本分组</label>
+  </section>
+
+  <section id="files" class="files" aria-live="polite">
+    <div class="skeleton file-skeleton"></div>
+    <div class="skeleton file-skeleton"></div>
+  </section>
+
+  <section id="mirrors" class="mirrors-card">
+    <div class="mirrors-head">
+      <div>
+        <h2>镜像设置</h2>
+        <p class="muted small">镜像为第三方公益加速服务，可能随时失效；页面会按列表顺序自动尝试，也可手动指定。</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="probeBtn" type="button">检测镜像可用性</button>
+    </div>
+    <div class="mirror-list" id="mirrorList"></div>
+    <p class="muted small" id="mirrorNote"></p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand" href="index.html"><img src="site/logo.svg" alt="" width="28" height="28" /><span>LanLink</span></a>
+      <p class="muted small">数据来源：GitHub Releases · 多镜像下载</p>
+    </div>
+    <div class="footer-links">
+      <a href="index.html">官网</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android/issues" target="_blank" rel="noopener">反馈</a>
+    </div>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" type="button" aria-label="回到顶部">↑</button>
+<script src="site/downloads.js" defer></script>
+</body>
+</html>

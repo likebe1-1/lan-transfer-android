@@ -1,0 +1,13 @@
+{
+  "updatedAt": "2026-11-20",
+  "comment": "GitHub 镜像前缀列表。App/网站按顺序尝试，prefix + GitHub 原始链接 即为镜像链接。enabled=false 表示暂时跳过。",
+  "mirrors": [
+    { "name": "ghproxy", "prefix": "https://ghproxy.net/", "enabled": true },
+    { "name": "gh-proxy", "prefix": "https://gh-proxy.com/", "enabled": true },
+    { "name": "ghfast", "prefix": "https://ghfast.top/", "enabled": true },
+    { "name": "moeyy", "prefix": "https://github.moeyy.xyz/", "enabled": true },
+    { "name": "llkk", "prefix": "https://gh.llkk.cc/", "enabled": true },
+    { "name": "gitmirror", "prefix": "https://hub.gitmirror.com/", "enabled": false },
+    { "name": "direct", "prefix": "", "enabled": true }
+  ]
+}
