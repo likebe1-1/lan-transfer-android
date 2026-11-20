@@ -1,0 +1,43 @@
+{
+  "updatedAt": "2026-11-20",
+  "primary": "gitee",
+  "comment": "下载源配置。gitee 为主源（国内直连），github 为兜底，mirrors 为 GitHub 加速前缀。页面/App 按顺序尝试。",
+  "sources": [
+    {
+      "name": "gitee",
+      "kind": "direct",
+      "base": "https://gitee.com/likebe1-1/lanlink-android/releases/download",
+      "raw": "https://gitee.com/likebe1-1/lanlink-android/raw/master",
+      "enabled": true
+    },
+    {
+      "name": "github",
+      "kind": "direct",
+      "base": "https://github.com/likebe1-1/lan-transfer-android/releases/download",
+      "raw": "https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master",
+      "enabled": true
+    }
+  ],
+  "mirrors": [
+    {
+      "name": "ghproxy",
+      "prefix": "https://ghproxy.net/",
+      "enabled": true
+    },
+    {
+      "name": "gh-proxy",
+      "prefix": "https://gh-proxy.com/",
+      "enabled": true
+    },
+    {
+      "name": "ghfast",
+      "prefix": "https://ghfast.top/",
+      "enabled": true
+    },
+    {
+      "name": "direct",
+      "prefix": "",
+      "enabled": true
+    }
+  ]
+}

@@ -10,6 +10,11 @@
   const MIRRORS_URL = "docs/mirrors.json";
   const MIRRORS_RAW = "https://raw.githubusercontent.com/" + REPO + "/master/docs/mirrors.json";
   const API_RELEASES = "https://api.github.com/repos/" + REPO + "/releases?per_page=100";
+
+  // 国内主源（Gitee）：仓库与文件镜像，raw 直连稳定
+  const GITEE_REPO = "likebe1-1/lanlink-android";
+  const GITEE_FILES_RAW = "https://gitee.com/" + GITEE_REPO + "/raw/master/files.json";
+  const GITEE_MIRRORS_RAW = "https://gitee.com/" + GITEE_REPO + "/raw/master/mirrors.json";
   const STORAGE = {
     mirrors: "lanlink.dl.mirrors",
     preferred: "lanlink.dl.preferred",
@@ -118,7 +123,7 @@
 
   /** 文件清单：优先 docs/files.json（同源），再走 raw 与镜像。 */
   async function loadFiles(mirrors) {
-    const candidates = [FILES_URL, JSDELIVR_FILES, FILES_RAW];
+    const candidates = [FILES_URL, FILES_RAW, JSDELIVR_FILES];
     for (const mirror of mirrors) {
       if (mirror.prefix) candidates.push(mirror.prefix + FILES_RAW);
     }
@@ -165,21 +170,40 @@
   async function loadMirrors() {
     const defaults = {
       mirrors: [
-        { name: "ghproxy", prefix: "https://ghproxy.net/", enabled: true },
+        { name: "gitee", kind: "gitee", enabled: true },
+        { name: "github", prefix: "", kind: "direct", enabled: true },
+        { name: "ghproxy", prefix: "https://ghproxy.net/", kind: "mirror", enabled: true },
         { name: "gh-proxy", prefix: "https://gh-proxy.com/", enabled: true },
         { name: "direct", prefix: "", enabled: true }
       ],
       updatedAt: ""
     };
-    const candidates = [MIRRORS_URL, JSDELIVR_MIRRORS, MIRRORS_RAW];
-    for (const mirror of defaults.mirrors) {
-      if (mirror.prefix) candidates.push(mirror.prefix + MIRRORS_RAW);
-    }
+    const candidates = [MIRRORS_URL, MIRRORS_RAW, JSDELIVR_MIRRORS];
     try {
       const result = await fetchJSON(candidates, { perUrlTimeout: 3000, totalBudget: 8000 });
-      const list = Array.isArray(result.data.mirrors) ? result.data.mirrors : [];
+      const data = result.data || {};
+      const sources = Array.isArray(data.sources) ? data.sources : [];
+      const rawMirrors = Array.isArray(data.mirrors) ? data.mirrors : [];
+      const list = [];
+      for (const source of sources) {
+        if (!source || !source.name) continue;
+        if (source.kind === "direct" && source.name === "github") {
+          list.push({ name: "github", prefix: "", kind: "direct", enabled: source.enabled !== false });
+        } else if (source.kind === "direct" && source.name === "gitee") {
+          list.push({ name: "gitee", kind: "gitee", enabled: source.enabled !== false });
+        }
+      }
+      for (const mirror of rawMirrors) {
+        if (!mirror || !mirror.name) continue;
+        list.push({
+          name: mirror.name,
+          prefix: mirror.prefix || "",
+          kind: mirror.name === "gitee" ? "gitee" : (mirror.prefix ? "mirror" : "direct"),
+          enabled: mirror.enabled !== false
+        });
+      }
       if (!list.length) return defaults;
-      return { mirrors: list, updatedAt: result.data.updatedAt || "" };
+      return { mirrors: list, updatedAt: data.updatedAt || "" };
     } catch (error) {
       return defaults;
     }
@@ -196,7 +220,17 @@
     return mirrors.filter((mirror) => mirrorPrefs[mirror.name] !== false);
   }
 
+  /**
+   * 生成下载地址：
+   * - kind=gitee 的源把 GitHub 发布链接改写到 Gitee 镜像仓库（同一文件名）；
+   * - 其余镜像为「前缀 + GitHub 原始链接」。
+   */
   function buildUrl(file, mirror) {
+    if (mirror && mirror.kind === "gitee") {
+      const tag = file.tag || "";
+      const name = String(file.name || "").split("/").pop();
+      return "https://gitee.com/" + GITEE_REPO + "/releases/download/" + encodeURIComponent(tag) + "/" + encodeURIComponent(name);
+    }
     const prefix = mirror ? (mirror.prefix || "") : "";
     return prefix + file.url;
   }
@@ -268,7 +302,7 @@
   function mirrorLinks(file) {
     return orderedMirrors().map((mirror) => ({
       name: mirror.name || "direct",
-      label: mirror.prefix ? mirror.name : "GitHub 直连",
+      label: mirror.kind === "gitee" ? "Gitee（国内）" : (mirror.kind === "direct" ? "GitHub 直连" : mirror.name),
       url: buildUrl(file, mirror)
     }));
   }
@@ -580,7 +614,8 @@
       const status = $("#dataStatus");
       if (status) {
         let source = "GitHub Releases";
-        if (result.source.includes("files.json")) source = "docs/files.json";
+        if (result.source.includes("gitee.com")) source = "Gitee 镜像（国内主源）";
+        else if (result.source.includes("files.json")) source = "GitHub 清单 docs/files.json";
         else if (result.source.includes("api.github.com")) source = "GitHub API（兜底）";
         status.textContent = "数据来源：" + source + (result.generatedAt ? " · 清单生成于 " + result.generatedAt : "") + " · 共 " + currentFiles.length + " 个文件";
       }
