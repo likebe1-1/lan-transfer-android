@@ -5,7 +5,9 @@ import android.net.Uri
 import java.io.File
 import com.manst.lantransfer.data.DefaultShareRepository
 import com.manst.lantransfer.data.JsonLocalServerConfigStore
+import com.manst.lantransfer.data.AndroidKeystoreSecretCipher
 import com.manst.lantransfer.data.JsonServerRepository
+import com.manst.lantransfer.data.SecretCipher
 import com.manst.lantransfer.data.LocalServerConfigStore
 import com.manst.lantransfer.data.ShareRepository
 import com.manst.lantransfer.data.ServerRepository
@@ -36,8 +38,11 @@ class AppContainer(context: Context) {
 
     private val appContext: Context = context.applicationContext
 
+    /** 服务器密码等凭据的加密器（Android Keystore AES-GCM，密钥不可导出）。 */
+    val secretCipher: SecretCipher = AndroidKeystoreSecretCipher()
+
     val serverRepository: ServerRepository by lazy {
-        JsonServerRepository(File(appContext.filesDir, "servers.json"))
+        JsonServerRepository(File(appContext.filesDir, "servers.json"), secretCipher)
     }
 
     val transferManager: TransferManager by lazy {

@@ -55,7 +55,10 @@ interface ServerRepository {
  * - 所有写操作由 [writeMutex] 串行化，保证并发 [save] 不会互相覆盖或写坏文件；
  * - 内存快照先持久化成功再对外发布，写盘失败时保留旧快照并抛出中文可读异常。
  */
-class JsonServerRepository(private val storageFile: File) : ServerRepository {
+class JsonServerRepository(
+    private val storageFile: File,
+    private val secretCipher: SecretCipher = PlaintextSecretCipher
+) : ServerRepository {
 
     private val writeMutex = Mutex()
 
@@ -148,7 +151,7 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
             host = host,
             port = port,
             username = json.optString(KEY_USERNAME),
-            password = json.optString(KEY_PASSWORD),
+            password = secretCipher.decrypt(json.optString(KEY_PASSWORD)),
             initialPath = RemotePath.normalize(json.optString(KEY_INITIAL_PATH, RemotePath.ROOT)),
             ftpsMode = parseEnum(json.optString(KEY_FTPS_MODE), FtpsMode.EXPLICIT),
             passiveMode = json.optBoolean(KEY_PASSIVE_MODE, true),
@@ -242,7 +245,7 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
         put(KEY_HOST, profile.host)
         put(KEY_PORT, profile.port)
         put(KEY_USERNAME, profile.username)
-        put(KEY_PASSWORD, profile.password)
+        put(KEY_PASSWORD, secretCipher.encrypt(profile.password))
         put(KEY_INITIAL_PATH, profile.initialPath)
         put(KEY_FTPS_MODE, profile.ftpsMode.name)
         put(KEY_PASSIVE_MODE, profile.passiveMode)

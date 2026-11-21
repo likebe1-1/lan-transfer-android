@@ -22,14 +22,14 @@ class JsonTransferStoreTest {
 
     private fun storageFile(): File = File(temporaryFolder.root, "transfer_tasks.json")
 
-    private fun sampleProfile() = ServerProfile(
+    private fun sampleProfile(password: String = "密码 p@ss") = ServerProfile(
         id = "profile-1",
         name = "家里的 NAS",
         protocol = TransferProtocol.SFTP,
         host = "192.168.1.8",
         port = 2222,
         username = "alice",
-        password = "密码 p@ss",
+        password = password,
         initialPath = "/home/alice",
         ftpsMode = FtpsMode.EXPLICIT,
         passiveMode = false,
@@ -40,10 +40,11 @@ class JsonTransferStoreTest {
     private fun sampleTask(
         id: String = "task-1",
         state: TransferState = TransferState.QUEUED,
-        finishedAt: Long = 0L
+        finishedAt: Long = 0L,
+        profile: ServerProfile? = sampleProfile()
     ) = TransferTask(
         id = id,
-        profileId = "profile-1",
+        profileId = profile?.id ?: "profile-1",
         serverName = "家里的 NAS",
         protocolLabel = "SFTP",
         direction = TransferDirection.DOWNLOAD,
@@ -60,7 +61,7 @@ class JsonTransferStoreTest {
         localRelativeDir = "相册/2024",
         attempts = 2,
         resumable = false,
-        profileSnapshot = sampleProfile(),
+        profileSnapshot = profile,
         createdAt = 100L,
         startedAt = 200L,
         finishedAt = finishedAt
@@ -186,5 +187,16 @@ class JsonTransferStoreTest {
         val store = JsonTransferStore(storageFile())
         assertTrue(store.load().isEmpty())
         assertNull(store.lastLoadError)
+    }
+
+    @Test
+    fun passwordEncryptedAtRest() {
+        val file = File.createTempFile("tasks-enc", ".json").apply { delete(); deleteOnExit() }
+        val store = JsonTransferStore(file, com.manst.lantransfer.data.TestSecretCipher)
+        store.save(listOf(sampleTask(profile = sampleProfile(password = "queue-secret"))))
+        val raw = file.readText()
+        assertTrue("传输队列不应出现明文密码", !raw.contains("queue-secret"))
+        val loaded = JsonTransferStore(file, com.manst.lantransfer.data.TestSecretCipher).load()
+        assertEquals("queue-secret", requireNotNull(loaded.first().profileSnapshot).password)
     }
 }

@@ -53,7 +53,9 @@ class DefaultTransferManager(
     context: Context,
     private val serverRepository: ServerRepository,
     private val transferStore: TransferStore = JsonTransferStore(
-        File(context.applicationContext.filesDir, TRANSFER_STORE_FILE_NAME)
+        File(context.applicationContext.filesDir, TRANSFER_STORE_FILE_NAME),
+        // 传输队列里也会保存 profile（含密码），统一用 Keystore 加密落盘
+        com.manst.lantransfer.data.AndroidKeystoreSecretCipher()
     )
 ) : TransferManager {
 

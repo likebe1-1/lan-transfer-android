@@ -23,7 +23,10 @@ import java.nio.file.StandardCopyOption
  *   未结束的队列任务始终保留；
  * - 保存任务快照（含 profileSnapshot），供进程重启后恢复队列。
  */
-class JsonTransferStore(private val storageFile: File) : TransferStore {
+class JsonTransferStore(
+    private val storageFile: File,
+    private val secretCipher: com.manst.lantransfer.data.SecretCipher = com.manst.lantransfer.data.PlaintextSecretCipher
+) : TransferStore {
 
     /** 最近一次读取失败的原因（诊断用）。 */
     var lastLoadError: Throwable? = null
@@ -125,7 +128,7 @@ class JsonTransferStore(private val storageFile: File) : TransferStore {
         put(P_HOST, profile.host)
         put(P_PORT, profile.port)
         put(P_USERNAME, profile.username)
-        put(P_PASSWORD, profile.password)
+        put(P_PASSWORD, secretCipher.encrypt(profile.password))
         put(P_INITIAL_PATH, profile.initialPath)
         put(P_FTPS_MODE, profile.ftpsMode.name)
         put(P_PASSIVE_MODE, profile.passiveMode)
@@ -179,7 +182,7 @@ class JsonTransferStore(private val storageFile: File) : TransferStore {
             host = host,
             port = if (rawPort in 1..65535) rawPort else protocol.defaultPort,
             username = json.optString(P_USERNAME),
-            password = json.optString(P_PASSWORD),
+            password = secretCipher.decrypt(json.optString(P_PASSWORD)),
             initialPath = RemotePath.normalize(json.optString(P_INITIAL_PATH, RemotePath.ROOT)),
             ftpsMode = enumValueOrNull<FtpsMode>(json.optString(P_FTPS_MODE)) ?: FtpsMode.EXPLICIT,
             passiveMode = json.optBoolean(P_PASSIVE_MODE, true),

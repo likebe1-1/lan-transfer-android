@@ -393,6 +393,8 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 
 - **发布前自检**：`python scripts/check_release_consistency.py`（校验 Gradle 版本号 ↔ `docs/update.json` ↔ Release APK 的 size/SHA-256；APK 差异默认警告，发布前用 `--strict-apk`）；
 - **更新签名密钥**：`scripts/gen_update_signing_key.py` 生成，私钥在项目外 `.update-signing/`（gitignore），公钥内置 App；每次发布需 `scripts/sign_update_manifest.py` 重新签名清单；
+- **凭据加密**：服务器密码与传输队列中的 profile 密码使用 Android Keystore AES-256-GCM 加密落盘（`enc:v1:` 前缀，历史明文自动兼容）；
+- **快速传文件协议**：自动回退只使用加密协议（SFTP/SCP/FTPS），明文 FTP 仅允许手动选择；
 - **签名材料**：keystore 与口令保存在项目外（默认 `%USERPROFILE%\.lanlink\`，可用 `scripts/migrate_keystore_to_userdir.ps1` 迁移），构建时优先读取环境变量 `LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`，其次读用户目录 `keystore.properties`，最后才回退项目内文件（已 gitignore）。项目目录内不再保存明文密钥库；
 - **FTPS 证书校验**：默认严格校验证书与主机名（`allowInsecureTls` 默认关闭）；只有用户在服务器编辑页显式勾选「信任任意证书」时才放宽（局域网自签证书场景）。快速传文件会话使用运行时自签证书，属显式例外；
 - **快速传文件主机认证**：FTPS 与 SFTP/SCP 均通过「发送方下发证书/主机密钥指纹、接收方固定校验」防中间人；只有旧版本对端（无指纹）才退回首次信任并提示；

@@ -356,7 +356,15 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - `.gitee_token` 等访问令牌**禁止落盘**进仓库：`.gitignore` 已覆盖 `.gitee_token`、`*_token`、`*token.txt`、`.env*`；脚本统一从环境变量（`GITEE_TOKEN`）读取；
 - 误提交的令牌已通过 `git filter-branch` 从全部历史中移除并强推，令牌本身需在服务端吊销。
 
-### 17.2 签名材料隔离
+### 17.2 凭据落盘加密
+- 服务器密码不再明文写盘：`SecretCipher` 抽象 + `AndroidKeystoreSecretCipher`（Keystore AES-256-GCM，密钥不可导出）；
+- 影响文件：`servers.json`（`JsonServerRepository`）与传输队列 `transfer_tasks.json`（`JsonTransferStore`）；
+- 密文格式：`enc:v1:` + Base64(IV‖ciphertext‖tag)，每条随机 IV；
+- 历史明文自动兼容：读取时若没有前缀则原样使用，下次保存自动转为密文；
+- 解密失败（密钥失效/恢复备份）返回空密码要求重新输入，不崩溃；加密失败极端情况下退回明文并记录日志；
+- 测试：JVM 用假 cipher 验证落盘无明文 + 往返；设备测试验证真实 Keystore 往返与仓库读写。
+
+### 17.2.1 签名材料隔离
 - 明文口令与 keystore 移出工作区：`scripts/migrate_keystore_to_userdir.ps1` 复制到 `%USERPROFILE%\.lanlink\` 并收紧 ACL；
 - `app/build.gradle.kts` 解析顺序：环境变量（`LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`）→ 用户目录 `.lanlink/keystore.properties` → 项目内 `keystore.properties`（兼容回退）；
 - 注意：`java.util.Properties` 会跳过首行，配置文件首行必须是注释。

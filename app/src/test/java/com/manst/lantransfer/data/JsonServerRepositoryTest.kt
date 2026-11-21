@@ -32,7 +32,8 @@ class JsonServerRepositoryTest {
         id: String = "id-1",
         name: String = "家里的 NAS",
         protocol: TransferProtocol = TransferProtocol.FTPS,
-        lastUsedAt: Long = 111L
+        lastUsedAt: Long = 111L,
+        password: String = "p@ss 密码"
     ) = ServerProfile(
         id = id,
         name = name,
@@ -40,7 +41,7 @@ class JsonServerRepositoryTest {
         host = "192.168.1.10",
         port = 2121,
         username = "alice",
-        password = "p@ss 密码",
+        password = password,
         initialPath = "/home/alice/照片",
         ftpsMode = FtpsMode.IMPLICIT,
         passiveMode = false,
@@ -256,5 +257,26 @@ class JsonServerRepositoryTest {
             assertTrue(e.message!!.startsWith("保存服务器配置失败"))
         }
         assertTrue(repository.profiles.value.isEmpty())
+    }
+
+    @Test
+    fun passwordIsEncryptedAtRestAndDecryptedOnLoad() = kotlinx.coroutines.runBlocking {
+        val file = storageFile()
+        val repository = JsonServerRepository(file, TestSecretCipher)
+        repository.save(sampleProfile(id = "secure", name = "加密", password = "super-secret"))
+        val raw = file.readText()
+        assertTrue("磁盘上不应出现明文密码：" + raw, !raw.contains("super-secret"))
+        assertTrue("应写入密文前缀", raw.contains(SecretCipher.PREFIX))
+        val reloaded = JsonServerRepository(file, TestSecretCipher)
+        assertEquals("super-secret", reloaded.profiles.value.first { it.id == "secure" }.password)
+    }
+
+    @Test
+    fun legacyPlaintextPasswordStillLoads() {
+        val file = storageFile()
+        val legacy = """{"version":1,"servers":[{"id":"old","name":"旧","protocol":"SFTP","host":"1.2.3.4","port":22,"password":"plain-old"}]}"""
+        file.writeText(legacy, Charsets.UTF_8)
+        val repository = JsonServerRepository(file, TestSecretCipher)
+        assertEquals("plain-old", repository.profiles.value.first().password)
     }
 }

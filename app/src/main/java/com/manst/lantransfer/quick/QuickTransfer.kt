@@ -28,12 +28,16 @@ object QuickTransferDefaults {
         TransferProtocol.SCP
     )
 
-    /** 自动选择协议时的优先级：加密优先（SFTP → SCP → FTPS → FTP）。 */
+    /**
+     * 自动选择协议时的优先级：只使用加密协议（SFTP → SCP → FTPS）。
+     *
+     * 明文 FTP 不参与自动回退：它会把接收码派生的临时密码以明文发到局域网，
+     * 同网段抓包即可拿到凭据。用户仍可在接收页手动指定 FTP（已知风险）。
+     */
     val PROTOCOL_PREFERENCE: List<TransferProtocol> = listOf(
         TransferProtocol.SFTP,
         TransferProtocol.SCP,
-        TransferProtocol.FTPS,
-        TransferProtocol.FTP
+        TransferProtocol.FTPS
     )
 
     const val DEFAULT_FTP_PORT = 2121
