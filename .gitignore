@@ -49,3 +49,4 @@ dsh-plugins/
 # 更新清单签名私钥（绝不提交）
 .update-signing/
 *.pem
+build-test.log
