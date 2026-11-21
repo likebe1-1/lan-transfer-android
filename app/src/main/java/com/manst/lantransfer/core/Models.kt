@@ -37,6 +37,11 @@ data class ServerProfile(
      * 出于安全考虑默认关闭（严格校验 + 主机名校验）；仅当用户显式选择时才放宽。
      */
     val allowInsecureTls: Boolean = false,
+    /**
+     * 可选的证书固定指纹（SHA-256 十六进制）。非空时只信任该指纹的 FTPS 服务端证书，
+     * 用于快速传文件等自签名证书场景，替代「信任任意证书」。
+     */
+    val pinnedCertificateSha256: String? = null,
     val lastUsedAt: Long = 0L
 ) {
     val endpoint: String get() = "$host:$port"

@@ -105,6 +105,11 @@ data class QuickSessionInfo(
     val ftpsPort: Int = QuickTransferDefaults.DEFAULT_FTPS_PORT,
     val sshPort: Int = QuickTransferDefaults.DEFAULT_SSH_PORT,
     val protocols: List<TransferProtocol> = QuickTransferDefaults.PROTOCOLS,
+    /**
+     * FTPS 服务端自签名证书的 SHA-256 指纹（十六进制）。
+     * 接收方据此固定证书，避免「信任任意证书」被中间人利用；旧版本发送方为 null。
+     */
+    val ftpsFingerprintSha256: String? = null,
     /** 本地收到的时间戳（毫秒），用于过期清理。 */
     val receivedAt: Long = System.currentTimeMillis()
 ) {
@@ -159,7 +164,13 @@ data class QuickSendState(
                 sshPort = endpoints.firstOrNull {
                     it.protocol == TransferProtocol.SFTP || it.protocol == TransferProtocol.SCP
                 }?.port ?: QuickTransferDefaults.DEFAULT_SSH_PORT,
-                protocols = protocols
+                protocols = protocols,
+                // 仅当本机 FTPS 端点启用时提供证书指纹，供接收方固定证书
+                ftpsFingerprintSha256 = if (endpoints.any { it.protocol == TransferProtocol.FTPS }) {
+                    runCatching { com.manst.lantransfer.server.ftp.FtpServerTls.certificateSha256Hex() }.getOrNull()
+                } else {
+                    null
+                }
             )
         } else {
             null
@@ -210,7 +221,9 @@ data class QuickJoinTarget(
     val protocol: TransferProtocol? = null,
     val ftpPort: Int = QuickTransferDefaults.DEFAULT_FTP_PORT,
     val ftpsPort: Int = QuickTransferDefaults.DEFAULT_FTPS_PORT,
-    val sshPort: Int = QuickTransferDefaults.DEFAULT_SSH_PORT
+    val sshPort: Int = QuickTransferDefaults.DEFAULT_SSH_PORT,
+    /** 发送方 FTPS 证书指纹（可选）：非空时接收方严格固定该证书。 */
+    val ftpsFingerprintSha256: String? = null
 ) {
     fun portFor(protocol: TransferProtocol): Int = when (protocol) {
         TransferProtocol.FTP -> ftpPort

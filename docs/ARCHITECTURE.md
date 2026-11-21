@@ -361,10 +361,15 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - `app/build.gradle.kts` 解析顺序：环境变量（`LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`）→ 用户目录 `.lanlink/keystore.properties` → 项目内 `keystore.properties`（兼容回退）；
 - 注意：`java.util.Properties` 会跳过首行，配置文件首行必须是注释。
 
-### 17.3 FTPS 证书校验
+### 17.3 FTPS 证书校验与固定
 - `ServerProfile.allowInsecureTls` 默认 `false`（严格校验 + 主机名校验），历史配置未显式开启时按严格处理；
-- 仅用户显式勾选「信任任意证书」时才使用信任任意证书的 TrustManager；
-- 快速传文件的运行时自签证书会话为显式例外（用户主动发起、同网段、短生命周期）。
+  `ServerRepository` 与 `JsonTransferStore` 的反序列化默认值现在完全一致（均为 `false`）；
+- 仅用户显式勾选「信任任意证书」时才使用信任任意证书的 TrustManager（运行时会打印安全警告）；
+- **快速传文件改用证书固定（pinning）**：发送方把 FTPS 自签名证书的 SHA-256 指纹随**二维码/局域网广播**下发，
+  接收方 `CertificatePinning` 只信任该指纹的证书（`ServerProfile.pinnedCertificateSha256`），
+  中间人无法出示同指纹证书，因此不会再出现「只加密不认证」；
+- 仅当对方是旧版本（未提供指纹）时才退回信任任意证书，且界面连接成功消息会明确提示「本次未校验证书」；
+- 已知后续项：SFTP/SCP 的主机密钥目前仍是首次信任（TOFU）方式，尚未做指纹固定。
 
 ### 17.4 接收码与服务端限流
 - 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；

@@ -146,7 +146,8 @@ class QuickReceiveViewModel(
                 protocol = null,
                 ftpPort = info.ftpPort,
                 ftpsPort = info.ftpsPort,
-                sshPort = info.sshPort
+                sshPort = info.sshPort,
+                ftpsFingerprintSha256 = info.ftpsFingerprintSha256
             )
         )
     }

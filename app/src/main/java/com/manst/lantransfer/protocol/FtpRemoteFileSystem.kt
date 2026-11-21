@@ -62,7 +62,11 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     private fun createClient(): FTPClient {
         if (!usesTls) return FTPClient()
         val implicitTls = profile.ftpsMode == FtpsMode.IMPLICIT
-        val sslContext = createSslContext(profile.allowInsecureTls)
+        val sslContext = createSslContext(
+            allowInsecureTls = profile.allowInsecureTls,
+            pinnedSha256 = profile.pinnedCertificateSha256,
+            endpoint = profile.endpoint
+        )
         return FTPSClient(implicitTls, sslContext).apply {
             // 显式模式下使用 AUTH TLS（RFC 4217），具体 TLS 版本由 JDK 协商
             setAuthValue("TLS")
@@ -594,10 +598,26 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
 
         /**
          * 构造 FTPS 使用的 SSLContext。
-         * [allowInsecureTls] 为 true 时信任任意服务端证书（局域网自签证书场景），否则使用 JVM 默认信任库。
+         *
+         * 优先级：
+         * 1. [pinnedSha256] 非空 → 只信任该指纹的证书（快速传文件等自签名场景，防中间人）；
+         * 2. [allowInsecureTls] 为 true → 信任任意证书（兼容旧配置，会打印安全警告）；
+         * 3. 否则 → JVM 默认信任库（严格校验）。
          */
-        fun createSslContext(allowInsecureTls: Boolean): SSLContext {
+        fun createSslContext(
+            allowInsecureTls: Boolean,
+            pinnedSha256: String? = null,
+            endpoint: String = "未知目标"
+        ): SSLContext {
+            val pin = com.manst.lantransfer.core.CertificatePinning.normalizeFingerprint(pinnedSha256)
+            if (com.manst.lantransfer.core.CertificatePinning.isValidFingerprint(pin)) {
+                return com.manst.lantransfer.core.CertificatePinning.createSslContext(pin)
+            }
             if (!allowInsecureTls) return SSLContext.getDefault()
+            System.err.println(
+                "[LanLink][安全] 使用「信任任意证书」模式连接 " + endpoint +
+                    "：TLS 只加密不认证，请仅在完全可信的局域网中使用"
+            )
             val trustAll = object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
                 override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit

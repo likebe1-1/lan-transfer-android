@@ -130,6 +130,7 @@ class JsonTransferStore(private val storageFile: File) : TransferStore {
         put(P_FTPS_MODE, profile.ftpsMode.name)
         put(P_PASSIVE_MODE, profile.passiveMode)
         put(P_ALLOW_INSECURE_TLS, profile.allowInsecureTls)
+        put(P_PINNED_CERT_SHA256, profile.pinnedCertificateSha256)
         put(P_LAST_USED_AT, profile.lastUsedAt)
     }
 
@@ -182,7 +183,9 @@ class JsonTransferStore(private val storageFile: File) : TransferStore {
             initialPath = RemotePath.normalize(json.optString(P_INITIAL_PATH, RemotePath.ROOT)),
             ftpsMode = enumValueOrNull<FtpsMode>(json.optString(P_FTPS_MODE)) ?: FtpsMode.EXPLICIT,
             passiveMode = json.optBoolean(P_PASSIVE_MODE, true),
-            allowInsecureTls = json.optBoolean(P_ALLOW_INSECURE_TLS, true),
+            // 与 ServerRepository 保持一致：历史配置未显式开启时按严格校验处理
+            allowInsecureTls = json.optBoolean(P_ALLOW_INSECURE_TLS, false),
+            pinnedCertificateSha256 = json.optString(P_PINNED_CERT_SHA256, "").takeIf { it.isNotBlank() },
             lastUsedAt = json.optLong(P_LAST_USED_AT, 0L).coerceAtLeast(0L)
         )
     }
@@ -260,6 +263,7 @@ class JsonTransferStore(private val storageFile: File) : TransferStore {
         const val P_FTPS_MODE = "ftpsMode"
         const val P_PASSIVE_MODE = "passiveMode"
         const val P_ALLOW_INSECURE_TLS = "allowInsecureTls"
+    const val P_PINNED_CERT_SHA256 = "pinnedCertificateSha256"
         const val P_LAST_USED_AT = "lastUsedAt"
     }
 }

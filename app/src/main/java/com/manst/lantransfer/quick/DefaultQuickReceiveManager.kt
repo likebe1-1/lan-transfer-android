@@ -248,7 +248,14 @@ class DefaultQuickReceiveManager(
         for (protocol in candidates) {
             val port = target.portFor(protocol)
             val candidate = RemoteFileSystems.create(
-                createProfile(protocol, host, port, credentials.username, credentials.password)
+                createProfile(
+                    protocol = protocol,
+                    host = host,
+                    port = port,
+                    username = credentials.username,
+                    password = credentials.password,
+                    pinnedFingerprint = if (protocol == TransferProtocol.FTPS) target.ftpsFingerprintSha256 else null
+                )
             )
             try {
                 val entries = withTimeout(JOIN_TIMEOUT_MS) {
@@ -265,7 +272,8 @@ class DefaultQuickReceiveManager(
                     ftpPort = target.ftpPort,
                     ftpsPort = target.ftpsPort,
                     sshPort = target.sshPort,
-                    protocols = listOf(protocol)
+                    protocols = listOf(protocol),
+                    ftpsFingerprintSha256 = target.ftpsFingerprintSha256
                 )
                 mutableState.update { current ->
                     current.copy(
@@ -274,7 +282,12 @@ class DefaultQuickReceiveManager(
                         activeProtocol = protocol,
                         remoteFiles = remoteEntries,
                         error = null,
-                        message = "已通过 " + protocol.label + " 连接对方设备"
+                        message = buildString {
+                            append("已通过 " + protocol.label + " 连接对方设备")
+                            if (protocol == TransferProtocol.FTPS && target.ftpsFingerprintSha256.isNullOrBlank()) {
+                                append("（对方为旧版本，未提供证书指纹，本次未校验证书）")
+                            }
+                        }
                     )
                 }
                 joinAttemptLimiter.recordSuccess(attemptKey)
@@ -324,7 +337,8 @@ class DefaultQuickReceiveManager(
         host: String,
         port: Int,
         username: String,
-        password: String
+        password: String,
+        pinnedFingerprint: String? = null
     ): ServerProfile = ServerProfile(
         name = "快捷传输 " + host,
         protocol = protocol,
@@ -336,7 +350,10 @@ class DefaultQuickReceiveManager(
         passiveMode = true,
         // 快速传文件的服务端使用运行时自签证书（无 CA），且会话由用户主动发起、同一局域网内短暂存在；
         // 因此这里显式信任自签证书。普通 FTPS 服务器连接默认使用严格校验（见 ServerProfile）。
-        allowInsecureTls = true
+        // 优先使用发送方广告的证书指纹做固定（防中间人）；仅当对方是旧版本、未提供指纹时
+        // 才退回「信任任意证书」（此时 FTPS 只加密不认证，界面会提示）。
+        pinnedCertificateSha256 = pinnedFingerprint,
+        allowInsecureTls = pinnedFingerprint.isNullOrBlank()
     )
 
     /** 限流提示：剩余锁定秒数换算成分钟（向上取整，至少 1 分钟）。 */

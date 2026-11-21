@@ -154,6 +154,7 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
             passiveMode = json.optBoolean(KEY_PASSIVE_MODE, true),
             // 安全默认：历史配置未显式开启时按“严格校验”处理，避免静默降级信任任意证书
             allowInsecureTls = json.optBoolean(KEY_ALLOW_INSECURE_TLS, false),
+            pinnedCertificateSha256 = json.optString(KEY_PINNED_CERT_SHA256, "").takeIf { it.isNotBlank() },
             lastUsedAt = json.optLong(KEY_LAST_USED_AT, 0L).coerceAtLeast(0L)
         )
     }
@@ -246,6 +247,7 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
         put(KEY_FTPS_MODE, profile.ftpsMode.name)
         put(KEY_PASSIVE_MODE, profile.passiveMode)
         put(KEY_ALLOW_INSECURE_TLS, profile.allowInsecureTls)
+        put(KEY_PINNED_CERT_SHA256, profile.pinnedCertificateSha256)
         put(KEY_LAST_USED_AT, profile.lastUsedAt)
     }
 
@@ -276,6 +278,7 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
         const val KEY_FTPS_MODE = "ftpsMode"
         const val KEY_PASSIVE_MODE = "passiveMode"
         const val KEY_ALLOW_INSECURE_TLS = "allowInsecureTls"
+        const val KEY_PINNED_CERT_SHA256 = "pinnedCertificateSha256"
         const val KEY_LAST_USED_AT = "lastUsedAt"
     }
 }

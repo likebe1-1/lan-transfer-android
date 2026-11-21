@@ -161,6 +161,30 @@ class LanBeaconCodecTest {
     }
 
     @Test
+    fun encodeDecode_roundTripsCertificateFingerprint() {
+        val fingerprint = "ab".repeat(32)
+        val info = QuickSessionInfo(
+            code = "",
+            deviceName = "带指纹设备",
+            addresses = listOf("192.168.1.33"),
+            ftpsFingerprintSha256 = fingerprint
+        )
+        val decoded = requireNotNull(QuickBeaconCodec.decode(QuickBeaconCodec.encode(info)))
+        assertEquals(fingerprint, decoded.ftpsFingerprintSha256)
+    }
+
+    @Test
+    fun decode_ignoresInvalidFingerprint() {
+        val payload = JSONObject()
+            .put("v", 2)
+            .put("addrs", JSONArray(listOf("192.168.1.34")))
+            .put("protocols", JSONArray(listOf("FTPS")))
+            .put("fp", "not-a-fingerprint")
+            .toString()
+        assertEquals(null, requireNotNull(QuickBeaconCodec.decode(payload)).ftpsFingerprintSha256)
+    }
+
+    @Test
     fun decode_rejectsMalformedPayloads() {
         assertNull(QuickBeaconCodec.decode(null))
         assertNull(QuickBeaconCodec.decode(""))

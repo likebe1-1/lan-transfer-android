@@ -50,6 +50,9 @@ internal object FtpServerTls {
     @Volatile
     private var cachedContext: SSLContext? = null
 
+    @Volatile
+    private var cachedCertificate: X509Certificate? = null
+
     /** 进程内共享的 [SSLContext]；首次调用时生成自签名证书（后续调用直接命中缓存）。 */
     fun sharedContext(): SSLContext {
         val existing = cachedContext
@@ -61,6 +64,19 @@ internal object FtpServerTls {
             cachedContext = created
             return created
         }
+    }
+
+    /** 当前自签名证书（首次生成后缓存）；用于把指纹通过二维码/广播告知接收方，实现证书固定。 */
+    fun certificate(): X509Certificate {
+        sharedContext()
+        return requireNotNull(cachedCertificate) { "FTPS 证书尚未生成" }
+    }
+
+    /** 证书 SHA-256 指纹（小写十六进制），接收方据此固定服务端证书，避免信任任意证书。 */
+    fun certificateSha256Hex(): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(certificate().encoded)
+        return digest.joinToString("") { byte -> "%02x".format(java.util.Locale.US, byte) }
     }
 
     private fun createContext(): SSLContext {
@@ -99,6 +115,7 @@ internal object FtpServerTls {
         val signer = JcaContentSignerBuilder("SHA256withRSA").build(keyPair.private)
         val certificate: X509Certificate =
             JcaX509CertificateConverter().getCertificate(certificateBuilder.build(signer))
+        cachedCertificate = certificate
 
         val password = KEY_STORE_PASSWORD.toCharArray()
         val keyStore = KeyStore.getInstance("PKCS12").apply {
