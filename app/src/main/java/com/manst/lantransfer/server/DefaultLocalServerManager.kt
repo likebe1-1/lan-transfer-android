@@ -34,6 +34,21 @@ class DefaultLocalServerManager(
     private var ftpServer: ProtocolServer? = null
     private var ftpsServer: ProtocolServer? = null
 
+    /** 认证限流器定期清理：每 5 分钟一次，避免长期运行 records 持续增长。 */
+    private val authPruneTimer = java.util.Timer("lanlink-auth-prune", true).apply {
+        schedule(
+            object : java.util.TimerTask() {
+                override fun run() {
+                    runCatching { sshServer.pruneAuthGuards() }
+                    runCatching { ftpServer?.pruneAuthGuards() }
+                    runCatching { ftpsServer?.pruneAuthGuards() }
+                }
+            },
+            5 * 60 * 1000L,
+            5 * 60 * 1000L
+        )
+    }
+
     private val mutableState = MutableStateFlow(
         LocalServerState(shareDirectoryPath = shareRepository.directoryPath)
     )

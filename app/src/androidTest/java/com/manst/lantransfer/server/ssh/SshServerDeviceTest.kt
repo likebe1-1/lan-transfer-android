@@ -144,6 +144,26 @@ class SshServerDeviceTest {
         }
     }
 
+    @Test
+    fun repeatedWrongPasswordLocksOutSshServerSide() = runBlocking {
+        withTimeout(90_000L) {
+            server.start(binding(), enableSftp = true, enableScp = false)
+            // 连续错误密码：第 5 次起 SSH 服务端应进入锁定（返回认证失败）
+            repeat(6) { index ->
+                val client = RemoteFileSystems.create(profile(TransferProtocol.SFTP, password = "wrong-" + index))
+                client.use { runCatching { it.connect() } }
+            }
+            // 锁定期间即使密码正确也必须被拒绝：证明限流在服务端生效，而非仅客户端
+            val correct = RemoteFileSystems.create(profile(TransferProtocol.SFTP))
+            val error = correct.use { runCatching { it.connect() }.exceptionOrNull() }
+            log("锁定后正确密码结果=" + error)
+            assertTrue(
+                "锁定期间正确密码也应被拒绝，实际：" + error,
+                error is AuthenticationException
+            )
+        }
+    }
+
     // ------------------------------------------------------------ 辅助
 
     private fun binding(): ServerBinding = ServerBinding(

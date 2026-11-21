@@ -55,6 +55,15 @@ class SshProtocolServer(
     @Volatile
     private var sshd: SshServer? = null
 
+    /** 当前 SSH 服务的认证失败限流器（供管理器定期清理过期记录）。 */
+    @Volatile
+    private var authGuard: ServerAuthGuard? = null
+
+    /** 清理认证限流器的过期记录（长期运行时由管理器定时调用）。 */
+    fun pruneAuthGuard() {
+        authGuard?.prune()
+    }
+
     override suspend fun start(binding: ServerBinding, enableSftp: Boolean, enableScp: Boolean): Unit {
         // 必须在任何 SSHD 代码触发 SecurityUtils.register() 之前执行（进程级设置，幂等）
         disableSshdBundledSecurityProviders()
@@ -105,6 +114,7 @@ class SshProtocolServer(
     }
 
     private fun stopBlocking() {
+        authGuard = null
         val current = sshd ?: return
         sshd = null
         try {
@@ -138,9 +148,28 @@ class SshProtocolServer(
         server.keyPairProvider = createHostKeyProvider()
         // 仅允许密码认证（本机服务器面向局域网设备，不需要公钥/交互式认证）
         server.userAuthFactories = listOf<UserAuthFactory>(UserAuthPasswordFactory.INSTANCE)
-        server.passwordAuthenticator = PasswordAuthenticator { username, password, _ ->
-            // 故意不使用短路运算，两个比较都执行
-            constantTimeEquals(username, binding.username) and constantTimeEquals(password, binding.password)
+        // 服务端认证失败限流：SFTP/SCP 与 FTP 共用同一套策略，
+        // 防止攻击者用 ssh/paramiko 等任意客户端暴力猜测接收码派生的临时帐号。
+        val authGuard = ServerAuthGuard()
+        this.authGuard = authGuard
+        server.passwordAuthenticator = PasswordAuthenticator { username, password, session ->
+            // SSHD 的 clientAddress 是 SocketAddress，需要转成 InetSocketAddress 才能取 IP
+            val source = runCatching {
+                (session?.clientAddress as? java.net.InetSocketAddress)?.address?.hostAddress
+            }.getOrNull().orEmpty().ifBlank { "unknown" }
+            when {
+                authGuard.isLocked(source) -> false
+                // 故意不使用短路运算，两个比较都执行
+                constantTimeEquals(username, binding.username) and
+                    constantTimeEquals(password, binding.password) -> {
+                    authGuard.recordSuccess(source)
+                    true
+                }
+                else -> {
+                    authGuard.recordFailure(source, username)
+                    false
+                }
+            }
         }
         server.fileSystemFactory = VirtualFileSystemFactory(shareRoot)
 

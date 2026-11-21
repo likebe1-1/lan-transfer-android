@@ -28,6 +28,9 @@ interface ProtocolServer {
     suspend fun start(binding: ServerBinding)
 
     suspend fun stop()
+
+    /** 清理认证限流器的过期记录（默认无操作；长驻服务实现该方法供管理器定期调用）。 */
+    fun pruneAuthGuards() {}
 }
 
 /**
@@ -38,4 +41,7 @@ interface SshServerComponent {
     suspend fun start(binding: ServerBinding, enableSftp: Boolean, enableScp: Boolean)
 
     suspend fun stop()
+
+    /** 清理认证限流器的过期记录（默认无操作；长驻服务实现该方法供管理器定期调用）。 */
+    fun pruneAuthGuards() {}
 }

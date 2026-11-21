@@ -27,29 +27,25 @@ class ServerAuthGuard(
 
     private val records = HashMap<String, Record>()
 
-    /** 该来源当前是否被锁定。 */
-    fun isLocked(source: String, username: String? = null): Boolean {
-        val key = keyOf(source, username)
-        val record = synchronized(records) { records[key] } ?: return false
-        synchronized(records) {
-            val now = clock()
-            if (record.lockedUntil > 0L && now >= record.lockedUntil) {
-                record.lockedUntil = 0L
-                record.failures.clear()
-                return false
-            }
-            return record.lockedUntil > now
+    /** 上次自动清理时间（仅在持有 [records] 锁时读写）。 */
+    private var lastPruneAt = 0L
+
+    /** 该来源当前是否被锁定（整个过程在同一个锁内完成，避免读到被并发修改的 record）。 */
+    fun isLocked(source: String, username: String? = null): Boolean = synchronized(records) {
+        val record = records[keyOf(source, username)] ?: return false
+        val now = clock()
+        if (record.lockedUntil > 0L && now >= record.lockedUntil) {
+            record.lockedUntil = 0L
+            record.failures.clear()
+            return false
         }
+        record.lockedUntil > now
     }
 
     /** 锁定剩余毫秒（未锁定时为 0）。 */
-    fun remainingLockMillis(source: String, username: String? = null): Long {
-        val key = keyOf(source, username)
-        val record = synchronized(records) { records[key] } ?: return 0L
-        synchronized(records) {
-            val remaining = record.lockedUntil - clock()
-            return remaining.coerceAtLeast(0L)
-        }
+    fun remainingLockMillis(source: String, username: String? = null): Long = synchronized(records) {
+        val record = records[keyOf(source, username)] ?: return 0L
+        (record.lockedUntil - clock()).coerceAtLeast(0L)
     }
 
     /** 记录一次认证失败；返回是否因此触发了锁定。 */
@@ -57,6 +53,11 @@ class ServerAuthGuard(
         val key = keyOf(source, username)
         val now = clock()
         synchronized(records) {
+            // 节流自动清理：即使调用方忘记定期 prune，长期运行也不会无限增长
+            if (now - lastPruneAt >= PRUNE_INTERVAL_MILLIS) {
+                pruneLocked(now)
+                lastPruneAt = now
+            }
             val record = records.getOrPut(key) { Record() }
             if (record.lockedUntil > 0L && now < record.lockedUntil) {
                 // 锁定期间再失败不延长锁定
@@ -86,9 +87,14 @@ class ServerAuthGuard(
     fun prune() {
         val now = clock()
         synchronized(records) {
-            records.entries.removeAll { (_, record) ->
-                record.lockedUntil <= now && record.failures.all { it < now - windowMillis }
-            }
+            pruneLocked(now)
+            lastPruneAt = now
+        }
+    }
+
+    private fun pruneLocked(now: Long) {
+        records.entries.removeAll { (_, record) ->
+            record.lockedUntil <= now && record.failures.all { it < now - windowMillis }
         }
     }
 
@@ -106,5 +112,8 @@ class ServerAuthGuard(
         const val DEFAULT_MAX_FAILURES = 5
         const val DEFAULT_WINDOW_MILLIS = 10 * 60 * 1000L
         const val DEFAULT_LOCK_MILLIS = 10 * 60 * 1000L
+
+        /** 自动清理间隔：60 秒（与记录量无关，足够便宜）。 */
+        const val PRUNE_INTERVAL_MILLIS = 60 * 1000L
     }
 }

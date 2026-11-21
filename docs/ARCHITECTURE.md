@@ -369,6 +369,9 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 ### 17.4 接收码与服务端限流
 - 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；
 - 新增 `server/ServerAuthGuard`：按**来源 IP** 统计认证失败（5 次 / 10 分钟窗口 → 锁定 10 分钟），FTP（USER/PASS 阶段）与 SSHD（PasswordAuthenticator）均已接入；
+- **SSHD 侧限流**：`SshProtocolServer.passwordAuthenticator` 读取 `session.clientAddress`（InetSocketAddress）作为来源 IP，锁定期间直接返回认证失败；SFTP 与 SCP 共用该入口；
+- **Guard 线程安全**：`isLocked` / `remainingLockMillis` 全程在单个 `synchronized(records)` 内完成；`recordFailure` 内部按 60 秒节流自动清理过期记录，即使调用方不 prune 也不会无限增长；
+- **定期清理**：`DefaultLocalServerManager` 启动守护 Timer（5 分钟）调用各协议服务的 `pruneAuthGuards()`；
 - 锁定期间即使密码正确也拒绝，攻击者更换用户名无法绕过；客户端 `QuickJoinAttemptLimiter` 保留用于即时 UI 反馈。
 
 ## 18. P1 加固

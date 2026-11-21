@@ -73,6 +73,30 @@ class ServerAuthGuardTest {
     }
 
     @Test
+    fun autoPrune_onRecordFailure_clearsExpiredRecords() {
+        repeat(5) { guard.recordFailure("10.0.0.20") }
+        assertEquals(1, guard.lockedSourceCount())
+        now += 10 * 60 * 1000L + 1
+        // 下一次失败会触发内部节流清理（间隔 60 秒已过）
+        guard.recordFailure("10.0.0.21")
+        // 旧来源已被清理，新的失败记录仍在
+        assertEquals(0, guard.lockedSourceCount())
+    }
+
+    @Test
+    fun concurrentFailures_doNotCorruptState() {
+        val threads = (1..8).map { index ->
+            Thread {
+                repeat(50) { round -> guard.recordFailure("10.1.0." + index) }
+            }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+        // 每个来源 50 次失败都会触发锁定；并发下不应抛异常，且锁定数不超过来源数
+        assertTrue(guard.lockedSourceCount() in 1..8)
+    }
+
+    @Test
     fun prune_removesStaleRecords() {
         repeat(5) { guard.recordFailure("10.0.0.12") }
         assertEquals(1, guard.lockedSourceCount())

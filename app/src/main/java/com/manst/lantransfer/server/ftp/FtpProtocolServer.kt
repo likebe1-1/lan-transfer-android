@@ -38,6 +38,14 @@ class FtpProtocolServer(private val transferProtocol: TransferProtocol) : Protoc
     override val protocol: TransferProtocol
         get() = transferProtocol
 
+    /** 当前服务的认证限流器引用（与 FtpServerContext 中为同一实例）。 */
+    @Volatile
+    private var authGuard: ServerAuthGuard? = null
+
+    override fun pruneAuthGuards() {
+        authGuard?.prune()
+    }
+
     private val lifecycleLock = Any()
     private val sessions = CopyOnWriteArrayList<FtpSession>()
 
@@ -171,6 +179,8 @@ class FtpProtocolServer(private val transferProtocol: TransferProtocol) : Protoc
         } else {
             null
         }
+        val guard = ServerAuthGuard()
+        authGuard = guard
         return FtpServerContext(
             protocol = transferProtocol,
             shareRoot = shareRoot,
@@ -180,7 +190,7 @@ class FtpProtocolServer(private val transferProtocol: TransferProtocol) : Protoc
             implicitTls = ftps && binding.ftpsMode == FtpsMode.IMPLICIT,
             sslContext = sslContext,
             passiveBindAddress = InetAddress.getByName(BIND_ADDRESS),
-            authGuard = ServerAuthGuard()
+            authGuard = guard
         )
     }
 
