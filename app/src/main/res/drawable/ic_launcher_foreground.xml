@@ -1,15 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- LanLink 图标（方案 e4c）：LL 叠合 + 两端连接点 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 上传箭头 -->
+    <!-- 白色 L（左上） -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="8.16"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M44.16,38.81 L44.16,65.25 L60.47,65.25" />
+    <!-- 浅蓝 L（右下） -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF8FD0FF"
+        android:strokeWidth="8.16"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M54.28,45.56 L54.28,72.00 L70.59,72.00" />
+    <!-- 右上连接点（白） -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M38,25 L23,47 L33,47 L33,82 L43,82 L43,47 L53,47 Z" />
-    <!-- 下载箭头 -->
+        android:pathData="M65.81,37.97 m -4.78,0 a 4.78,4.78 0 1,0 9.56,0 a 4.78,4.78 0 1,0 -9.56,0" />
+    <!-- 左下连接点（浅蓝） -->
     <path
-        android:fillColor="#FF8FD3FF"
-        android:pathData="M70,83 L85,61 L75,61 L75,26 L65,26 L65,61 L55,61 Z" />
+        android:fillColor="#FF8FD0FF"
+        android:pathData="M32.63,72.84 m -4.78,0 a 4.78,4.78 0 1,0 9.56,0 a 4.78,4.78 0 1,0 -9.56,0" />
 </vector>

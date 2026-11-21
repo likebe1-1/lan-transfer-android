@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="window_background">#FFF7FAFC</color>
-    <color name="ic_launcher_background">#FF0F4C81</color>
+    <color name="ic_launcher_background">#FF0E2C61</color>
+    <color name="ic_launcher_gradient_start">#FF3B86FF</color>
+    <color name="ic_launcher_gradient_end">#FF0E2C61</color>
 </resources>

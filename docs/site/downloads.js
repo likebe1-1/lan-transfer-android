@@ -198,10 +198,12 @@
         list.push({
           name: mirror.name,
           prefix: mirror.prefix || "",
+          // 镜像前缀只代理 GitHub；空前缀即 GitHub 直连
           kind: mirror.name === "gitee" ? "gitee" : (mirror.prefix ? "mirror" : "direct"),
           enabled: mirror.enabled !== false
         });
       }
+
       if (!list.length) return defaults;
       return { mirrors: list, updatedAt: data.updatedAt || "" };
     } catch (error) {
@@ -232,6 +234,9 @@
       return "https://gitee.com/" + GITEE_REPO + "/releases/download/" + encodeURIComponent(tag) + "/" + encodeURIComponent(name);
     }
     const prefix = mirror ? (mirror.prefix || "") : "";
+    const isGitHub = String(file.url || "").startsWith("https://github.com/");
+    // 代理前缀仅用于 GitHub 链接；Gitee 直链原样使用
+    if (!isGitHub) return file.url;
     return prefix + file.url;
   }
 
@@ -271,9 +276,9 @@
     const sha = file.sha256 || "";
     const mirrorsForFile = orderedMirrors();
     const badges = mirrorsForFile
-      .filter((mirror) => mirror.prefix)
+      .filter((mirror) => mirror.kind === "gitee" || mirror.prefix)
       .slice(0, 3)
-      .map((mirror) => '<span class="mirror-badge' + (probeResults[mirror.name] === "bad" ? " warn" : "") + '">' + escapeHtml(mirror.name) + "</span>")
+      .map((mirror) => '<span class="mirror-badge' + (probeResults[mirror.name] === "bad" ? " warn" : "") + '">' + escapeHtml(mirror.kind === "gitee" ? "Gitee" : mirror.name) + "</span>")
       .join("");
     return (
       '<div class="file-row" data-file-id="' + escapeHtml(file.id || file.name) + '">' +
@@ -302,7 +307,8 @@
   function mirrorLinks(file) {
     return orderedMirrors().map((mirror) => ({
       name: mirror.name || "direct",
-      label: mirror.kind === "gitee" ? "Gitee（国内）" : (mirror.kind === "direct" ? "GitHub 直连" : mirror.name),
+      label: mirror.kind === "gitee" ? "Gitee（国内主源）"
+        : (mirror.kind === "direct" ? "GitHub 直连" : (mirror.name + "（GitHub 代理）")),
       url: buildUrl(file, mirror)
     }));
   }

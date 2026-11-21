@@ -36,3 +36,12 @@ dsh-plugins/
 
 # 临时解包目录
 .tmp-asar2/
+
+# 访问令牌 / 凭据文件（绝不提交，提交即泄露）
+.gitee_token
+.github_token
+.env
+.env.*
+!.env.example
+*_token
+*token.txt
