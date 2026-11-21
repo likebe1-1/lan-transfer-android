@@ -64,7 +64,8 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
         }
         mutableState.update { it.copy(checking = true, error = null) }
         scope.launch {
-            val found = fetchManifestInParallel()
+            val diagnostics = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val found = fetchManifestInParallel(diagnostics)
             Log.i(TAG, "更新清单检查结果：" + if (found == null) "全部来源失败" else found.manifest.versionName)
             val currentCode = installedVersionCode()
             val newer = found != null && UpdateManifestParser.isNewer(found.manifest.versionCode, currentCode)
@@ -159,7 +160,7 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
      * 多源并发拉取清单：任一来源成功即可，全部失败最多等约一个超时周期。
      * 串行拉取在离线/被墙时可能累积 4 个来源 × 超时时间，导致「正在检查更新」停留过久。
      */
-    private fun fetchManifestInParallel(): UpdateInfo? {
+    private fun fetchManifestInParallel(diagnostics: MutableList<String>): UpdateInfo? {
         val urls = UpdateSources.manifestUrls
         val result = java.util.concurrent.atomic.AtomicReference<UpdateInfo?>()
         val latch = java.util.concurrent.CountDownLatch(urls.size)
@@ -170,7 +171,8 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
                         urls = listOf(url),
                         supportedAbis = supportedAbis,
                         connectTimeoutMillis = 4_000,
-                        readTimeoutMillis = 4_000
+                        readTimeoutMillis = 4_000,
+                        onDiagnostic = { reason -> diagnostics.add(reason) }
                     )
                     if (info != null) result.compareAndSet(null, info)
                 } catch (e: Exception) {

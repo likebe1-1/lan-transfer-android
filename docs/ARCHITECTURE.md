@@ -396,3 +396,26 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
   1. Python `canonical_manifest` + OpenSSL 验签；
   2. Kotlin 纯实现 `Ed25519.verify` + 真实发布公钥（单测 `UpdateManifestSignatureTest`）；
   3. Gitee 远端 raw 清单（curl 拉取 200、`sig` 字段存在）。
+
+## 19. P2（兼容性 / 可观测性 / 代码质量）
+
+### 19.1 广播兼容（#8）
+- `QuickBeaconCodec.decode` 同时接受 v2 与旧版 v1 广播，便于新客户端发现老版本设备；
+- 两种版本的 `code` 字段**一律丢弃**，接收方仍需手动输入对方屏幕接收码（安全不降级）；
+- v3 及未知版本继续忽略。
+
+### 19.2 失败计数语义（#10）
+- 新增 `QuickJoinFailurePolicy.shouldCountAsCodeFailure`：只有**全部失败都是认证错误**时才计为接收码错误；
+- 若混入连接被拒/端口占用/超时等非认证错误，更可能是端口冲突或目标不是 LanLink，不计失败、不锁定。
+
+### 19.3 更新失败可观测性（#11）
+- `UpdateManifestFetcher` 新增 `onDiagnostic` 回调与 `describeFailure`：
+  区分 DNS 解析失败 / 连接超时 / TLS 握手失败 / 连接被拒 / HTTP 状态码 / 签名问题；
+- `UpdateUiState.diagnostic` 保存最多 3 条原因，更新对话框在失败时展示，logcat 同步输出。
+
+### 19.4 代码质量（#12~#16）
+- 删除 `QuickQrCodec` 中重复的 `QUICK_QR_PAYLOAD_VERSION` / `quickQrPayloadVersion()` 死代码；
+- 移除未使用的 `slf4j-simple` catalog 条目；
+- Kotlin Android 插件统一由根工程通过 version catalog 声明（`libs.plugins.kotlin.android`），子模块使用无版本 id；
+- 新增 `scripts/check_release_consistency.py`：校验 Gradle 版本号 ↔ `docs/update.json` ↔ 本地 Release APK 的 size/SHA-256
+  （默认 APK 差异仅警告，发布前加 `--strict-apk` 视为错误），同时校验清单一律 HTTPS 且带签名。

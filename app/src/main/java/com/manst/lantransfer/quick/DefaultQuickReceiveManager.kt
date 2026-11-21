@@ -244,6 +244,7 @@ class DefaultQuickReceiveManager(
         val failures = ArrayList<String>(candidates.size)
         // 自动回退会依次尝试多种协议，但同一个接收码错误只计 1 次失败
         var authenticationFailed = false
+        var nonAuthFailureCount = 0
         for (protocol in candidates) {
             val port = target.portFor(protocol)
             val candidate = RemoteFileSystems.create(
@@ -292,12 +293,20 @@ class DefaultQuickReceiveManager(
                 throw e
             } catch (e: Exception) {
                 runCatching { candidate.close() }
-                if (e is AuthenticationException) authenticationFailed = true
+                if (e is AuthenticationException) {
+                    authenticationFailed = true
+                } else {
+                    nonAuthFailureCount += 1
+                }
                 failures += protocol.label + "：" + quickErrorMessage(e)
             }
         }
 
-        if (authenticationFailed) {
+        // 只有「全部失败都来自认证」才计为接收码错误：
+        // 若同时存在连接被拒/端口占用等非认证错误，更可能是目标服务不是 LanLink 或端口冲突，
+        // 不应把用户锁 10 分钟。
+        val onlyAuthFailures = QuickJoinFailurePolicy.shouldCountAsCodeFailure(authenticationFailed, nonAuthFailureCount)
+        if (onlyAuthFailures) {
             joinAttemptLimiter.recordFailure(attemptKey)
             val remaining = joinAttemptLimiter.lockedRemainingSeconds(attemptKey)
             if (remaining > 0L) {

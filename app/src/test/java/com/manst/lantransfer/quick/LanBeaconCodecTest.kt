@@ -139,8 +139,9 @@ class LanBeaconCodecTest {
     }
 
     @Test
-    fun decode_rejectsLegacyV1PayloadEvenIfValidElsewhere() {
-        // 旧版 v1 报文携带接收码：旧客户端会据此自动连接，新版必须一律忽略
+    fun decode_acceptsLegacyV1PayloadButIgnoresItsCode() {
+        // 兼容旧版 v1 广播（便于发现老版本设备），但其接收码一律不采信：
+        // 接收方仍须手动输入对方屏幕上的接收码。
         val legacy = JSONObject()
             .put("v", 1)
             .put("code", "123456")
@@ -150,7 +151,13 @@ class LanBeaconCodecTest {
             .put("ftps", 2122)
             .put("ssh", 2222)
             .toString()
-        assertNull(QuickBeaconCodec.decode(legacy))
+        val decoded = QuickBeaconCodec.decode(legacy)
+        assertNotNull("旧版 v1 广播应能被发现", decoded)
+        requireNotNull(decoded)
+        assertEquals("旧版广播里的接收码必须被丢弃", "", decoded.code)
+        assertFalse(decoded.hasCode)
+        assertEquals("旧设备", decoded.deviceName)
+        assertEquals(listOf("192.168.1.10"), decoded.addresses)
     }
 
     @Test
@@ -178,7 +185,8 @@ class LanBeaconCodecTest {
 
         val addrs = JSONArray(listOf("192.168.1.1"))
         val protocols = JSONArray(listOf("FTP"))
-        assertNull("版本不一致必须忽略", QuickBeaconCodec.decode(payload(addrs, protocols, version = 1)))
+        // v1 现在被接受（兼容旧客户端），v3 等未知版本仍拒绝
+        assertEquals("", requireNotNull(QuickBeaconCodec.decode(payload(addrs, protocols, version = 1))).code)
         assertNull("版本不一致必须忽略", QuickBeaconCodec.decode(payload(addrs, protocols, version = 3)))
         assertNull("没有可用地址必须忽略", QuickBeaconCodec.decode(payload(JSONArray(listOf("  ", "")), protocols)))
         assertNull("协议全部不认识必须忽略", QuickBeaconCodec.decode(payload(addrs, JSONArray(listOf("FOO")))))

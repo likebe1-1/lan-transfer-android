@@ -84,9 +84,3 @@ object QuickQrCodec {
         )
     }
 }
-
-// 二维码格式版本：Base64(JSON) 的载荷版本号，与 QuickSessionInfo 字段保持同步。
-private const val QUICK_QR_PAYLOAD_VERSION = 1
-
-/** 兼容旧名：二维码 JSON 版本（供测试断言）。 */
-internal fun quickQrPayloadVersion(): Int = QUICK_QR_PAYLOAD_VERSION

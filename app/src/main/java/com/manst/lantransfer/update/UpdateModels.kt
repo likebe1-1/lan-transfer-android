@@ -36,6 +36,8 @@ data class UpdateUiState(
     val progress: Float = -1f,
     val downloadedBytes: Long = 0L,
     val error: String? = null,
+    /** 检查更新失败时的可读原因（DNS/TLS/超时/签名等），仅用于排查展示 */
+    val diagnostic: String? = null,
     /** 下载/校验完成，正在拉起系统安装器 */
     val installing: Boolean = false,
     /** 用户点了「稍后」，本次进程内不再自动弹出 */

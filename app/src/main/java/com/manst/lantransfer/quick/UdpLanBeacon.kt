@@ -22,12 +22,15 @@ import java.nio.charset.StandardCharsets
  *
  * v2 起广播**不携带接收码**：附近设备只能看到设备名/IP/端口/协议，连接时仍需发送方屏幕上的
  * 接收码（或扫描发送页二维码）。解码对非法/未知/缺字段的报文一律返回 null，绝不抛异常；
- * 端口非法时回退到默认端口；旧版 v1 报文（携带接收码）一律忽略。
+ * 端口非法时回退到默认端口；旧版 v1 报文可被发现，但其携带的接收码一律丢弃。
  */
 internal object QuickBeaconCodec {
 
-    /** 当前广播报文版本；版本不一致的报文直接忽略（v1 报文携带接收码，v2 起不再携带）。 */
+    /** 当前广播报文版本。 */
     const val VERSION = 2
+
+    /** 旧版本广播格式（仍可被新客户端发现，但其接收码一律不采信）。 */
+    const val LEGACY_VERSION = 1
 
     /** 单个 UDP 报文最大长度，超出视为非法报文。 */
     const val MAX_PACKET_BYTES = 4096
@@ -54,7 +57,13 @@ internal object QuickBeaconCodec {
         }
     }
 
-    /** JSON 文本 -> 会话信息；非法/不完整报文返回 null。v2 广播不含接收码，解码结果 code 恒为空。 */
+    /**
+     * JSON 文本 -> 会话信息；非法/不完整报文返回 null。
+     *
+     * 兼容性：同时接受 v2 与旧版 v1 广播（便于发现老版本设备）；
+     * 但**两种版本都不采信广播里的接收码**（v1 的 code 字段直接忽略），
+     * 接收方仍需输入屏幕上的接收码才能连接。
+     */
     fun decode(payload: String?): QuickSessionInfo? {
         val text = payload?.trim().orEmpty()
         if (text.isEmpty() || text.length > MAX_PACKET_BYTES) return null
@@ -63,8 +72,10 @@ internal object QuickBeaconCodec {
         } catch (e: Exception) {
             return null
         }
-        // 只接受当前版本：v1 报文携带接收码，旧客户端会据此自动连接，必须忽略
-        if (json.optInt("v", 0) != VERSION) return null
+        // 接受 v2（当前）与 v1（旧版，便于发现老版本设备）；其他版本忽略。
+        // 两种版本的接收码都不采信：接收方仍需输入对方屏幕上的接收码。
+        val version = json.optInt("v", 0)
+        if (version != VERSION && version != LEGACY_VERSION) return null
 
         val protocols = decodeProtocols(json) ?: return null
         val addresses = decodeAddresses(json) ?: return null
