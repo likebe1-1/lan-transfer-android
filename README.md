@@ -391,6 +391,7 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 
 ## 已知限制
 
+- **签名材料**：keystore 与口令保存在项目外（默认 `%USERPROFILE%\.lanlink\`，可用 `scripts/migrate_keystore_to_userdir.ps1` 迁移），构建时优先读取环境变量 `LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`，其次读用户目录 `keystore.properties`，最后才回退项目内文件（已 gitignore）。项目目录内不再保存明文密钥库；
 - **FTPS 证书校验**：默认严格校验证书与主机名（`allowInsecureTls` 默认关闭）；只有用户在服务器编辑页显式勾选「信任任意证书」时才放宽（局域网自签证书场景）。快速传文件会话使用运行时自签证书，属显式例外；
 - **协议本身限制**：SCP 不提供断点续传（失败/中断后从 0 重传，应用会自动回退到 SFTP 优先）；SCP 的列目录/建目录/重命名/删除依赖远端 POSIX shell，无 shell 的服务器只能传输文件。
 - **本机服务器**：仅密码认证、单用户、单个共享目录；FTP 服务端仅支持被动模式（PASV/EPSV），不支持主动模式；FTPS 使用进程内生成的自签名证书，App 进程重启后证书会重新生成（客户端需重新信任）；用户名/密码以明文存储在应用私有目录（其他应用无法读取，但未做加密）。

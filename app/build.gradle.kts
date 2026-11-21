@@ -6,13 +6,31 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// 签名配置放在项目根目录的 keystore.properties（已被 .gitignore 排除）
+// ---------------------------------------------------------------- 签名配置（P0-2 加固）
+// 优先级：环境变量/用户目录密钥文件 > 项目内 keystore.properties（已 gitignore，仅作兼容回退）。
+// 推荐做法：把 keystore 与口令放在项目之外，通过环境变量注入，避免密码明文留在工作区。
 val keystorePropertiesFile = rootProject.file("keystore.properties")
+// 回退位置：用户目录下的私密配置（项目外，避免明文长期留在工作区）
+val userKeystorePropertiesFile = File(System.getProperty("user.home"), ".lanlink/keystore.properties")
 val keystoreProperties = Properties().apply {
-    if (keystorePropertiesFile.exists()) {
-        keystorePropertiesFile.inputStream().use { load(it) }
+    when {
+        keystorePropertiesFile.exists() -> keystorePropertiesFile.inputStream().use { load(it) }
+        userKeystorePropertiesFile.exists() -> userKeystorePropertiesFile.inputStream().use { load(it) }
     }
 }
+
+fun envOrProperty(envName: String, property: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() } ?: keystoreProperties.getProperty(property)?.takeIf { it.isNotBlank() }
+
+val resolvedStoreFile: String? = System.getenv("LANT_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val resolvedStorePassword: String? = envOrProperty("LANT_KEYSTORE_PASSWORD", "storePassword")
+val resolvedKeyAlias: String? = System.getenv("LANT_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("keyAlias")?.takeIf { it.isNotBlank() }
+val resolvedKeyPassword: String? = envOrProperty("LANT_KEY_PASSWORD", "keyPassword")
+val hasSigningMaterial: Boolean = resolvedStoreFile != null && resolvedStorePassword != null &&
+    resolvedKeyAlias != null && resolvedKeyPassword != null &&
+    rootProject.file(resolvedStoreFile).exists()
 
 android {
     namespace = "com.manst.lantransfer"
@@ -31,12 +49,12 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (hasSigningMaterial) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = rootProject.file(resolvedStoreFile!!)
+                storePassword = resolvedStorePassword
+                keyAlias = resolvedKeyAlias
+                keyPassword = resolvedKeyPassword
             }
         }
     }
@@ -53,10 +71,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (keystorePropertiesFile.exists()) {
+            if (hasSigningMaterial) {
                 signingConfig = signingConfigs.getByName("release")
             }
-        }    }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

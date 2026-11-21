@@ -356,12 +356,17 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - `.gitee_token` 等访问令牌**禁止落盘**进仓库：`.gitignore` 已覆盖 `.gitee_token`、`*_token`、`*token.txt`、`.env*`；脚本统一从环境变量（`GITEE_TOKEN`）读取；
 - 误提交的令牌已通过 `git filter-branch` 从全部历史中移除并强推，令牌本身需在服务端吊销。
 
-### 17.2 FTPS 证书校验
+### 17.2 签名材料隔离
+- 明文口令与 keystore 移出工作区：`scripts/migrate_keystore_to_userdir.ps1` 复制到 `%USERPROFILE%\.lanlink\` 并收紧 ACL；
+- `app/build.gradle.kts` 解析顺序：环境变量（`LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`）→ 用户目录 `.lanlink/keystore.properties` → 项目内 `keystore.properties`（兼容回退）；
+- 注意：`java.util.Properties` 会跳过首行，配置文件首行必须是注释。
+
+### 17.3 FTPS 证书校验
 - `ServerProfile.allowInsecureTls` 默认 `false`（严格校验 + 主机名校验），历史配置未显式开启时按严格处理；
 - 仅用户显式勾选「信任任意证书」时才使用信任任意证书的 TrustManager；
 - 快速传文件的运行时自签证书会话为显式例外（用户主动发起、同网段、短生命周期）。
 
-### 17.3 接收码与服务端限流
+### 17.4 接收码与服务端限流
 - 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；
 - 新增 `server/ServerAuthGuard`：按**来源 IP** 统计认证失败（5 次 / 10 分钟窗口 → 锁定 10 分钟），FTP（USER/PASS 阶段）与 SSHD（PasswordAuthenticator）均已接入；
 - 锁定期间即使密码正确也拒绝，攻击者更换用户名无法绕过；客户端 `QuickJoinAttemptLimiter` 保留用于即时 UI 反馈。
