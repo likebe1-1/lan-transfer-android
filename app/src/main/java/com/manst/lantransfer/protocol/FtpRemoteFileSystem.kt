@@ -41,6 +41,8 @@ import javax.net.ssl.X509TrustManager
  * - 目录列表优先使用 MLSD（RFC 3659），服务器不支持或返回错误时回退 LIST，由 Commons Net 的 Unix
  *   列表解析器处理；
  * - 被动模式为默认，[ServerProfile.passiveMode] 为 false 时使用主动模式；
+ * - 数据连接使用 128 KiB 的流缓冲（setBufferSize）与数据 socket 收发缓冲，
+ *   兼顾局域网吞吐与 Android 内存占用（详见 [applyDataTransferBufferTuning]）；
  * - [ServerProfile.allowInsecureTls] 为 true 时信任任意服务端证书（局域网自签证书常见），为 false 时使用
  *   JVM 默认信任库做严格校验；
  * - 全部阻塞调用都放在 [Dispatchers.IO] 上执行，类本身是纯 JVM 实现（不依赖 Android API）。
@@ -85,6 +87,16 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         ftp.connectTimeout = CONNECT_TIMEOUT_MS
         ftp.defaultTimeout = READ_TIMEOUT_MS
         ftp.setDataTimeout(Duration.ofMillis(READ_TIMEOUT_MS.toLong()))
+        // 数据连接缓冲区调优（配置型 setter，connect 前后调用均可，这里放在建连前保证一致）。
+        // Commons Net 3.11.1 实际语义：
+        // - setBufferSize 只影响数据流包装：retrieveFile/storeFile/appendFile 内部用 bufferSize 包裹
+        //   数据连接流（FTPClient#getBufferedInputStream/OutputStream），默认 0 时仅 8 KiB；
+        // - setReceiveBufferSize/setSendBufferSize 是 SocketClient 对「控制连接」的 SO_RCVBUF/SO_SNDBUF，
+        //   在 _connect() 内、socket.connect() 之前读取，控制连接只传输少量命令，调大无吞吐收益，故不设置；
+        // - 数据连接的 SO_RCVBUF/SO_SNDBUF 要用 FTPClient 专用的
+        //   setReceieveDataSocketBufferSize/setSendDataSocketBufferSize（注意 setter 拼写为 Receieve），
+        //   FTPClient 与 FTPSClient 的 _openDataConnection_ 都会在创建数据 socket 时应用。
+        applyDataTransferBufferTuning(ftp)
         try {
             ftp.connect(profile.host, profile.port)
         } catch (e: IOException) {
@@ -628,4 +640,36 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             return context
         }
     }
+}
+
+/**
+ * 数据连接缓冲区大小（128 KiB），用于数据流包装与数据 socket 的 SO_RCVBUF/SO_SNDBUF。
+ *
+ * 选择依据：
+ * - Commons Net 默认不为数据流指定缓冲（内部退化为 8 KiB），在局域网千兆/Wi-Fi 下 syscall 与
+ *   TLS 记录层开销会明显限制吞吐；
+ * - 128 KiB 足以覆盖多个 TCP MSS 与多份 TLS 记录，单次读写即可摊薄系统调用开销；
+ * - 每条连接额外内存约为 3 × 128 KiB（读流缓冲、写流缓冲、socket 收发缓冲），
+ *   低于 256 KiB 方案的一半，对 Android 低端设备与并行传输更友好，故取 128 KiB。
+ */
+internal const val DATA_TRANSFER_BUFFER_SIZE = 128 * 1024
+
+/**
+ * 为 FTP/FTPS 数据连接应用缓冲区配置。
+ *
+ * 依据 Commons Net 3.11.1 源码核实：
+ * - [FTPClient.setBufferSize] 仅影响 retrieveFile/storeFile/appendFile 等数据流包装
+ *   （getBufferedInputStream/getBufferedOutputStream 用该值创建包装流），对控制连接与目录列表缓冲无影响；
+ * - [FTPClient.setReceieveDataSocketBufferSize]（setter 拼写为 Receieve，官方保留）与
+ *   [FTPClient.setSendDataSocketBufferSize] 在每条数据连接创建时设置 SO_RCVBUF/SO_SNDBUF，
+ *   普通 [FTPClient] 与 [FTPSClient]（覆写的 _openDataConnection_）都会应用，FTPS 加密数据连接同样生效；
+ * - 这些 setter 只保存配置，与 connect 时机无关，但必须在数据传输前调用。
+ *
+ * 注意：SocketClient.setReceiveBufferSize/setSendBufferSize 作用于控制连接，
+ * 且只在 connect() 内部创建 socket 时读取；控制连接仅传输少量命令，调大没有吞吐收益，故不在此设置。
+ */
+internal fun applyDataTransferBufferTuning(client: FTPClient) {
+    client.setBufferSize(DATA_TRANSFER_BUFFER_SIZE)
+    client.setReceieveDataSocketBufferSize(DATA_TRANSFER_BUFFER_SIZE)
+    client.setSendDataSocketBufferSize(DATA_TRANSFER_BUFFER_SIZE)
 }

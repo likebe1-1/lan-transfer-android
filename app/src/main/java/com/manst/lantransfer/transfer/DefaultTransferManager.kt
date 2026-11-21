@@ -20,11 +20,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -39,14 +42,17 @@ import java.util.concurrent.ConcurrentHashMap
  * 传输队列默认实现（v2：持久化 / 历史 / 自动重试 / 断点续传 / 文件夹递归）。
  *
  * 设计：
- * - 单 worker 协程串行执行队列，[tasks] 是 UI 的唯一数据源；
+ * - 有限并发执行队列：最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时传输
+ *   （小文件多时显著减少 connect/认证/断开的固定开销），并发决策见 [TransferScheduler]；
+ *   调度循环只负责分配槽位，真正的生产工作在各自协程的 withContext(Dispatchers.IO) 中执行；
+ * - [tasks] 是 UI 的唯一数据源；同一个 taskId 同一时刻最多只有一个执行体；
  * - 每个任务使用独立的 [RemoteFileSystem] 连接，任务结束（含失败、取消）立即关闭；
  * - 队列与历史通过 [TransferStore] 持久化（500ms 节流）：进程重启后未完成任务恢复为 QUEUED 并自动继续，
  *   已结束任务作为历史保留（默认最多 200 条，见 [TransferHistoryLimit]）；
  * - 下载先写入 cacheDir/transfer/<taskId>.part（支持断点续传），完成后复制到 MediaStore 下载目录并删除 staging；
  *   失败时保留 staging 以便重试或重启后续传；
  * - 自动重试：非用户取消的 IO/网络错误最多重试 3 次（退避 2s/4s/8s），认证/路径错误不重试；
- * - 文件夹传输：递归列出远端目录 / 遍历 SAF 目录树，拆分为逐文件任务，串行执行；
+ * - 文件夹传输：递归列出远端目录 / 遍历 SAF 目录树，拆分为逐文件任务，按上面同一套并发调度执行；
  * - 有活动任务时启动 [TransferService] 前台保活，队列清空后停止。
  */
 class DefaultTransferManager(
@@ -66,6 +72,16 @@ class DefaultTransferManager(
     private val stagingDirectory: File = File(appContext.cacheDir, STAGING_DIRECTORY_NAME)
 
     private val queueModel = TransferQueueModel()
+
+    /** 有限并发调度策略（纯 JVM 逻辑，可单元测试）。 */
+    private val scheduler = TransferScheduler()
+
+    /**
+     * 当前已被 worker 占用的任务 id：同一 taskId 同一时刻只会有一个执行体，
+     * 任务失败退避等待期间仍算「占用中」（避免退避窗口内被其它 worker 重新取出）。
+     */
+    private val executingTaskIds = ConcurrentHashMap.newKeySet<String>()
+
     private val mutableTasks = MutableStateFlow<List<TransferTask>>(emptyList())
     private val mutableActiveCount = MutableStateFlow(0)
 
@@ -120,7 +136,9 @@ class DefaultTransferManager(
             requests[task.id] = request
             queueModel.add(task)
             publishLocked()
-            startService = queueModel.countActive() == 1
+            // 只有「活动任务数由 0 变 1」才需要启动前台服务，与 stopForegroundIfIdle 严格配对；
+            // 并发下第二个及后续任务入队时服务已经在运行，重复 start 没有意义。
+            startService = scheduler.shouldStartForegroundService(queueModel.countActive())
         }
         if (startService) ensureForegroundService()
         return task.id
@@ -362,16 +380,68 @@ class DefaultTransferManager(
 
     // ------------------------------------------------------------ 队列执行
 
-    private suspend fun runQueueLoop() {
-        while (currentCoroutineContext().isActive) {
-            val next = tasks.first { list -> list.any { it.state == TransferState.QUEUED } }
-                .firstOrNull { it.state == TransferState.QUEUED }
-            if (next == null) continue
-            runTask(next.id)
+    /**
+     * 队列调度循环：维持最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时执行。
+     *
+     * 调度决策全部交给纯 JVM 的 [TransferScheduler]（可单元测试），本循环只负责
+     * 「占槽位 -> 启动子协程 -> 等待槽位释放或新任务出现」，不执行任何 IO：
+     * - 每个任务作为 [scope] 下的独立子 Job 启动（SupervisorJob：某个任务异常既不会打断调度循环，
+     *   也不会取消其它正在传输的任务）；
+     * - 任务内部的阻塞 IO 仍在各自协程的 withContext(Dispatchers.IO) 中执行，
+     *   因此多个任务并行时不会因为单一线程池饥饿而互相阻塞（调度循环自身在 Dispatchers.Default 上，
+     *   只做状态读写的轻量工作，不会被 IO 阻塞）；
+     * - 等待使用 StateFlow（新任务入队）与任务完成信号（释放槽位）唤醒，不轮询、不空转。
+     */
+    private suspend fun runQueueLoop() = coroutineScope {
+        // 唤醒信号：任一任务结束（释放槽位）或队列出现新的可执行任务时唤醒调度循环。
+        val wakeUp = Channel<Unit>(Channel.CONFLATED)
+        val queueWatcher = launch {
+            tasks.collect { list ->
+                if (list.any { it.state == TransferState.QUEUED }) wakeUp.trySend(Unit)
+            }
+        }
+        // 仅在调度循环内访问（单协程访问，无需额外同步）
+        val runningJobs = LinkedHashMap<String, Job>()
+        try {
+            while (currentCoroutineContext().isActive) {
+                runningJobs.entries.removeAll { it.value.isCompleted }
+                val startable = scheduler.startableTaskIds(tasks.value, runningJobs.keys)
+                for (taskId in startable) {
+                    val job = scope.launch { runTask(taskId) }
+                    runningJobs[taskId] = job
+                    job.invokeOnCompletion { wakeUp.trySend(Unit) }
+                }
+                if (runningJobs.isEmpty()) {
+                    // 没有任务在执行：挂起等待「出现可启动的任务」。
+                    // StateFlow.first 会先读取当前值，因此不会丢掉「入队」与「开始等待」之间的唤醒。
+                    tasks.first { list -> scheduler.startableTaskIds(list, emptySet()).isNotEmpty() }
+                } else {
+                    // 等任一任务结束（释放槽位）或队列出现新的可执行任务。
+                    wakeUp.receive()
+                }
+            }
+        } finally {
+            queueWatcher.cancel()
         }
     }
 
+    /**
+     * 执行单个任务。[executingTaskIds] 是「同一 taskId 不会被启动两次」的最后一道保险：
+     * 即使调度器因竞态重复调度同一个任务，也只会有一个执行体真正运行。
+     */
     private suspend fun runTask(taskId: String) {
+        if (!executingTaskIds.add(taskId)) {
+            Log.w(TAG, "任务已在执行中，忽略重复调度：" + taskId)
+            return
+        }
+        try {
+            executeTask(taskId)
+        } finally {
+            executingTaskIds.remove(taskId)
+        }
+    }
+
+    private suspend fun executeTask(taskId: String) {
         val execution = beginTask(taskId) ?: return
         ensureForegroundService()
         val fileSystem = RemoteFileSystems.create(execution.request.profile)
@@ -417,6 +487,9 @@ class DefaultTransferManager(
             stopForegroundIfIdle()
         }
         if (retryBackoffMillis > 0L) {
+            // 退避等待期间本任务仍占一个并发槽位（任务已重置为 QUEUED，但仍在 executingTaskIds 中，
+            // 因此不会被其它 worker 提前重新取出——否则等于绕过了退避，退化成忙重试）。
+            // 其余槽位仍可执行其它任务，所以退避不会阻塞整个队列，作用与改造前的串行等待一致。
             Log.i(TAG, "任务失败，等待 " + retryBackoffMillis + "ms 后自动重试：" + taskId)
             delay(retryBackoffMillis)
         }
@@ -455,7 +528,12 @@ class DefaultTransferManager(
         return 0L
     }
 
-    /** 取队首任务并原子地切换为 RUNNING。 */
+    /**
+     * 原子地把任务从 QUEUED 切换为 RUNNING 并取出执行参数。
+     *
+     * 整个判断 + 切换都在 [stateLock] 内完成：并发 worker 即使同时选中同一个任务，
+     * 也只有第一个能拿到 [TransferQueueModel.beginAttempt] 的返回值，其余返回 null 直接退出。
+     */
     private fun beginTask(taskId: String): Execution? = synchronized(stateLock) {
         val task = queueModel.get(taskId) ?: return null
         if (task.state != TransferState.QUEUED) return null
@@ -471,16 +549,9 @@ class DefaultTransferManager(
             publishLocked()
             return null
         }
+        val running = queueModel.beginAttempt(taskId) ?: return null
         val tracker = TransferProgressTracker()
         trackers[taskId] = tracker
-        val running = queueModel.update(taskId) {
-            it.copy(
-                state = TransferState.RUNNING,
-                startedAt = System.currentTimeMillis(),
-                bytesPerSecond = 0L,
-                error = null
-            )
-        } ?: return null
         publishLocked()
         Execution(running, request, tracker)
     }

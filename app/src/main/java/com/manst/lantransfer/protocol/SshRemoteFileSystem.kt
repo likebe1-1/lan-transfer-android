@@ -38,8 +38,15 @@ import java.nio.charset.StandardCharsets
  *   手动处理 C/T/D/E 记录与 ACK；
  * - SCP 协议没有目录列表/建目录/重命名能力，这些操作通过同一 SSH 会话执行 POSIX shell 命令
  *   （`ls -la`、`mkdir -p`、`rm`/`rmdir`、`mv`）完成，参数一律做 shell 单引号转义；
- * - 密码认证；本版不做主机密钥固定校验（见 docs/ARCHITECTURE.md 已知限制）；
- * - 全部阻塞调用放在 [Dispatchers.IO]，类本身是纯 JVM 实现（不依赖 Android API）。
+ * - 密码认证；快速传文件路径对主机密钥做指纹固定（`ServerProfile.pinnedSshHostKeySha256` +
+ *   `SshHostKeyPinning.PinnedRepository`，此时 `StrictHostKeyChecking=yes`），无指纹的普通服务器退回首次信任；
+ * - 全部阻塞调用放在 [Dispatchers.IO]，类本身是纯 JVM 实现（不依赖 Android API）；
+ * - 吞吐调优（依据 JSch 0.2.26 源码核实）：自有拷贝缓冲区统一为 [SSH_TRANSFER_BUFFER_SIZE]（128 KiB，
+ *   原 32 KiB），作用于 SCP 线协议收发、`ls` 输出读取与未知大小上传的落盘；均为单次分配、单连接串行使用，
+ *   内存开销可接受。JSch 的 SFTP 数据包尺寸无法从应用侧放大：ChannelSftp 的本地最大包尺寸硬编码为
+ *   32 KiB，Session 也没有 `max_packetsize` 之类配置键（Channel.setLocalPacketSize 为包内可见、无公开入口）；
+ *   并行分块传输需要按偏移写目标文件，而 JSch 只提供 OutputStream 偏移读与 OVERWRITE/RESUME/APPEND 语义，
+ *   引入后会破坏续传与进度语义，故未启用。
  *
  * 线程模型：同一实例不支持多线程并发操作（上层「一任务一连接」保证），唯一允许跨线程调用的是
  * [close]——它会把传输中出现的 IO 异常转换成 [TransferCancelledException]。
@@ -193,7 +200,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         }
         val channel = requireSftp()
         try {
-            channel.get(remote, sink, SftpProgressCallback(onProgress), ChannelSftp.RESUME, startOffset)
+            channel.get(remote, sink, SftpResumeProgressMonitor(onProgress), ChannelSftp.RESUME, startOffset)
         } catch (e: SftpException) {
             throw sftpFailure("下载文件", remote, e)
         } catch (e: IOException) {
@@ -213,7 +220,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             channel.put(
                 source,
                 remote,
-                SftpProgressCallback(onProgress, initialOffset = startOffset),
+                SftpResumeProgressMonitor(onProgress, initialOffset = startOffset),
                 ChannelSftp.RESUME
             )
         } catch (e: SftpException) {
@@ -301,7 +308,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     private fun downloadSftp(remote: String, sink: OutputStream, onProgress: (Long) -> Unit) {
         val channel = requireSftp()
         try {
-            channel.get(remote, sink, SftpProgressCallback(onProgress))
+            channel.get(remote, sink, SftpResumeProgressMonitor(onProgress))
         } catch (e: SftpException) {
             throw sftpFailure("下载文件", remote, e)
         } catch (e: IOException) {
@@ -312,7 +319,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     private fun uploadSftp(source: InputStream, remote: String, onProgress: (Long) -> Unit) {
         val channel = requireSftp()
         try {
-            channel.put(source, remote, SftpProgressCallback(onProgress), ChannelSftp.OVERWRITE)
+            channel.put(source, remote, SftpResumeProgressMonitor(onProgress), ChannelSftp.OVERWRITE)
         } catch (e: SftpException) {
             throw sftpFailure("上传文件", remote, e)
         } catch (e: IOException) {
@@ -460,7 +467,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
                 readAck(exec.input, remote)
 
                 var total = 0L
-                val buffer = ByteArray(BUFFER_SIZE)
+                val buffer = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
                 while (true) {
                     val read = content.read(buffer)
                     if (read < 0) break
@@ -595,7 +602,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
 
     private fun readFully(input: InputStream): ByteArray {
         val buffer = ByteArrayOutputStream()
-        val chunk = ByteArray(BUFFER_SIZE)
+        val chunk = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
         while (true) {
             val read = input.read(chunk)
             if (read < 0) break
@@ -655,9 +662,9 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     /** 从输入流精确读取 size 字节写入 sink，并按增量回调进度。 */
     private fun copyExact(input: InputStream, sink: OutputStream, size: Long, onChunk: (Long) -> Unit) {
         var remaining = size
-        val buffer = ByteArray(BUFFER_SIZE)
+        val buffer = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
         while (remaining > 0L) {
-            val limit = minOf(remaining, buffer.size.toLong()).toInt()
+            val limit = sshChunkLimit(remaining, buffer.size)
             val read = input.read(buffer, 0, limit)
             if (read < 0) {
                 throw ConnectionException("SCP 传输提前结束：还差 $remaining 字节")
@@ -678,7 +685,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             throw RemotePathException("无法创建临时文件以确定上传大小（$remote）", e)
         }
         try {
-            file.outputStream().use { output -> source.copyTo(output, BUFFER_SIZE) }
+            file.outputStream().use { output -> source.copyTo(output, SSH_TRANSFER_BUFFER_SIZE) }
         } catch (e: IOException) {
             file.delete()
             if (closed) throw TransferCancelledException()
@@ -758,34 +765,63 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         val output: OutputStream
     )
 
-    /**
-     * JSch 传输进度回调：把增量字节累计后交给上层。
-     * [initialOffset] 用于续传上传（JSch 只回调本次写入字节，需要补上已有偏移）；
-     * 续传下载时 JSch 会主动以 count(skip) 上报偏移，因此 initialOffset 保持 0。
-     */
-    private class SftpProgressCallback(
-        private val onProgress: (Long) -> Unit,
-        private val initialOffset: Long = 0L
-    ) : SftpProgressMonitor {
-        private var total = initialOffset
-
-        override fun init(op: Int, src: String?, dest: String?, max: Long) {
-            total = initialOffset
-        }
-
-        override fun count(count: Long): Boolean {
-            total += count
-            onProgress(total)
-            return true
-        }
-
-        override fun end() = Unit
-    }
-
     private companion object {
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 30_000
-        const val BUFFER_SIZE = 32 * 1024
         const val MAX_PROTOCOL_LINE = 64 * 1024
     }
+}
+
+/**
+ * SFTP/SCP 自有拷贝缓冲区大小：128 KiB（原 32 KiB）。
+ *
+ * 只用于本类自己控制的读写循环（SCP 线协议收发、`ls` 输出读取、未知大小上传落盘）；
+ * 每次传输只分配一个缓冲区，且同一实例不允许并发传输，因此 128 KiB 不会造成内存压力。
+ * 局域网链路上单块越大，read/write 系统调用与进度回调次数越少。
+ * 注意：JSch 0.2.26 的 ChannelSftp 内部数据包尺寸由库硬编码为 32 KiB（LOCAL_MAXIMUM_PACKET_SIZE），
+ * 无法通过 Session 配置放大，所以本常量不影响 SFTP get/put 的线上分片。
+ */
+internal const val SSH_TRANSFER_BUFFER_SIZE = 128 * 1024
+
+/**
+ * 计算单次 read/write 的块大小：同时受「剩余字节数」与「缓冲区大小」约束。
+ *
+ * 提取为纯函数便于单测，避免 SCP 精确拷贝在最后一块越界或提前结束。
+ *
+ * @throws IllegalArgumentException 当 [bufferSize] 不是正数（属于编码错误）
+ */
+internal fun sshChunkLimit(remaining: Long, bufferSize: Int = SSH_TRANSFER_BUFFER_SIZE): Int {
+    require(bufferSize > 0) { "缓冲区大小必须为正数：" + bufferSize }
+    if (remaining <= 0L) return 0
+    return if (remaining < bufferSize.toLong()) remaining.toInt() else bufferSize
+}
+
+/**
+ * JSch 传输进度回调：把增量字节累计后交给上层。
+ *
+ * [initialOffset] 用于续传上传：JSch 的 `ChannelSftp._put(..., RESUME)` 只回调本次写入的字节，
+ * 不会补偿远端已存在的前缀，因此需要从续传偏移起算；
+ * 续传下载则相反：`ChannelSftp.get(..., RESUME, skip)` 会先主动回调一次 `count(skip)`，
+ * 之后按实际读取字节回调，所以下载路径的 initialOffset 必须保持 0，否则偏移会被重复计数。
+ */
+internal class SftpResumeProgressMonitor(
+    private val onProgress: (Long) -> Unit,
+    private val initialOffset: Long = 0L
+) : SftpProgressMonitor {
+
+    /** 当前累计字节数（含初始偏移），便于测试与排查进度问题。 */
+    var totalBytes: Long = initialOffset
+        private set
+
+    override fun init(op: Int, src: String?, dest: String?, max: Long) {
+        totalBytes = initialOffset
+    }
+
+    override fun count(count: Long): Boolean {
+        totalBytes += count
+        onProgress(totalBytes)
+        return true
+    }
+
+    override fun end() = Unit
 }

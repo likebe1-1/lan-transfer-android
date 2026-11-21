@@ -49,4 +49,6 @@ dsh-plugins/
 # 更新清单签名私钥（绝不提交）
 .update-signing/
 *.pem
-build-test.log
+# 构建/测试日志（本地临时产物）
+build-*.log
+*.log.tmp

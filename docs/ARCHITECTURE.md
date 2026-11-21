@@ -47,7 +47,7 @@
 ┌───────────────▼──────────────────────────────┐
 │ 领域层                                        │
 │  ServerRepository（配置持久化）                │
-│  TransferManager（串行传输队列 + 进度 + 保活）   │
+│  TransferManager（有限并发队列 + 进度 + 保活）   │
 └───────────────┬──────────────────────────────┘
                 │ RemoteFileSystem 抽象
 ┌───────────────▼──────────────────────────────┐
@@ -63,7 +63,8 @@
 2. **手动依赖注入**：`AppContainer` 在 Application 中创建，按需 lazy 初始化；不引入 Hilt/KSP，避免注解处理器拖慢构建。
 3. **协议层纯 JVM**：不 import 任何 Android API，因此可以用 JVM 单元测试 + 内嵌服务器跑真实报文测试。
 4. **一任务一连接**：不做连接池。每次浏览会话、每个传输任务各自建立 `RemoteFileSystem`，结束即关闭；取消任务 = 关闭连接。FTP 控制连接并发限制、SSH 会话状态隔离问题都被绕开。
-5. **传输串行**：局域网带宽下多任务并发只会互相抢带宽并增加失败面，队列串行执行、展示逐条进度。
+5. **有限并发传输**：默认 3 路并发（`TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS`），每个任务独立连接；
+   小文件多时显著减少「连接/认证/断开」固定开销。极端场景（服务端限制并发数）可调为 1 退回串行。
 6. **前台服务保活**：有活动任务时启动 `TransferService`（`dataSync` 类型）显示通知；队列清空即停止。
 7. **下载落盘**：Android 10+ 用 `MediaStore.Downloads` 直接写入公共目录 `Download/` 根目录（不新建子文件夹），无需存储权限；上传用系统文件选择器（SAF）返回的 content Uri 流式读取。
 
@@ -94,14 +95,15 @@ interface RemoteFileSystem : Closeable {
 
 安全取舍：
 
-- 默认信任自签名证书（局域网设备常见），可在服务器配置中关闭，改为严格校验系统 CA；
-- 主机密钥（SFTP/SCP）本版不做 known_hosts 固定校验，文档标注为已知限制；
-- 密码以明文存于应用私有目录的 JSON（`filesDir/servers.json`，其他应用不可读），本版不做加密，README 中说明。
+- FTPS 默认严格校验系统 CA；快速传文件等自签名场景改用**证书指纹固定**（`ServerProfile.pinnedCertificateSha256`）。`allowInsecureTls` 仅作兼容旧配置的兜底，启用时打印安全警告；
+- 主机密钥（SFTP/SCP）：快速传文件的发送方用 `SshHostKeyProbe` 取回主机密钥指纹并随二维码/广播（`hk` 字段）下发，接收方通过 `ServerProfile.pinnedSshHostKeySha256` 固定校验；无指纹的普通服务器退回首次信任；
+- 服务器密码使用 Android Keystore 的 AES-256-GCM 加密后写入 `filesDir/servers.json`（`AndroidKeystoreSecretCipher`，密钥不可导出）；Keystore 异常时降级明文并记录日志；
+- 本机服务器（FTP/FTPS/SFTP/SCP）在服务端统计认证失败次数并临时封禁来源（`ServerAuthGuard`）。
 
 ## 5. 数据与状态
 
 - `ServerRepository`：`servers.json`（org.json 手写序列化 + 原子写临时文件后 rename），`StateFlow<List<ServerProfile>>` 驱动 UI；单元测试传入临时文件，可在 JVM 直接测。
-- `TransferManager`：`StateFlow<List<TransferTask>>`；任务串行执行，进度按 100ms 节流推送到 UI，并计算瞬时速度；`cancel` 关闭连接，`retry` 重新入队。
+- `TransferManager`：`StateFlow<List<TransferTask>>`；任务按 `TransferScheduler` 有限并发执行（默认 3 路，同一 taskId 不会重复启动），进度按 100ms 节流推送到 UI，并计算瞬时速度；`cancel` 关闭连接，`retry` 重新入队。
 - 不引入 Room：数据量是「几十条服务器配置 + 内存态队列」，Room 只增加构建复杂度与 APK 体积。
 
 ## 6. 工程与构建
@@ -121,11 +123,11 @@ interface RemoteFileSystem : Closeable {
 
 ## 8. 已知限制 / 后续演进
 
-1. 不支持断点续传（SCP 协议本身不支持 REST；FTP/SFTP 可在 v2 增加）；
-2. 不做 SFTP 主机密钥指纹固定；
-3. 无文件夹递归上传/下载；
-4. 无局域网服务发现（可后续加 mDNS/端口扫描）；
-5. 密码加密可升级为 Android Keystore 派生密钥的 AES-GCM 存储。
+1. SCP 线协议本身不支持 REST，续传依赖各协议自身能力（FTP `REST`、SFTP `RESUME`）；
+2. 仅快速传文件路径做证书/主机密钥指纹固定；手动配置的普通服务器仍为首次信任；
+3. 监听地址固定 `0.0.0.0`，依赖服务端认证限流（`ServerAuthGuard`）兜底；多网卡/VPN/公网暴露场景需谨慎；
+4. SFTP 数据包尺寸受 JSch 硬编码 32 KiB（`LOCAL_MAXIMUM_PACKET_SIZE`）限制，应用侧无法放大；
+5. Keystore 加密异常时降级为明文保存（优先保证可用性，日志可查）。
 
 ## 9. 验证记录（2026-11-13）
 

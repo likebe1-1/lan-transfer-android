@@ -50,7 +50,9 @@ data class TransferTask(
 }
 
 /**
- * 传输队列。任务串行执行（局域网带宽下并发收益低、且 FTP 控制连接有并发限制）。
+ * 传输队列。任务有限并发执行（默认 3 路，见 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS]）：
+ * 大量小文件时减少「连接/认证/断开」的固定开销；每个任务使用独立连接，
+ * 如遇服务端连接数限制可把并发上限调为 1 退回串行。
  *
  * 实现要求：
  * - 每个任务使用独立的 [com.manst.lantransfer.protocol.RemoteFileSystem] 连接，任务结束即关闭；
@@ -86,7 +88,7 @@ interface TransferManager {
 
     /**
      * 递归下载远端目录到系统「下载」目录（保留子目录结构），
-     * 文件任务按现有队列串行执行；返回批次 id（仅用于 UI 提示）。
+     * 文件任务按现有并发调度执行；返回批次 id（仅用于 UI 提示）。
      */
     fun enqueueDownloadFolder(
         profile: ServerProfile,
