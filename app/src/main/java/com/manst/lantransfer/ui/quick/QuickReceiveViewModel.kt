@@ -107,10 +107,10 @@ class QuickReceiveViewModel(
             host.contains(' ') -> "IP 地址不能包含空格"
             else -> null
         }
-        val codeError = if (normalizedCode == null) "请输入 6 位数字接收码" else null
+        val codeError = if (normalizedCode == null) "请输入接收码（8 位数字）" else null
         _uiState.update { it.copy(hostError = hostError, codeError = codeError) }
         if (hostError != null || normalizedCode == null) {
-            _messages.trySend("请先填写对方 IP 和 6 位接收码")
+            _messages.trySend("请先填写对方 IP 和接收码（8 位数字）")
             return
         }
         joinTarget(
@@ -123,7 +123,7 @@ class QuickReceiveViewModel(
     }
 
     /**
-     * 点击附近设备后（广播不再携带接收码）用用户输入的 6 位接收码连接；
+     * 点击附近设备后（广播不再携带接收码）用用户输入的接收码连接；
      * 协议自动选择，加密优先。
      */
     fun joinDiscovered(info: QuickSessionInfo, code: String) {
@@ -135,7 +135,7 @@ class QuickReceiveViewModel(
         }
         val normalizedCode = QuickSessionCode.normalize(code)
         if (normalizedCode == null) {
-            _messages.trySend("请输入 6 位数字接收码")
+            _messages.trySend("请输入接收码（8 位数字）")
             return
         }
         joinTarget(

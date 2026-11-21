@@ -35,19 +35,26 @@ class SessionCredentialsTest {
         assertEquals(null, QuickSessionCode.normalize("abcdef"))
     }
 
-    @Test
-    fun generate_alwaysProducesSixDigits() {
+    fun generate_alwaysProducesConfiguredLengthDigits() {
         repeat(200) {
             val code = QuickSessionCode.generate()
             assertEquals(QuickTransferDefaults.CODE_LENGTH, code.length)
             assertTrue("接收码必须是纯数字：" + code, code.all { ch -> ch.isDigit() })
         }
+        assertEquals(8, QuickTransferDefaults.CODE_LENGTH)
     }
 
     @Test
     fun generate_isDeterministicWithSeededRandom() {
-        val expected = Random(42).nextInt(100_000, 1_000_000).toString()
+        val expected = Random(42).nextLong(10_000_000L, 100_000_000L).toString()
         assertEquals(expected, QuickSessionCode.generate(Random(42)))
+    }
+
+    @Test
+    fun normalize_acceptsLegacySixDigitCodes() {
+        assertEquals("123456", QuickSessionCode.normalize("123 456"))
+        assertEquals("12345678", QuickSessionCode.normalize("1234 5678"))
+        assertEquals(null, QuickSessionCode.normalize("123456789"))
     }
 
     @Test

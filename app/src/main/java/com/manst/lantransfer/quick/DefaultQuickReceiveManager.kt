@@ -210,7 +210,7 @@ class DefaultQuickReceiveManager(
 
     private suspend fun joinLocked(target: QuickJoinTarget): Result<Unit> {
         val code = QuickSessionCode.normalize(target.code)
-            ?: return joinFailure("接收码必须是 6 位数字")
+            ?: return joinFailure("接收码必须是 8 位数字（旧版为 6 位）")
         val host = target.host.trim()
         if (host.isEmpty()) return joinFailure("请输入对方的 IP 地址")
         // 同一目标连续接收码错误会被限流：锁定期间直接拒绝，避免继续暴力尝试
@@ -325,6 +325,8 @@ class DefaultQuickReceiveManager(
         password = password,
         ftpsMode = FtpsMode.EXPLICIT,
         passiveMode = true,
+        // 快速传文件的服务端使用运行时自签证书（无 CA），且会话由用户主动发起、同一局域网内短暂存在；
+        // 因此这里显式信任自签证书。普通 FTPS 服务器连接默认使用严格校验（见 ServerProfile）。
         allowInsecureTls = true
     )
 

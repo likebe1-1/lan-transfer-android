@@ -3,6 +3,7 @@ package com.manst.lantransfer.server.ftp
 import com.manst.lantransfer.core.FtpsMode
 import com.manst.lantransfer.core.TransferProtocol
 import com.manst.lantransfer.server.ProtocolServer
+import com.manst.lantransfer.server.ServerAuthGuard
 import com.manst.lantransfer.server.ServerBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -178,7 +179,8 @@ class FtpProtocolServer(private val transferProtocol: TransferProtocol) : Protoc
             explicitTls = ftps && binding.ftpsMode == FtpsMode.EXPLICIT,
             implicitTls = ftps && binding.ftpsMode == FtpsMode.IMPLICIT,
             sslContext = sslContext,
-            passiveBindAddress = InetAddress.getByName(BIND_ADDRESS)
+            passiveBindAddress = InetAddress.getByName(BIND_ADDRESS),
+            authGuard = ServerAuthGuard()
         )
     }
 
@@ -218,7 +220,9 @@ internal data class FtpServerContext(
     /** FTPS 时非空；FTP 时为 null。 */
     val sslContext: SSLContext?,
     /** 被动模式数据端口的监听地址（与 0.0.0.0 控制端口同网卡）。 */
-    val passiveBindAddress: InetAddress
+    val passiveBindAddress: InetAddress,
+    /** 服务端认证失败限流：同一来源多次失败后临时封禁（防止接收码被暴力枚举）。 */
+    val authGuard: ServerAuthGuard
 ) {
     val tlsEnabled: Boolean get() = protocol == TransferProtocol.FTPS && sslContext != null
 

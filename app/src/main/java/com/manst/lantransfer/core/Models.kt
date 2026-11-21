@@ -32,7 +32,11 @@ data class ServerProfile(
     val initialPath: String = "/",
     val ftpsMode: FtpsMode = FtpsMode.EXPLICIT,
     val passiveMode: Boolean = true,
-    val allowInsecureTls: Boolean = true,
+    /**
+     * FTPS 是否信任任意服务端证书（自签证书场景）。
+     * 出于安全考虑默认关闭（严格校验 + 主机名校验）；仅当用户显式选择时才放宽。
+     */
+    val allowInsecureTls: Boolean = false,
     val lastUsedAt: Long = 0L
 ) {
     val endpoint: String get() = "$host:$port"

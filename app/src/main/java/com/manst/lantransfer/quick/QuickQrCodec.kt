@@ -9,7 +9,7 @@ import java.util.Base64
  * 快速传文件二维码载荷编解码。
  *
  * 二维码内容 = Base64(UTF-8 JSON)，JSON 字段与局域网广播一致：
- * v（版本）、code（6 位接收码）、name（设备名）、addrs（IP 列表）、ftp/ftps/ssh（端口）、protocols（协议）。
+ * v（版本）、code（8 位接收码，兼容旧版 6 位）、name（设备名）、addrs（IP 列表）、ftp/ftps/ssh（端口）、protocols（协议）。
  * 不在二维码中携带临时帐号密码——接收端用接收码派生出相同的临时凭据。
  */
 object QuickQrCodec {

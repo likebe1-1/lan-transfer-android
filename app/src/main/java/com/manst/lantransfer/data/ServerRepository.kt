@@ -152,7 +152,8 @@ class JsonServerRepository(private val storageFile: File) : ServerRepository {
             initialPath = RemotePath.normalize(json.optString(KEY_INITIAL_PATH, RemotePath.ROOT)),
             ftpsMode = parseEnum(json.optString(KEY_FTPS_MODE), FtpsMode.EXPLICIT),
             passiveMode = json.optBoolean(KEY_PASSIVE_MODE, true),
-            allowInsecureTls = json.optBoolean(KEY_ALLOW_INSECURE_TLS, true),
+            // 安全默认：历史配置未显式开启时按“严格校验”处理，避免静默降级信任任意证书
+            allowInsecureTls = json.optBoolean(KEY_ALLOW_INSECURE_TLS, false),
             lastUsedAt = json.optLong(KEY_LAST_USED_AT, 0L).coerceAtLeast(0L)
         )
     }

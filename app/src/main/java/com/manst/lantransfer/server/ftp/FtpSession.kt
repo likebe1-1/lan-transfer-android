@@ -169,6 +169,12 @@ internal class FtpSession(
 
     private fun handleUser(argument: String) {
         val user = argument.trim()
+        if (user.isNotEmpty() && serverContext.authGuard.isLocked(remoteAddress())) {
+            pendingUser = null
+            loggedIn = false
+            sendReply("421 Too many failed login attempts, try again later")
+            return
+        }
         pendingUser = user.ifEmpty { null }
         loggedIn = false
         if (user.isEmpty()) {
@@ -184,16 +190,39 @@ internal class FtpSession(
             sendReply("503 Login with USER first")
             return
         }
+        val remote = remoteAddress()
+        // 服务端限流：同一来源多次认证失败后临时拒绝，防止接收码被暴力枚举
+        if (serverContext.authGuard.isLocked(remote)) {
+            pendingUser = null
+            loggedIn = false
+            sendReply("421 Too many failed login attempts, try again later")
+            return
+        }
         pendingUser = null
         if (user == serverContext.username && argument == serverContext.password) {
+            serverContext.authGuard.recordSuccess(remote)
             loggedIn = true
             cwd = ROOT
             sendReply("230 Login successful")
         } else {
+            val locked = serverContext.authGuard.recordFailure(remote, user)
             loggedIn = false
-            sendReply("530 Login incorrect")
+            if (locked) {
+                sendReply("421 Too many failed login attempts, try again later")
+            } else {
+                sendReply("530 Login incorrect")
+            }
         }
     }
+
+    /** 控制连接对端地址（用于服务端认证限流）。 */
+    private fun remoteAddress(): String =
+        try {
+            controlSocket.inetAddress?.hostAddress ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
+
 
     private fun sendFeatures() {
         val features = mutableListOf(

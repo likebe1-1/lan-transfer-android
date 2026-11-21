@@ -349,3 +349,19 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - B（接收方）：扫码相机（zxing）→ `WifiSetupQrCodec.decode` → 请求 `NEARBY_WIFI_DEVICES`（API 33+）/`ACCESS_FINE_LOCATION`（≤32）与相机权限 → `WifiNetworkSpecifier.Builder().setSsid().setWpa2Passphrase()` + `ConnectivityManager.requestNetwork()`（30s 超时）；`onAvailable` 后 `bindProcessToNetwork(network)` 让后续快速传文件/网络工具走热点，断开/页面销毁时 `bindProcessToNetwork(null)`；
 - 连接为应用级 Wi-Fi：不修改系统 Wi-Fi 设置，其他 App 不受影响；页面提供「打开快速传文件（接收）」跳转；
 - 测试：`WifiSetupQrCodecTest` 覆盖编解码/非法载荷/开放网络/密码与 SSID 校验；`NetworkSetupSmokeTest` 覆盖入口与页面区块；实际加入热点需要两台真机验证。
+
+## 17. 安全加固（P0）
+
+### 17.1 凭据与令牌
+- `.gitee_token` 等访问令牌**禁止落盘**进仓库：`.gitignore` 已覆盖 `.gitee_token`、`*_token`、`*token.txt`、`.env*`；脚本统一从环境变量（`GITEE_TOKEN`）读取；
+- 误提交的令牌已通过 `git filter-branch` 从全部历史中移除并强推，令牌本身需在服务端吊销。
+
+### 17.2 FTPS 证书校验
+- `ServerProfile.allowInsecureTls` 默认 `false`（严格校验 + 主机名校验），历史配置未显式开启时按严格处理；
+- 仅用户显式勾选「信任任意证书」时才使用信任任意证书的 TrustManager；
+- 快速传文件的运行时自签证书会话为显式例外（用户主动发起、同网段、短生命周期）。
+
+### 17.3 接收码与服务端限流
+- 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；
+- 新增 `server/ServerAuthGuard`：按**来源 IP** 统计认证失败（5 次 / 10 分钟窗口 → 锁定 10 分钟），FTP（USER/PASS 阶段）与 SSHD（PasswordAuthenticator）均已接入；
+- 锁定期间即使密码正确也拒绝，攻击者更换用户名无法绕过；客户端 `QuickJoinAttemptLimiter` 保留用于即时 UI 反馈。

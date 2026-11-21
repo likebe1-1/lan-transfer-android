@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
  * ftp / ftps / ssh（三种监听端口，SFTP 与 SCP 共用 ssh）、protocols（协议名数组）、ts（发送时间戳）。
  *
  * v2 起广播**不携带接收码**：附近设备只能看到设备名/IP/端口/协议，连接时仍需发送方屏幕上的
- * 6 位接收码（或扫描发送页二维码）。解码对非法/未知/缺字段的报文一律返回 null，绝不抛异常；
+ * 接收码（或扫描发送页二维码）。解码对非法/未知/缺字段的报文一律返回 null，绝不抛异常；
  * 端口非法时回退到默认端口；旧版 v1 报文（携带接收码）一律忽略。
  */
 internal object QuickBeaconCodec {

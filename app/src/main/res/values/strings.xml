@@ -117,14 +117,14 @@
     <string name="quick_send_exit_dialog_message">返回会结束当前会话，对方将立即断开连接。</string>
     <string name="quick_send_exit_confirm">结束并返回</string>
     <string name="quick_send_idle_title">把文件发给附近的设备</string>
-    <string name="quick_send_idle_description">无需配置服务器：选择文件后会自动开启 FTP / FTPS / SFTP / SCP 服务，对方输入 6 位接收码即可连接。</string>
+    <string name="quick_send_idle_description">无需配置服务器：选择文件后会自动开启 FTP / FTPS / SFTP / SCP 服务，对方输入 8 位接收码即可连接。</string>
     <string name="quick_send_pick_files">选择要发送的文件</string>
     <string name="quick_send_max_files">一次最多选择 %1$d 个文件</string>
     <string name="quick_max_files_message">一次最多选择 %1$d 个文件，已选择前 %1$d 个</string>
     <string name="quick_send_retry_last">使用上次选择的 %1$d 个文件重试</string>
     <string name="quick_send_steps_title">使用步骤</string>
     <string name="quick_send_step_1">在本机选择要发送的文件</string>
-    <string name="quick_send_step_2">让对方打开「快速传文件 → 接收文件」，输入本页显示的 6 位接收码</string>
+    <string name="quick_send_step_2">让对方打开「快速传文件 → 接收文件」，输入本页显示的 8 位接收码</string>
     <string name="quick_send_step_3">对方接收后文件会保存到其系统下载目录；对方也可以把文件发回给你</string>
     <string name="quick_code_label">接收码</string>
     <string name="quick_send_code_copied">接收码已复制</string>
@@ -173,7 +173,7 @@
     <string name="quick_recv_no_device_desc">请确认对方已开启发送会话，或使用下方「手动输入」连接。</string>
     <string name="quick_recv_manual_title">手动输入</string>
     <string name="label_peer_ip">对方 IP 地址</string>
-    <string name="label_six_digit_code">6 位接收码</string>
+    <string name="label_six_digit_code">8 位接收码</string>
     <string name="quick_recv_protocol_hint">「自动」会按加密优先尝试 SFTP → SCP → FTPS → FTP</string>
     <string name="quick_connecting">连接中…</string>
     <string name="quick_recv_connecting_title">正在连接…</string>
@@ -199,7 +199,7 @@
     <string name="quick_recv_sent_count">已发送（%1$d）</string>
     <string name="quick_recv_ports_line">FTP %1$d / FTPS %2$d / SSH %3$d</string>
     <string name="quick_recv_code_dialog_title">输入接收码</string>
-    <string name="quick_recv_code_dialog_message">输入对方屏幕上的 6 位接收码</string>
+    <string name="quick_recv_code_dialog_message">输入对方屏幕上的 8 位接收码</string>
     <string name="quick_recv_code_dialog_device">设备：%1$s</string>
     <string name="transfer_empty_title">队列为空</string>
     <string name="transfer_empty_desc">在服务器浏览页下载或上传文件后，任务会出现在这里</string>

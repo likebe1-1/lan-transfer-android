@@ -42,8 +42,11 @@ import com.manst.lantransfer.ui.components.ProtocolChip
 /** 接收码展示格式：6 位数字按「123 456」分组，方便口头/手动输入。 */
 fun formatSessionCode(code: String): String {
     val trimmed = code.trim()
-    if (trimmed.length != 6) return trimmed
-    return trimmed.substring(0, 3) + " " + trimmed.substring(3)
+    return when (trimmed.length) {
+        8 -> trimmed.substring(0, 4) + " " + trimmed.substring(4)
+        6 -> trimmed.substring(0, 3) + " " + trimmed.substring(3)
+        else -> trimmed
+    }
 }
 
 /** 手动连接的协议选项文案；null 表示自动选择。 */

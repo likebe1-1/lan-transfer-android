@@ -1,5 +1,6 @@
 package com.manst.lantransfer.server.ssh
 
+import com.manst.lantransfer.server.ServerAuthGuard
 import com.manst.lantransfer.server.ServerBinding
 import com.manst.lantransfer.server.SshServerComponent
 import kotlinx.coroutines.Dispatchers

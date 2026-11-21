@@ -14,7 +14,11 @@ object QuickTransferDefaults {
     const val BEACON_PORT = 47823
 
     /** 接收码长度（纯数字）。 */
-    const val CODE_LENGTH = 6
+    /** 新的接收码长度（8 位数字；沿用 6 位是为了兼容旧版本扫码/输入）。 */
+    const val CODE_LENGTH = 8
+
+    /** 兼容旧版本的接收码长度（仍接受 6 位输入）。 */
+    const val LEGACY_CODE_LENGTH = 6
 
     /** 会话可用的四种协议。 */
     val PROTOCOLS: List<TransferProtocol> = listOf(
@@ -50,18 +54,31 @@ data class QuickCredentials(
 object QuickSessionCode {
 
     fun generate(random: Random = Random.Default): String {
-        val value = random.nextInt(100_000, 1_000_000)
+        // 新会话使用 8 位接收码（1e8 空间，比 6 位多 100 倍）
+        val value = random.nextLong(10_000_000L, 100_000_000L)
         return value.toString()
     }
 
-    /** 规范化用户输入的接收码：去掉空格/横线，必须为 6 位数字，否则返回 null。 */
+    /** 规范化用户输入的接收码：去掉空格/横线，必须是 8 位（当前）或 6 位（兼容旧版本）数字。 */
     fun normalize(input: String?): String? {
         if (input.isNullOrBlank()) return null
         val digits = input.filter { it.isDigit() }
-        return if (digits.length == QuickTransferDefaults.CODE_LENGTH) digits else null
+        return if (digits.length == QuickTransferDefaults.CODE_LENGTH ||
+            digits.length == QuickTransferDefaults.LEGACY_CODE_LENGTH
+        ) {
+            digits
+        } else {
+            null
+        }
     }
 
-    /** 由接收码派生服务器临时帐号（发送端设置到本机服务器，接收端用同样值登录）。 */
+    /**
+     * 由接收码派生服务器临时帐号（发送端设置到本机服务器，接收端用同样值登录）。
+     *
+     * 说明：派生盐是公开常量（安装包内可见），因此**安全性来自接收码本身的熵**——
+     * 当前 8 位接收码（1e8 空间）配合服务端认证失败限流（[com.manst.lantransfer.server.ServerAuthGuard]）
+     * 已能有效抵御在线暴力猜测；离线穷举需要拿到服务器密码 hash，而临时帐号每次会话随机。
+     */
     fun deriveCredentials(code: String): QuickCredentials {
         val normalized = normalize(code) ?: code.trim()
         val digest = MessageDigest.getInstance("SHA-256")

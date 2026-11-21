@@ -32,7 +32,7 @@ import java.net.ServerSocket
  * 快捷传输发送端默认实现。
  *
  * 一次会话的完整流程：
- * 1. 生成 6 位接收码，用 [QuickSessionCode.deriveCredentials] 派生临时帐号（双方算法一致，无需手动配置）；
+ * 1. 生成 8 位接收码，用 [QuickSessionCode.deriveCredentials] 派生临时帐号（双方算法一致，无需手动配置）；
  * 2. 选择三个空闲端口（优先 [QuickTransferDefaults.DEFAULT_FTP_PORT] / DEFAULT_FTPS_PORT / DEFAULT_SSH_PORT，
  *    被占用则逐个 +1；SFTP 与 SCP 共用 ssh 端口）；
  * 3. 把用户选择的文件复制进会话目录（externalFilesDir/quick-send/接收码）：普通文件走

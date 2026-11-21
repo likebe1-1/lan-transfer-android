@@ -100,7 +100,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 接收端快捷传文件页：
- * 自动发现附近发送端（点击即连）或手动输入 IP + 6 位接收码；
+ * 自动发现附近发送端（点击即连）或手动输入 IP + 接收码；
  * 连接后列出对方文件，支持全部接收/单个接收、进度、已保存清单、失败重试，并可反向发送文件给对方。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -114,7 +114,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var disconnectThenExit by remember { mutableStateOf(false) }
     var exitAfterLeave by remember { mutableStateOf(false) }
-    // 广播不再携带接收码：点击附近设备后弹窗输入对方屏幕上的 6 位接收码
+    // 广播不再携带接收码：点击附近设备后弹窗输入对方屏幕上的接收码
     var pendingJoinInfo by remember { mutableStateOf<QuickSessionInfo?>(null) }
 
     SnackbarMessageEffect(messages = viewModel.messages, snackbarHostState = snackbarHostState)
@@ -301,7 +301,7 @@ fun QuickReceiveScreen(viewModel: QuickReceiveViewModel, onBack: () -> Unit) {
     }
 }
 
-/** 点击附近设备后输入对方屏幕上的 6 位接收码（广播已不再携带接收码）。 */
+/** 点击附近设备后输入对方屏幕上的接收码（广播已不再携带接收码）。 */
 @Composable
 private fun ReceiveCodeDialog(
     deviceName: String,

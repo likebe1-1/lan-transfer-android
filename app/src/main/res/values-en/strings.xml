@@ -117,14 +117,14 @@
     <string name="quick_send_exit_dialog_message">Going back ends the current session and the other device will disconnect immediately.</string>
     <string name="quick_send_exit_confirm">End and go back</string>
     <string name="quick_send_idle_title">Send files to a nearby device</string>
-    <string name="quick_send_idle_description">No server setup needed: files are served over FTP / FTPS / SFTP / SCP automatically, and the other device can connect with a 6-digit receive code.</string>
+    <string name="quick_send_idle_description">No server setup needed: files are served over FTP / FTPS / SFTP / SCP automatically, and the other device can connect with a 8-digit receive code.</string>
     <string name="quick_send_pick_files">Choose files to send</string>
     <string name="quick_send_max_files">You can select up to %1$d files at a time</string>
     <string name="quick_max_files_message">You can select up to %1$d files at a time; only the first %1$d are selected</string>
     <string name="quick_send_retry_last">Retry with the %1$d files selected earlier</string>
     <string name="quick_send_steps_title">How it works</string>
     <string name="quick_send_step_1">Choose the files to send on this device</string>
-    <string name="quick_send_step_2">Ask the other device to open “Quick Transfer → Receive files” and enter the 6-digit receive code shown here</string>
+    <string name="quick_send_step_2">Ask the other device to open “Quick Transfer → Receive files” and enter the 8-digit receive code shown here</string>
     <string name="quick_send_step_3">Received files are saved to the Downloads folder on the other device; that device can also send files back to you</string>
     <string name="quick_code_label">Receive code</string>
     <string name="quick_send_code_copied">Receive code copied</string>
@@ -173,7 +173,7 @@
     <string name="quick_recv_no_device_desc">Make sure the other device has started a send session, or connect with “Manual input” below.</string>
     <string name="quick_recv_manual_title">Manual input</string>
     <string name="label_peer_ip">Sender IP address</string>
-    <string name="label_six_digit_code">6-digit receive code</string>
+    <string name="label_six_digit_code">8-digit receive code</string>
     <string name="quick_recv_protocol_hint">“Auto” tries encrypted protocols first: SFTP → SCP → FTPS → FTP</string>
     <string name="quick_connecting">Connecting…</string>
     <string name="quick_recv_connecting_title">Connecting…</string>
@@ -199,7 +199,7 @@
     <string name="quick_recv_sent_count">Sent (%1$d)</string>
     <string name="quick_recv_ports_line">FTP %1$d / FTPS %2$d / SSH %3$d</string>
     <string name="quick_recv_code_dialog_title">Enter receive code</string>
-    <string name="quick_recv_code_dialog_message">Enter the 6-digit receive code shown on the other device</string>
+    <string name="quick_recv_code_dialog_message">Enter the 8-digit receive code shown on the other device</string>
     <string name="quick_recv_code_dialog_device">Device: %1$s</string>
     <string name="transfer_empty_title">Queue is empty</string>
     <string name="transfer_empty_desc">Downloads and uploads from the browser will appear here</string>

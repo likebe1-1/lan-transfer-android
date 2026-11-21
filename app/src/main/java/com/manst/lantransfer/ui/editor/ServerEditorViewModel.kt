@@ -36,7 +36,7 @@ data class ServerEditorUiState(
     val initialPath: String = RemotePath.ROOT,
     val ftpsMode: FtpsMode = FtpsMode.EXPLICIT,
     val passiveMode: Boolean = true,
-    val allowInsecureTls: Boolean = true,
+    val allowInsecureTls: Boolean = false,
     val nameError: String? = null,
     val hostError: String? = null,
     val portError: String? = null,
