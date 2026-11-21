@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.manst.lantransfer.core.TransferProtocol
 import com.manst.lantransfer.ui.components.ProtocolChip
 
-/** 接收码展示格式：6 位数字按「123 456」分组，方便口头/手动输入。 */
+/** 接收码展示格式：8 位按「1234 5678」分组（旧版 6 位按「123 456」），方便口头/手动输入。 */
 fun formatSessionCode(code: String): String {
     val trimmed = code.trim()
     return when (trimmed.length) {

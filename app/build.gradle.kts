@@ -88,7 +88,10 @@ android {
     }
 
     lint {
-        // 本机 lint 在 JDK 21 下可运行，但为节省构建时间不在 release 阶段强制跑 lintVital
+        // 本机（Windows + JDK 21）实测 lintAnalyzeDebugAndroidTest 会崩（Gradle lint worker 异常），
+        // 因此不在本地 release 构建中强制跑 lintVital；静态检查交由 CI（Linux/JDK17）执行：
+        //   ./gradlew lintDebug lintRelease
+        // 在 CI 恢复前，本地提交前以单元测试 + 设备测试为主。
         checkReleaseBuilds = false
         abortOnError = false
     }

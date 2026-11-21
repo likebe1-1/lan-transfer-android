@@ -439,3 +439,20 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - Kotlin Android 插件统一由根工程通过 version catalog 声明（`libs.plugins.kotlin.android`），子模块使用无版本 id；
 - 新增 `scripts/check_release_consistency.py`：校验 Gradle 版本号 ↔ `docs/update.json` ↔ 本地 Release APK 的 size/SHA-256
   （默认 APK 差异仅警告，发布前加 `--strict-apk` 视为错误），同时校验清单一律 HTTPS 且带签名。
+
+## 20. 已知可接受风险与清理记录
+
+### 20.1 监听 0.0.0.0（已接受风险）
+- FTP/FTPS/SFTP/SCP 服务端绑定 `0.0.0.0`，设计目标是「同一局域网任意设备可连」；
+- 风险已由以下措施大幅降低：8/6 位接收码 + 服务端认证失败锁定（5 次/10 分钟，按 IP）、
+  加密协议自动优先、FTPS/SFTP 证书/主机密钥固定；
+- 仍有残余：同网段任意主机可发起连接尝试（受限于限流）、服务暴露面不区分网段；
+- 后续可选项：仅接受私有网段来源 IP、每服务连接数上限、可选「仅可信 Wi-Fi」开关。
+
+### 20.2 构建清理（P2）
+- `app/build.gradle.kts` 的 signingConfigs/buildTypes 花括号排版已修正；
+- `proguard-rules.pro` 由整包 `-keep` 改为 `-keep,allowoptimization`：保留反射所需的类名/签名，
+  同时允许 R8 继续优化；已实测 release 构建通过、模拟器安装启动无崩溃；
+- 本机（Windows + JDK 21）`:app:lintDebug` 的 lint worker 会崩，故 `checkReleaseBuilds` 仍为 false，
+  静态检查移交 CI（Linux/JDK17）执行；注释已写明原因与命令；
+- 接收码展示分组注释与实现一致：8 位「1234 5678」、旧版 6 位「123 456」，并有单元测试锁定。
