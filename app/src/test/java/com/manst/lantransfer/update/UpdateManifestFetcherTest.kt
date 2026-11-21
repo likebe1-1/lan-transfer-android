@@ -48,10 +48,12 @@ class UpdateManifestFetcherTest {
     @Test
     fun fetchFirst_fallsBackToWorkingSource() {
         val info = UpdateManifestFetcher.fetchFirst(
+            allowNonHttps = true,
             urls = listOf(baseUrl + "/missing", baseUrl + "/broken", baseUrl + "/manifest"),
             supportedAbis = listOf("arm64-v8a"),
             connectTimeoutMillis = 2_000,
-            readTimeoutMillis = 2_000
+            readTimeoutMillis = 2_000,
+            allowUnsigned = true
         )
         assertNotNull(info)
         assertEquals("2.2.0", info!!.manifest.versionName)
@@ -61,6 +63,7 @@ class UpdateManifestFetcherTest {
     @Test
     fun fetchFirst_allSourcesFail_returnsNull() {
         val info = UpdateManifestFetcher.fetchFirst(
+            allowNonHttps = true,
             urls = listOf(baseUrl + "/missing", baseUrl + "/broken", "http://127.0.0.1:1/never"),
             supportedAbis = listOf("arm64-v8a"),
             connectTimeoutMillis = 1_000,

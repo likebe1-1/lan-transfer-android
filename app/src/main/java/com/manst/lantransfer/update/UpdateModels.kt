@@ -46,19 +46,22 @@ data class UpdateUiState(
 
 /** 更新清单来源（多镜像依次尝试，国内网络下 GitHub 直连可能失败）。 */
 object UpdateSources {
-    /** update.json 的多个来源：jsDelivr -> GitHub raw -> ghproxy 镜像。 */
+    /**
+     * update.json 的多个来源（全部 HTTPS）。
+     * 清单必须带 Ed25519 签名（见 [UpdateManifestVerifier]），因此即使经过第三方镜像也能保证完整性。
+     */
     val manifestUrls: List<String> = listOf(
+        "https://gitee.com/likebe1-1/lanlink-android/raw/master/update.json",
         "https://cdn.jsdelivr.net/gh/likebe1-1/lan-transfer-android@master/docs/update.json",
         "https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json",
-        "https://ghproxy.net/https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json",
-        "https://ghfast.top/https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json"
+        "https://ghproxy.net/https://raw.githubusercontent.com/likebe1-1/lan-transfer-android/master/docs/update.json"
     )
 
-    /** GitHub 下载地址的镜像前缀（按顺序尝试）。 */
+    /** GitHub 下载地址的镜像前缀（按顺序尝试；空串表示直连）。 */
     val mirrorPrefixes: List<String> = listOf(
         "",
         "https://ghproxy.net/",
-        "https://ghfast.top/"
+        "https://gh-proxy.com/"
     )
 
     const val RELEASE_PAGE_URL = "https://github.com/likebe1-1/lan-transfer-android/releases"

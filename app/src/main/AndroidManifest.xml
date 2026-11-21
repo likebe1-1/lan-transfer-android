@@ -16,6 +16,8 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 本机服务器（FTP/FTPS/SFTP/SCP）为长期运行服务；Android 15 起 dataSync 最长 6 小时，改用 specialUse -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 快速传文件扫码加入 -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -92,7 +94,11 @@
         <service
             android:name=".server.LocalServerService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="本地局域网文件服务器（FTP/FTPS/SFTP/SCP），需要长期运行以便其他设备随时访问" />
+        </service>
     </application>
 
 </manifest>

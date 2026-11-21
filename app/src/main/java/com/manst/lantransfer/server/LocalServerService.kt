@@ -76,7 +76,8 @@ class LocalServerService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 buildNotification(state),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                // 长驻服务器：使用 specialUse（Android 15 起 dataSync 最长 6 小时，会被系统掐断）
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
             true
         } catch (e: RuntimeException) {

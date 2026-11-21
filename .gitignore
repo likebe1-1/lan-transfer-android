@@ -45,3 +45,7 @@ dsh-plugins/
 !.env.example
 *_token
 *token.txt
+
+# 更新清单签名私钥（绝不提交）
+.update-signing/
+*.pem

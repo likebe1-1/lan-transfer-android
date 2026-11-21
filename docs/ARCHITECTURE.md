@@ -370,3 +370,19 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；
 - 新增 `server/ServerAuthGuard`：按**来源 IP** 统计认证失败（5 次 / 10 分钟窗口 → 锁定 10 分钟），FTP（USER/PASS 阶段）与 SSHD（PasswordAuthenticator）均已接入；
 - 锁定期间即使密码正确也拒绝，攻击者更换用户名无法绕过；客户端 `QuickJoinAttemptLimiter` 保留用于即时 UI 反馈。
+
+## 18. P1 加固
+
+### 18.1 前台服务类型（Android 15）
+- 传输服务保持 `dataSync`（短时同步任务）；
+- 本机服务器 `LocalServerService` 改为 `specialUse`，并声明 `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`，
+  避免 Android 15 对 `dataSync` 的 6 小时限制掐断长驻 FTP/SFTP 服务。
+
+### 18.2 更新通道完整性
+- 清单只接受 **HTTPS** 来源（`UpdateManifestFetcher.isHttps`），HTTP 一律跳过；
+- 清单支持 **Ed25519 签名**（`UpdateManifestVerifier`）：递归去 `sig`、键排序、紧凑 JSON 作为规范化载荷；
+  签名端 `scripts/canonical_manifest.py` 使用同一规则；
+- 签名无效 → 拒绝；未签名清单默认拒绝（`allowUnsigned=false`），仅测试可放开；
+- 公钥内置在 App（`PUBLIC_KEY_BASE64`），私钥保存在项目外 `.update-signing/`（已 gitignore）；
+- 下载 APK 仍校验大小 + SHA-256 + 签名，形成「清单签名 → 文件 hash → APK 签名」三层校验；
+- 发布流程：`python scripts/sign_update_manifest.py --key .update-signing/update_signing_private.pem`。

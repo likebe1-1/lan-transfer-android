@@ -76,7 +76,7 @@
 - **系统分享直达快速传**：在相册/文件管理器选择文件后「分享」到本应用，直接进入快速传文件发送页并用这些文件开启会话。
 - **扫码快速传输**：发送页显示接收码二维码，接收页「扫码加入」用相机扫描自动连接；二维码外层载荷为 **Base64(UTF-8 JSON)**（JSON 含接收码、设备名、IP、端口、协议），不携带明文密码。
 - **快速传文件安全加固**：UDP 广播只携带设备名/IP/端口/协议，**不含接收码**；接收方需点击设备后输入接收码（**8 位**，兼容旧版 6 位）；**服务端**对同一来源连续 5 次认证失败锁定 10 分钟（FTP/FTPS/SFTP/SCP 全部生效，可抵御用任意客户端暴力猜码），客户端也有同样的限流。
-- **应用内更新**：启动时静默检查 `docs/update.json`（jsDelivr / GitHub raw / ghproxy 多源），有新版本弹窗展示更新日志；下载走 GitHub Releases 多镜像、校验 SHA-256 与 APK 签名后拉起系统安装；GitHub 不可用时提供**蓝奏云浏览器下载**兜底（链接与密码随清单下发）。
+- **应用内更新**：启动时静默检查 `docs/update.json`（Gitee / jsDelivr / GitHub raw / ghproxy 多源，**仅 HTTPS**，且要求 **Ed25519 签名**），有新版本弹窗展示更新日志；下载走 GitHub Releases 多镜像、校验 SHA-256 与 APK 签名后拉起系统安装；GitHub 不可用时提供**蓝奏云浏览器下载**兜底（链接与密码随清单下发）。
 - **中英文界面**：所有界面文案已抽取到 `strings.xml` 并配齐 `values-en/`（294 条），系统语言为英文时自动显示英文界面（中文环境保持中文）；动态提示（Snackbar/错误文案）暂时仍为中文。
 - **快速传文件接收断点续传**：接收端先写 App 私有分片，FTP/FTPS/SFTP 从断点续传，成功后复制到系统下载目录；失败/取消保留分片，重试自动续传，7 天孤儿分片自动清理（SCP 不支持偏移，仍整文件重传）。
 - **收到文件自动保留**：快速传文件会话结束时，对方发回的文件自动导出到系统「下载」目录（保留子目录结构），不再随会话目录删除；手动导出过的文件不会重复导出。
@@ -391,6 +391,7 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 
 ## 已知限制
 
+- **更新签名密钥**：`scripts/gen_update_signing_key.py` 生成，私钥在项目外 `.update-signing/`（gitignore），公钥内置 App；每次发布需 `scripts/sign_update_manifest.py` 重新签名清单；
 - **签名材料**：keystore 与口令保存在项目外（默认 `%USERPROFILE%\.lanlink\`，可用 `scripts/migrate_keystore_to_userdir.ps1` 迁移），构建时优先读取环境变量 `LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`，其次读用户目录 `keystore.properties`，最后才回退项目内文件（已 gitignore）。项目目录内不再保存明文密钥库；
 - **FTPS 证书校验**：默认严格校验证书与主机名（`allowInsecureTls` 默认关闭）；只有用户在服务器编辑页显式勾选「信任任意证书」时才放宽（局域网自签证书场景）。快速传文件会话使用运行时自签证书，属显式例外；
 - **协议本身限制**：SCP 不提供断点续传（失败/中断后从 0 重传，应用会自动回退到 SFTP 优先）；SCP 的列目录/建目录/重命名/删除依赖远端 POSIX shell，无 shell 的服务器只能传输文件。

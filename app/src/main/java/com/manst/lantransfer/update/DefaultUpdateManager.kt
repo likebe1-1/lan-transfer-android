@@ -37,6 +37,11 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutableState = MutableStateFlow(UpdateUiState())
 
+    init {
+        // 让更新清单拉取过程的关键拒绝原因进入 logcat，便于排查（非 HTTPS / 签名无效 / 未签名）
+        UpdateManifestFetcher.logger = { message -> Log.w(TAG, message) }
+    }
+
     override val state: StateFlow<UpdateUiState> = mutableState.asStateFlow()
 
     private val packageManager get() = appContext.packageManager
