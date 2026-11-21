@@ -110,6 +110,8 @@ data class QuickSessionInfo(
      * 接收方据此固定证书，避免「信任任意证书」被中间人利用；旧版本发送方为 null。
      */
     val ftpsFingerprintSha256: String? = null,
+    /** SSH（SFTP/SCP）服务端主机密钥的 SHA-256 指纹；旧版本发送方为 null。 */
+    val sshHostKeySha256: String? = null,
     /** 本地收到的时间戳（毫秒），用于过期清理。 */
     val receivedAt: Long = System.currentTimeMillis()
 ) {
@@ -148,6 +150,8 @@ data class QuickSendState(
     val sendingFiles: List<QuickFile> = emptyList(),
     /** 对方上传到本机的文件（互传：对方也能发给本机）。 */
     val receivedFiles: List<QuickFile> = emptyList(),
+    /** SSH 服务端主机密钥指纹（启动后探测得到，用于接收方固定主机密钥）。 */
+    val sshHostKeySha256: String? = null,
     val error: String? = null
 ) {
     val isActive: Boolean get() = phase == QuickSendPhase.WAITING
@@ -170,7 +174,8 @@ data class QuickSendState(
                     runCatching { com.manst.lantransfer.server.ftp.FtpServerTls.certificateSha256Hex() }.getOrNull()
                 } else {
                     null
-                }
+                },
+                sshHostKeySha256 = sshHostKeySha256
             )
         } else {
             null
@@ -223,7 +228,9 @@ data class QuickJoinTarget(
     val ftpsPort: Int = QuickTransferDefaults.DEFAULT_FTPS_PORT,
     val sshPort: Int = QuickTransferDefaults.DEFAULT_SSH_PORT,
     /** 发送方 FTPS 证书指纹（可选）：非空时接收方严格固定该证书。 */
-    val ftpsFingerprintSha256: String? = null
+    val ftpsFingerprintSha256: String? = null,
+    /** 发送方 SSH 主机密钥指纹（可选）：非空时接收方严格固定 SFTP/SCP 主机密钥。 */
+    val sshHostKeySha256: String? = null
 ) {
     fun portFor(protocol: TransferProtocol): Int = when (protocol) {
         TransferProtocol.FTP -> ftpPort

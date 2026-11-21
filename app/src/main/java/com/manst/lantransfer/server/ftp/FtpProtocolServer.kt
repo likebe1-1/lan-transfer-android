@@ -93,7 +93,11 @@ class FtpProtocolServer(private val transferProtocol: TransferProtocol) : Protoc
                 controlServer = null
                 acceptor = acceptorThread
                 acceptorThread = null
-                activeSessions = sessions.toList()
+                // 用 COW 迭代器做快照：toList() 的底层 toArray 在并发 clear 时偶发越界
+                activeSessions = ArrayList<FtpSession>(sessions.size).apply {
+                    val iterator = sessions.iterator()
+                    while (iterator.hasNext()) add(iterator.next())
+                }
                 sessions.clear()
                 currentBinding = null
             }

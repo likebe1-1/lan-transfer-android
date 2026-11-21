@@ -50,6 +50,7 @@ internal object QuickBeaconCodec {
                 .put("ssh", info.sshPort)
                 .put("protocols", JSONArray(info.protocols.map { it.name }))
                 .put("fp", info.ftpsFingerprintSha256.orEmpty())
+                .put("hk", info.sshHostKeySha256.orEmpty())
                 .put("ts", System.currentTimeMillis())
             json.toString()
         } catch (e: Exception) {
@@ -93,6 +94,8 @@ internal object QuickBeaconCodec {
             sshPort = validPort(json.optInt("ssh", QuickTransferDefaults.DEFAULT_SSH_PORT), QuickTransferDefaults.DEFAULT_SSH_PORT),
             protocols = protocols,
             ftpsFingerprintSha256 = json.optString("fp", "").trim()
+                .takeIf { com.manst.lantransfer.core.CertificatePinning.isValidFingerprint(it) },
+            sshHostKeySha256 = json.optString("hk", "").trim()
                 .takeIf { com.manst.lantransfer.core.CertificatePinning.isValidFingerprint(it) },
             receivedAt = System.currentTimeMillis()
         )

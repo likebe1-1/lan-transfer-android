@@ -65,11 +65,19 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         if (closed) throw TransferCancelledException()
         if (connected && session?.isConnected == true) return
 
+        val pinnedHostKey = profile.pinnedSshHostKeySha256
+            ?.takeIf { SshHostKeyPinning.isValidFingerprint(it) }
+        val jsch = JSch().apply {
+            if (pinnedHostKey != null) {
+                // 快速传文件：只接受发送方广告的主机密钥指纹，防止中间人冒充
+                hostKeyRepository = SshHostKeyPinning.PinnedRepository(pinnedHostKey)
+            }
+        }
         val sshSession = try {
-            JSch().getSession(profile.username, profile.host, profile.port).apply {
+            jsch.getSession(profile.username, profile.host, profile.port).apply {
                 setPassword(profile.password)
-                // 本版不固定 SFTP/SCP 主机密钥指纹，仅接受任意主机密钥（见架构文档已知限制）
-                setConfig("StrictHostKeyChecking", "no")
+                // 有指纹时严格校验；无指纹（旧版本对端/普通服务器）沿用首次信任
+                setConfig("StrictHostKeyChecking", if (pinnedHostKey != null) "yes" else "no")
                 setConfig("PreferredAuthentications", "password")
                 setTimeout(READ_TIMEOUT_MS)
                 connect(CONNECT_TIMEOUT_MS)

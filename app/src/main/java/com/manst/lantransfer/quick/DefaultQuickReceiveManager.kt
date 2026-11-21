@@ -254,7 +254,12 @@ class DefaultQuickReceiveManager(
                     port = port,
                     username = credentials.username,
                     password = credentials.password,
-                    pinnedFingerprint = if (protocol == TransferProtocol.FTPS) target.ftpsFingerprintSha256 else null
+                    pinnedFingerprint = if (protocol == TransferProtocol.FTPS) target.ftpsFingerprintSha256 else null,
+                    pinnedSshHostKey = if (protocol == TransferProtocol.SFTP || protocol == TransferProtocol.SCP) {
+                        target.sshHostKeySha256
+                    } else {
+                        null
+                    }
                 )
             )
             try {
@@ -273,7 +278,8 @@ class DefaultQuickReceiveManager(
                     ftpsPort = target.ftpsPort,
                     sshPort = target.sshPort,
                     protocols = listOf(protocol),
-                    ftpsFingerprintSha256 = target.ftpsFingerprintSha256
+                    ftpsFingerprintSha256 = target.ftpsFingerprintSha256,
+                    sshHostKeySha256 = target.sshHostKeySha256
                 )
                 mutableState.update { current ->
                     current.copy(
@@ -284,8 +290,13 @@ class DefaultQuickReceiveManager(
                         error = null,
                         message = buildString {
                             append("已通过 " + protocol.label + " 连接对方设备")
-                            if (protocol == TransferProtocol.FTPS && target.ftpsFingerprintSha256.isNullOrBlank()) {
-                                append("（对方为旧版本，未提供证书指纹，本次未校验证书）")
+                            val legacyNoPin = when (protocol) {
+                                TransferProtocol.FTPS -> target.ftpsFingerprintSha256.isNullOrBlank()
+                                TransferProtocol.SFTP, TransferProtocol.SCP -> target.sshHostKeySha256.isNullOrBlank()
+                                TransferProtocol.FTP -> false
+                            }
+                            if (legacyNoPin) {
+                                append("（对方为旧版本，未提供指纹，本次未校验证书/主机密钥）")
                             }
                         }
                     )
@@ -338,7 +349,8 @@ class DefaultQuickReceiveManager(
         port: Int,
         username: String,
         password: String,
-        pinnedFingerprint: String? = null
+        pinnedFingerprint: String? = null,
+        pinnedSshHostKey: String? = null
     ): ServerProfile = ServerProfile(
         name = "快捷传输 " + host,
         protocol = protocol,
@@ -353,6 +365,7 @@ class DefaultQuickReceiveManager(
         // 优先使用发送方广告的证书指纹做固定（防中间人）；仅当对方是旧版本、未提供指纹时
         // 才退回「信任任意证书」（此时 FTPS 只加密不认证，界面会提示）。
         pinnedCertificateSha256 = pinnedFingerprint,
+        pinnedSshHostKeySha256 = pinnedSshHostKey,
         allowInsecureTls = pinnedFingerprint.isNullOrBlank()
     )
 

@@ -73,4 +73,18 @@ class QuickQrCodecTest {
         assertEquals(QuickTransferDefaults.DEFAULT_FTP_PORT, decoded?.ftpPort)
         assertEquals(QuickTransferDefaults.PROTOCOLS, decoded?.protocols)
     }
+
+    @Test
+    fun roundTripsFingerprints() {
+        val info = QuickSessionInfo(
+            code = "12345678",
+            deviceName = "指纹设备",
+            addresses = listOf("192.168.1.50"),
+            ftpsFingerprintSha256 = "cd".repeat(32),
+            sshHostKeySha256 = "ef".repeat(32)
+        )
+        val decoded = requireNotNull(QuickQrCodec.decode(QuickQrCodec.encode(info)))
+        assertEquals("cd".repeat(32), decoded.ftpsFingerprintSha256)
+        assertEquals("ef".repeat(32), decoded.sshHostKeySha256)
+    }
 }

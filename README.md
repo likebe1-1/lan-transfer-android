@@ -395,6 +395,7 @@ scripts/               构建入口 gw.cmd / gw.ps1、客户端 E2E 服务端 e2
 - **更新签名密钥**：`scripts/gen_update_signing_key.py` 生成，私钥在项目外 `.update-signing/`（gitignore），公钥内置 App；每次发布需 `scripts/sign_update_manifest.py` 重新签名清单；
 - **签名材料**：keystore 与口令保存在项目外（默认 `%USERPROFILE%\.lanlink\`，可用 `scripts/migrate_keystore_to_userdir.ps1` 迁移），构建时优先读取环境变量 `LANT_KEYSTORE_FILE` / `LANT_KEYSTORE_PASSWORD` / `LANT_KEY_ALIAS` / `LANT_KEY_PASSWORD`，其次读用户目录 `keystore.properties`，最后才回退项目内文件（已 gitignore）。项目目录内不再保存明文密钥库；
 - **FTPS 证书校验**：默认严格校验证书与主机名（`allowInsecureTls` 默认关闭）；只有用户在服务器编辑页显式勾选「信任任意证书」时才放宽（局域网自签证书场景）。快速传文件会话使用运行时自签证书，属显式例外；
+- **快速传文件主机认证**：FTPS 与 SFTP/SCP 均通过「发送方下发证书/主机密钥指纹、接收方固定校验」防中间人；只有旧版本对端（无指纹）才退回首次信任并提示；
 - **协议本身限制**：SCP 不提供断点续传（失败/中断后从 0 重传，应用会自动回退到 SFTP 优先）；SCP 的列目录/建目录/重命名/删除依赖远端 POSIX shell，无 shell 的服务器只能传输文件。
 - **本机服务器**：仅密码认证、单用户、单个共享目录；FTP 服务端仅支持被动模式（PASV/EPSV），不支持主动模式；FTPS 使用进程内生成的自签名证书，App 进程重启后证书会重新生成（客户端需重新信任）；用户名/密码以明文存储在应用私有目录（其他应用无法读取，但未做加密）。
 - **共享目录位置**：位于应用外部私有目录（Android/data/…/files/share），卸载 App 会随之删除；其他设备上传文件后页面可见时约每 5 秒自动刷新，回到前台也会立即刷新（也可手动点「刷新」）。

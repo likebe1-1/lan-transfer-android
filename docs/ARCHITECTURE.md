@@ -369,7 +369,11 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
   接收方 `CertificatePinning` 只信任该指纹的证书（`ServerProfile.pinnedCertificateSha256`），
   中间人无法出示同指纹证书，因此不会再出现「只加密不认证」；
 - 仅当对方是旧版本（未提供指纹）时才退回信任任意证书，且界面连接成功消息会明确提示「本次未校验证书」；
-- 已知后续项：SFTP/SCP 的主机密钥目前仍是首次信任（TOFU）方式，尚未做指纹固定。
+- **SFTP/SCP 主机密钥固定（P0-1 新增）**：发送方用 `SshHostKeyProbe` 对本机 SSH 端口做一次真实密钥交换，
+  取到 JSch 视角的主机密钥线格式 blob 并计算 SHA-256 指纹，随二维码/广播（`hk` 字段）下发；
+  接收方 `ServerProfile.pinnedSshHostKeySha256` + `SshHostKeyPinning.PinnedRepository` 只接受该指纹，
+  `StrictHostKeyChecking=yes`；中间人无法出示同指纹主机密钥（除非持有发送方私钥）。
+  旧版本对端无指纹时退回首次信任，并在连接成功消息中明确提示「本次未校验证书/主机密钥」。
 
 ### 17.4 接收码与服务端限流
 - 接收码由 6 位升级为 **8 位**（1e8 空间），仍兼容旧版 6 位输入；

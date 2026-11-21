@@ -28,6 +28,7 @@ object QuickQrCodec {
             .put("ssh", info.sshPort)
             .put("protocols", JSONArray(info.protocols.map { it.name }))
             .put("fp", info.ftpsFingerprintSha256.orEmpty())
+            .put("hk", info.sshHostKeySha256.orEmpty())
         val bytes = json.toString().toByteArray(Charsets.UTF_8)
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
@@ -83,6 +84,8 @@ object QuickQrCodec {
             sshPort = json.optInt("ssh", QuickTransferDefaults.DEFAULT_SSH_PORT),
             protocols = if (protocols.isEmpty()) QuickTransferDefaults.PROTOCOLS else protocols,
             ftpsFingerprintSha256 = json.optString("fp", "").trim()
+                .takeIf { com.manst.lantransfer.core.CertificatePinning.isValidFingerprint(it) },
+            sshHostKeySha256 = json.optString("hk", "").trim()
                 .takeIf { com.manst.lantransfer.core.CertificatePinning.isValidFingerprint(it) }
         )
     }

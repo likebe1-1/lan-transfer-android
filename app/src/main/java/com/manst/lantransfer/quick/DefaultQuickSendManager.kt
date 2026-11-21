@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import android.util.Log
+import com.manst.lantransfer.core.TransferProtocol
 import com.manst.lantransfer.data.ShareFileNames
 import com.manst.lantransfer.server.LanAddress
 import com.manst.lantransfer.server.LocalServerConfig
@@ -206,6 +207,23 @@ class DefaultQuickSendManager(
             fileKey(it) to FileFingerprint(it.size, it.modifiedAt)
         }
         val deviceName = Build.MODEL?.trim().orEmpty().ifBlank { "Android 设备" }
+        // 探测 SSH 主机密钥指纹（供接收方固定，防中间人冒充）：仅启动了 SSH 端点才需要
+        val sshHostKeySha256 = if (runningEndpoints.any {
+                it.protocol == TransferProtocol.SFTP || it.protocol == TransferProtocol.SCP
+            }
+        ) {
+            withContext(Dispatchers.IO) {
+                SshHostKeyProbe.fingerprintSha256(
+                    port = serverState.endpoints
+                        .firstOrNull { it.protocol == TransferProtocol.SFTP || it.protocol == TransferProtocol.SCP }
+                        ?.port ?: 0,
+                    username = credentials.username,
+                    password = credentials.password
+                )
+            }
+        } else {
+            null
+        }
         mutableState.value = QuickSendState(
             phase = QuickSendPhase.WAITING,
             code = code,
@@ -214,7 +232,8 @@ class DefaultQuickSendManager(
             endpoints = runningEndpoints,
             protocols = protocols,
             sessionDirectory = directory.absolutePath,
-            sendingFiles = sendingFiles
+            sendingFiles = sendingFiles,
+            sshHostKeySha256 = sshHostKeySha256
         )
         val sessionInfo = mutableState.value.sessionInfo ?: return failStart("生成快捷会话信息失败")
         beacon = UdpBeaconBroadcaster().also { broadcaster ->

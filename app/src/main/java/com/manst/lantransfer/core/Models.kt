@@ -42,6 +42,11 @@ data class ServerProfile(
      * 用于快速传文件等自签名证书场景，替代「信任任意证书」。
      */
     val pinnedCertificateSha256: String? = null,
+    /**
+     * 可选的 SSH 主机密钥指纹（SHA-256 十六进制，对 SSH 公钥线格式 blob 计算）。
+     * 非空时 SFTP/SCP 只接受该主机密钥，用于快速传文件，避免中间人冒充发送方。
+     */
+    val pinnedSshHostKeySha256: String? = null,
     val lastUsedAt: Long = 0L
 ) {
     val endpoint: String get() = "$host:$port"
