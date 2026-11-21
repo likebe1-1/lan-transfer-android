@@ -388,3 +388,11 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 签名后的清单同时发布到 GitHub `docs/update.json` 与 Gitee `update.json`（Gitee raw 用原生域名，避免 CDN 广告跳转）；
 - 下载 APK 仍校验大小 + SHA-256 + 签名，形成「清单签名 → 文件 hash → APK 签名」三层校验；
 - 发布流程：`python scripts/sign_update_manifest.py --key .update-signing/update_signing_private.pem`。
+
+### 18.3 待验证 / 已知问题
+- 模拟器环境 DNS 污染：`gitee.com` 在模拟器内被解析到广告域名，导致 App 内 Gitee 清单源请求失败；
+  真机环境下用原生 gitee.com 域名可正常访问（已验证 curl 200 且签名校验通过）。
+- 更新清单的签名链路已用三条独立路径验证：
+  1. Python `canonical_manifest` + OpenSSL 验签；
+  2. Kotlin 纯实现 `Ed25519.verify` + 真实发布公钥（单测 `UpdateManifestSignatureTest`）；
+  3. Gitee 远端 raw 清单（curl 拉取 200、`sig` 字段存在）。
