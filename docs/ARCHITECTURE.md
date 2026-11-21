@@ -384,5 +384,7 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
   签名端 `scripts/canonical_manifest.py` 使用同一规则；
 - 签名无效 → 拒绝；未签名清单默认拒绝（`allowUnsigned=false`），仅测试可放开；
 - 公钥内置在 App（`PUBLIC_KEY_BASE64`），私钥保存在项目外 `.update-signing/`（已 gitignore）；
+- Ed25519 验签为**纯 Kotlin 实现**（`update/Ed25519.kt`）：Android 系统 Provider 不提供 Ed25519，改用自带实现；
+- 签名后的清单同时发布到 GitHub `docs/update.json` 与 Gitee `update.json`（Gitee raw 用原生域名，避免 CDN 广告跳转）；
 - 下载 APK 仍校验大小 + SHA-256 + 签名，形成「清单签名 → 文件 hash → APK 签名」三层校验；
 - 发布流程：`python scripts/sign_update_manifest.py --key .update-signing/update_signing_private.pem`。

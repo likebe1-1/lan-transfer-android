@@ -4,9 +4,6 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Base64
-import java.security.KeyFactory
-import java.security.Signature
-import java.security.spec.X509EncodedKeySpec
 
 /**
  * 用真实发布密钥验证「签名端(Python) ↔ 验签端(Kotlin canonicalPayload)」一致性。
@@ -25,12 +22,11 @@ class UpdateManifestSignatureTest {
         val manifest = SAMPLE_MANIFEST
         val json = JSONObject(manifest)
         json.put("sig", signatureB64)
-        val key = KeyFactory.getInstance("Ed25519")
-            .generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(publicKeyB64)))
-        val verifier = Signature.getInstance("Ed25519")
-        verifier.initVerify(key)
-        verifier.update(UpdateManifestVerifier.canonicalPayload(json).toByteArray(Charsets.UTF_8))
-        assertEquals(true, verifier.verify(Base64.getDecoder().decode(signatureB64)))
+        val publicKey = UpdateManifestVerifier.extractRawPublicKey(Base64.getDecoder().decode(publicKeyB64))
+        val payload = UpdateManifestVerifier.canonicalPayload(json).toByteArray(Charsets.UTF_8)
+        assertEquals(true, Ed25519.verify(publicKey, payload, Base64.getDecoder().decode(signatureB64)))
+        // 篡改载荷后应失败
+        assertEquals(false, Ed25519.verify(publicKey, payload + " ".toByteArray(), Base64.getDecoder().decode(signatureB64)))
     }
 
     private companion object {

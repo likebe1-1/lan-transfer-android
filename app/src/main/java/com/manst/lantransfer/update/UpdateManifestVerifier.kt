@@ -2,10 +2,7 @@ package com.manst.lantransfer.update
 
 import android.util.Base64
 import org.json.JSONObject
-import java.security.KeyFactory
-import java.security.PublicKey
-import java.security.Signature
-import java.security.spec.X509EncodedKeySpec
+import java.math.BigInteger
 
 /**
  * 更新清单签名校验（Ed25519）。
@@ -52,16 +49,22 @@ object UpdateManifestVerifier {
         }
         val payload = canonicalPayload(json)
         return try {
-            val key: PublicKey = KeyFactory.getInstance("Ed25519")
-                .generatePublic(X509EncodedKeySpec(Base64.decode(PUBLIC_KEY_BASE64, Base64.NO_WRAP)))
-            val verifier = Signature.getInstance("Ed25519")
-            verifier.initVerify(key)
-            verifier.update(payload.toByteArray(Charsets.UTF_8))
-            val ok = verifier.verify(Base64.decode(signatureText, Base64.NO_WRAP))
+            val publicKeyRaw = extractRawPublicKey(Base64.decode(PUBLIC_KEY_BASE64, Base64.NO_WRAP))
+            val signature = Base64.decode(signatureText, Base64.NO_WRAP)
+            val ok = Ed25519.verify(publicKeyRaw, payload.toByteArray(Charsets.UTF_8), signature)
             if (ok) Result(Status.VALID) else Result(Status.INVALID, "清单签名不匹配（可能被篡改）")
         } catch (e: Exception) {
             Result(Status.INVALID, "校验签名失败：" + (e.message ?: e.javaClass.simpleName))
         }
+    }
+
+    /**
+     * 从 X.509 SubjectPublicKeyInfo 中取出 32 字节原始公钥。
+     * 结构：30 2a 30 05 06 03 2b 65 70 03 21 00 || 32 字节公钥（共 44 字节）
+     */
+    fun extractRawPublicKey(spki: ByteArray): ByteArray {
+        require(spki.size == 44) { "公钥长度异常：" + spki.size }
+        return spki.copyOfRange(12, 44)
     }
 
     /**

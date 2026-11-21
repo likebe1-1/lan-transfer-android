@@ -46,6 +46,12 @@ data class UpdateUiState(
 
 /** 更新清单来源（多镜像依次尝试，国内网络下 GitHub 直连可能失败）。 */
 object UpdateSources {
+
+    /**
+     * Gitee 的 CDN 对部分 UA（如 Dart/OkHttp）会把 raw 请求重定向到广告页；
+     * App 侧请求 Gitee 源时使用原生域名，避免被广告中间页污染。
+     */
+    const val GITEE_HOST = "https://gitee.com"
     /**
      * update.json 的多个来源（全部 HTTPS）。
      * 清单必须带 Ed25519 签名（见 [UpdateManifestVerifier]），因此即使经过第三方镜像也能保证完整性。

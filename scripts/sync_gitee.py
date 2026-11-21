@@ -101,7 +101,12 @@ def main():
 
     token = os.environ.get("GITEE_TOKEN", "").strip()
     if not token:
-        print("缺少 GITEE_TOKEN 环境变量", file=sys.stderr)
+        # 兼容：从用户目录读取（项目外，绝不入库）
+        token_file = os.path.join(os.path.expanduser("~"), ".lanlink", "gitee_token")
+        if os.path.exists(token_file):
+            token = open(token_file, encoding="utf-8").read().strip()
+    if not token:
+        print("缺少 GITEE_TOKEN（环境变量或 ~/.lanlink/gitee_token）", file=sys.stderr)
         return 1
     github_token = os.environ.get("GITHUB_TOKEN", "").strip()
 
