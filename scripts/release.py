@@ -291,7 +291,7 @@ def read_output_metadata():
 
 
 def ensure_apk_version(code: int, version: str, apks: dict) -> None:
-    """execute 时校验本地产物版本号，避免 --skip-build 误用旧 APK。"""
+    """execute 时校验本地产物版本号与文件名形态，避免 --skip-build 误用旧 APK。"""
     versions = read_output_metadata()
     if versions and (code, version) not in versions:
         found = "、".join(f"versionCode={c}/versionName={n}" for c, n in sorted(versions)) or "未知"
@@ -299,8 +299,14 @@ def ensure_apk_version(code: int, version: str, apks: dict) -> None:
             f"本地产物版本（{found}）与目标 versionCode={code} versionName={version} 不一致。"
             "请去掉 --skip-build 重新构建（或用 --bump 递增后再构建）。"
         )
-    expected = {abi: f"app-{abi}-release.apk" for abi in ABI_ORDER}
-    mismatched = [abi for abi, filename in expected.items() if abi in apks and apks[abi]["name"] != filename]
+    # 文件名形如 app-<abi>-release.apk，或带 dist flavor 的 app-<flavor>-<abi>-release.apk
+    # （flavor 维度见 app/build.gradle.kts 的 productFlavors）。这里只校验 ABI 段与整体形态，
+    # 不写死 flavor 名，避免每加一个渠道就要改脚本。
+    mismatched = [
+        abi
+        for abi in ABI_ORDER
+        if abi in apks and not re.fullmatch(rf"app-(?:[A-Za-z0-9_]+-)?{re.escape(abi)}-release\.apk", apks[abi]["name"])
+    ]
     if mismatched:
         raise ReleaseError(f"APK 文件名不符合 Gradle 拆分约定：{', '.join(mismatched)}；请重新构建")
 
@@ -501,7 +507,7 @@ def _run(args, execute: bool, state: dict) -> int:
         if missing:
             raise ReleaseError(
                 f"缺少 APK：{', '.join(missing)}。请先构建（不要同时使用 --skip-build），"
-                f"期望文件：{', '.join(f'app-{abi}-release.apk' for abi in missing)}"
+                f"期望文件：{', '.join(f'app-<flavor>-{abi}-release.apk（或 app-{abi}-release.apk）' for abi in missing)}"
             )
         ensure_apk_version(target_code, target_version, apks)
 

@@ -40,8 +40,8 @@ android {
         applicationId = "com.manst.lantransfer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.3.0"
+        versionCode = 12
+        versionName = "2.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // 资源精简：只保留中英文（UI 文案本身只有中文）；减少 AndroidX/依赖库内置的大量翻译资源
