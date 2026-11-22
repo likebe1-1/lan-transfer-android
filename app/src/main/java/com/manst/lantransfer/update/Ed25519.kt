@@ -12,14 +12,16 @@ import java.security.MessageDigest
  */
 object Ed25519 {
 
-    private val P: BigInteger = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19))
-    private val L: BigInteger = BigInteger.TWO.pow(252)
+    /** TWO 是 API 33 新增字段，minSdk 29 需自建常量（lint NewApi）。 */
+    private val TWO: BigInteger = BigInteger.valueOf(2)
+
+    private val P: BigInteger = TWO.pow(255).subtract(BigInteger.valueOf(19))
+    private val L: BigInteger = TWO.pow(252)
         .add(BigInteger("27742317777372353535851937790883648493"))
     private val D: BigInteger = BigInteger.valueOf(-121665)
         .multiply(BigInteger.valueOf(121666).modInverse(P))
         .mod(P)
-    private val I: BigInteger = BigInteger.TWO.modPow(P.subtract(BigInteger.ONE).divide(BigInteger.valueOf(4)), P)
-    private val TWO = BigInteger.TWO
+    private val I: BigInteger = TWO.modPow(P.subtract(BigInteger.ONE).divide(BigInteger.valueOf(4)), P)
 
     /** 扩展坐标点 (X:Y:Z:T)，满足 x = X/Z, y = Y/Z, x*y = T/Z。 */
     private class Point(val x: BigInteger, val y: BigInteger, val z: BigInteger, val t: BigInteger)

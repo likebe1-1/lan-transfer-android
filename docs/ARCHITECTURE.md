@@ -491,3 +491,21 @@ LanLink 以 **GPL-3.0-or-later**（GNU General Public License v3 或更高版本
   对应关系由 Release 说明中的 tag 保证；
 - **商店/仓库要求**：F-Droid、IzzyOnDroid 等 FOSS 仓库均认可 GPLv3；提交前需保证 `LICENSE` 在仓库根目录、
   `gradle.properties` 不包含本机绝对路径、构建可从源码在 Linux 上完成。
+
+## 23. 构建工具链基线（Gradle 8.9 + AGP 8.7.3）
+
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| Gradle | **8.9**（wrapper 固定 + SHA-256 校验） | AGP 8.7 官方要求的最小/默认版本；此前误用 Gradle 9.6.0 属非认证组合 |
+| AGP | 8.7.3 | 最高支持 API 35，与 `compileSdk = 35` 一致 |
+| Kotlin | 2.0.21 | Compose 编译器插件随 Kotlin 版本 |
+| Daemon JVM | **21**（`gradle/gradle-daemon-jvm.properties`） | 原为 25，Kotlin 2.0.21 编译器不支持 JDK 25（`IllegalArgumentException: 25.0.3`） |
+| JDK 路径 | 不写死 | `gradle.properties` 已移除 `org.gradle.java.home`（Linux/CI/F-Droid 构建必需） |
+
+**影响与收益**
+- lint 恢复可用：`checkReleaseBuilds = true`、`abortOnError = true`，CI 中为强制门禁；
+- Dependabot 的 AGP/Gradle 相关 PR 不再因工具链错配崩溃；
+- 满足 F-Droid / IzzyOnDroid 的“可从源码在标准工具链上构建”要求。
+
+**升级路径**：如需 Gradle 9.x，必须同时升 AGP 到 9.0+（要求 Gradle 9.1+、KGP ≥ 2.2.10、Build Tools 36），
+并回归 Compose BOM 与全部测试——见 docs/DEPENDENCIES.md 升级清单。

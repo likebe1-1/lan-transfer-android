@@ -27,7 +27,7 @@ Job `test-lint-build` 依次执行：
    - `lint-reports`：`app/build/reports/lint-results*.html`（Lint HTML 报告）
 
 > 成功标准：单测通过、lint 不因 error 中断、debug APK 能构建出来。
-> `app/build.gradle.kts` 里 `lint { abortOnError = false }`，所以 lint 的 **warning 不会让 CI 失败**；只有构建/单测失败才会红。
+> `app/build.gradle.kts` 里 `lint { abortOnError = true }`，所以 **lint error 会让 CI 失败**；warning 不会（如需更严格可开 `warningsAsErrors`）。
 
 ### 为什么多了一步 "Point Gradle at the CI JDK"
 
@@ -86,13 +86,19 @@ scripts\gw.cmd testDebugUnitTest
 - 单测 HTML：`app/build/reports/tests/testDebugUnitTest/index.html`
 - Lint HTML：`app/build/reports/lint-results-debug.html`
 
+## lint 状态：已恢复为强制门禁
+
+Gradle 已对齐到 AGP 8.7 的官方基线 **Gradle 8.9**（此前 Gradle 9.6 + AGP 8.7 属非认证组合，lint worker 必崩）。
+
+- 本地 `assembleRelease` 现在同样强制 lint：`checkReleaseBuilds = true`、`abortOnError = true`；
+- 已修复的 lint error：`NewApi`（`BigInteger.TWO` 是 API 33 字段 → 改为自建常量）、`CoarseFineLocation`（补 `ACCESS_COARSE_LOCATION`）；
+- 已评估后抑制：`TrustAllX509TrustManager` / `CustomX509TrustManager`（FTPS 证书固定与“用户显式信任”分支，见 docs/security.html）；
+- 当前基线：**0 error / 60 warning**，warning 会随版本逐步清理，不影响 CI 通过。
+
 ## 为什么 lint 放在 CI 跑
 
-- **本机（Windows + JDK 21）跑 lint 会崩**：Gradle lint worker 在 Windows 上异常退出（`app/build.gradle.kts` 的
-  `lint {}` 注释里也记录了这个已知问题），所以本地 `assembleRelease` 不强制跑 lint（`checkReleaseBuilds = false`）。
-- **CI 是 Linux + Temurin 21**，lint 能正常跑完；把静态检查放到 CI，本地构建更快、更稳定，也能保证每次 PR 都过一遍 lint。
-- `abortOnError = false` 让 lint 的 warning 不阻塞 CI；如果以后想提高标准，把它改成 `true`（或加 `warningsAsErrors`）即可让 CI 变严格——属于对构建配置的改动，需要单独评估。
-
+CI 强制跑 lint 的好处：任何 PR 都会过一遍静态检查，不依赖开发者本地是否执行。历史上 lint 曾因 Gradle 9.6 组合在本机崩溃，
+现已通过版本对齐解决；Gradle 工具链路线见 docs/ARCHITECTURE.md §23。
 ## 如何加 CI badge
 
 在 [README.md](../README.md) 顶部（标题或官网链接下方）加一行 Markdown：

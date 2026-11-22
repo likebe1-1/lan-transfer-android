@@ -32,30 +32,11 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      # gradle.properties 里写死了本机 Windows 路径 org.gradle.java.home=D:/SDK/JDK21，
-      # 该路径在 Linux runner 上不存在，会让 Gradle 直接报 "Java home supplied is invalid"。
-      # 这里在 GRADLE_USER_HOME 的 gradle.properties 中覆盖它（用户级 gradle.properties
-      # 优先级高于项目根目录的 gradle.properties，已用 Gradle 9.6.0 实测），
-      # 这样无需修改仓库里的任何 Gradle 配置。
-      - name: Point Gradle at the CI JDK
-        run: |
-          GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
-          mkdir -p "$GRADLE_USER_HOME"
-          echo "org.gradle.java.home=$JAVA_HOME" >> "$GRADLE_USER_HOME/gradle.properties"
-
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # 注意：lint 目前在本项目工具链（Gradle 9.6.0 + AGP 8.7.3 非官方组合）下
-      # 会稳定崩溃（AndroidLintWorkAction / LintClassLoaderBuildService），本机与 CI 均复现。
-      # 因此 lint 单独作为「非阻塞」步骤，主质量门禁是单元测试 + debug 构建；
-      # 待 AGP/Gradle 版本对齐（见 docs/DEPENDENCIES.md）后把 continue-on-error 去掉即可强制。
-      - name: Run unit tests and assemble debug
-        run: ./gradlew testDebugUnitTest assembleDebug --console=plain
-
-      - name: Run lint (non-blocking, known toolchain issue)
-        continue-on-error: true
-        run: ./gradlew lintDebug --console=plain
+      - name: Run unit tests, lint and assemble debug
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
 
       # 失败也上传，便于定位是哪个单测 / 哪条 lint 规则出问题
       - name: Upload unit test results

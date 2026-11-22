@@ -88,12 +88,14 @@ android {
     }
 
     lint {
-        // 本机（Windows + JDK 21）实测 lintAnalyzeDebugAndroidTest 会崩（Gradle lint worker 异常），
-        // 因此不在本地 release 构建中强制跑 lintVital；静态检查交由 CI（Linux/JDK17）执行：
-        //   ./gradlew lintDebug lintRelease
-        // 在 CI 恢复前，本地提交前以单元测试 + 设备测试为主。
-        checkReleaseBuilds = false
-        abortOnError = false
+        // Gradle 已对齐到 AGP 8.7 官方基线（8.9），lint worker 恢复正常（此前 Gradle 9.6 组合下必崩）。
+        checkReleaseBuilds = true
+        abortOnError = true
+        warningsAsErrors = false
+        // 已知且已评估的告警：
+        // - TrustAllX509TrustManager / CustomX509TrustManager：FTPS 证书固定与「用户显式信任任意证书」分支，
+        //   已由 CertificatePinning + 默认严格校验约束（见 docs/security.html）。
+        disable += setOf("TrustAllX509TrustManager", "CustomX509TrustManager")
     }
 
     // ABI 拆分：为每种 ABI 生成独立 APK（含 universal 兜底），减小下载体积；
