@@ -33,54 +33,97 @@ No cloud, no account, no data collection.
 
 ---
 
-## Description
+## Description（Markdown）
 
-```
-LanLink is an Android file transfer tool that works entirely on your local network — no cloud, no account. It is designed for moving files directly between devices: phone to phone, phone to NAS/server, or phone to desktop.
+```markdown
+### What it is
 
-Features
-• Four protocols — FTP, FTPS, SFTP and SCP. Connect to a NAS or any server, or turn the phone itself into a server (built-in server mode).
-• Quick transfer — pick files and LanLink starts a temporary server and shows an 8-digit code; the other device types the code or scans a QR code. Supports folders, resume, and auto-save into the system Downloads folder.
-• Transfer queue — 3 concurrent tasks, live speed/progress/ETA, automatic retry, history, and opening finished files from the notification or history list.
-• Network tools — LAN device discovery (with AP-isolation hints), network diagnostics, and port reachability tests.
-• One-click hotspot — scan the hotspot QR code to join the sender's hotspot, which works even when the router enforces AP isolation.
+LanLink is an Android file transfer tool that works **entirely on your local network** — no cloud, no account,
+no data collection. It is built for moving files directly between devices: phone → phone, phone → NAS/server,
+phone → desktop.
 
-Security
-• Quick transfer pins the FTPS certificate and SSH host key by SHA-256 fingerprint (delivered through the QR code / LAN beacon), so a man-in-the-middle cannot impersonate the peer.
-• Automatic protocol fallback only uses encrypted transports (SFTP → SCP → FTPS); plain FTP must be selected explicitly.
-• Server-side authentication throttling: per-source escalating lockout plus a global failure-rate cap, applied to FTP/FTPS/SFTP/SCP alike.
-• Saved server passwords are encrypted with Android Keystore (AES-256-GCM, non-exportable key); allowBackup is disabled.
-• The update manifest is fetched over HTTPS only and verified with an Ed25519 signature; downloaded APKs are additionally checked by size, SHA-256, signing certificate and versionCode.
+### Features
 
-Privacy
-No data collection, no ads, no analytics, no crash reporting. Files never leave the local network. The only outbound request is the optional update check (GitHub/Gitee release metadata), and it is disabled in the store flavor.
+- **Four protocols** — FTP, FTPS, SFTP and SCP. Use it as a client to reach a NAS or any server, or turn the
+  phone itself into a server (built-in server mode, one shared folder).
+- **Quick transfer** — pick files and LanLink starts a temporary server showing an **8-digit code**; the other
+  device enters the code or scans a QR code. Folders, resume and auto-save into the system *Downloads* folder
+  are supported.
+- **Transfer queue** — 3 concurrent tasks, live speed / progress / ETA, automatic retry, history, and opening
+  finished files from the notification or history list.
+- **Network tools** — LAN device discovery (with AP-isolation hints), network diagnostics, port reachability
+  tests.
+- **One-click hotspot** — scan the hotspot QR code to join the sender's hotspot; works even when the router
+  enforces AP isolation.
+- **Languages** — Chinese and English UI.
 
-Open source
-Released under GPL-3.0-or-later — audit it, build it, fork it.
+### Security
 
-──────────────── 中文 ────────────────
+- **Peer authentication, not just encryption** — quick transfer pins the FTPS certificate and the SSH host key
+  by SHA-256 fingerprint, delivered out-of-band via the QR code / LAN beacon. A man-in-the-middle on the same
+  network cannot impersonate the peer, because it cannot present a matching fingerprint.
+- **Encrypted transports by default** — automatic fallback only tries SFTP → SCP → FTPS; plain-text FTP must be
+  selected explicitly by the user.
+- **Server-side brute-force protection** — per-source escalating lockout plus a global failure-rate cap, applied
+  to FTP/FTPS/SFTP/SCP alike (the client-side limiter alone would be bypassable by any FTP/SSH client).
+- **Credentials encrypted at rest** — saved server passwords are encrypted with Android Keystore
+  (AES-256-GCM, non-exportable key); `allowBackup` is disabled.
+- **Signed updates** — the update manifest is fetched over HTTPS only and verified with an Ed25519 signature;
+  downloaded APKs are additionally checked by size, SHA-256, signing certificate and versionCode.
 
-LanLink 是一款不依赖云端的 Android 局域网文件传输工具，面向「两台设备之间直接搬文件」的场景（手机↔手机、手机↔NAS/服务器、手机↔电脑）。
+### Privacy
 
-主要功能
-• 四种协议：FTP、FTPS、SFTP、SCP。既能连接 NAS 或其他服务器，也能把手机变成服务器（本机服务器模式）。
-• 快速传文件：选择文件后自动开启临时服务器并显示 8 位接收码，对方输入接收码或扫描二维码即可接收；支持文件夹传输、断点续传、接收后自动保存到系统下载目录。
-• 传输队列：多任务并发（3 路）、实时速度/进度/剩余时间、失败自动重试、历史记录，支持从通知或历史记录打开已下载文件。
-• 网络工具：局域网设备扫描（含 AP 隔离提示）、网络诊断、端口连通性测试。
-• 一键组网：扫描热点二维码自动加入对方热点，解决路由器 AP 隔离导致无法互传的问题。
+No data collection, no ads, no analytics, no crash reporting. Files never leave the local network. The only
+outbound request is the optional update check (GitHub/Gitee release metadata) — and it is **disabled in the
+store flavor**.
 
-安全设计
-• 快速传文件对 FTPS 证书与 SSH 主机密钥做 SHA-256 指纹固定（指纹通过二维码/广播下发），中间人无法冒充。
-• 自动连接只使用加密协议（SFTP → SCP → FTPS），明文 FTP 需用户手动选择。
-• 服务端认证失败限流：单来源逐级锁定 + 全局失败速率上限，FTP/FTPS/SFTP/SCP 统一生效。
-• 服务器密码使用 Android Keystore AES-256-GCM 加密落盘（密钥不可导出）；allowBackup=false。
-• 更新清单仅接受 HTTPS + Ed25519 签名，下载的 APK 再校验 size/SHA-256/签名/versionCode。
+### Distribution note
 
-隐私
-不收集任何数据，无广告、无统计、无崩溃上报；文件只在局域网内传输。唯一的对外网络请求是「检查更新」读取 GitHub/Gitee 的版本清单，且商店分发版（fdroid flavor）已禁用应用内更新。
+Two build flavors share the same `applicationId`, version code and signing key:
+`fdroid` (in-app updater disabled, `REQUEST_INSTALL_PACKAGES` removed — used for this repository) and
+`github` (keeps the built-in updater for direct downloads).
 
-开源
-源码以 GPL-3.0-or-later 发布，欢迎审计与自建。
+### License
+
+GPL-3.0-or-later. Source: https://github.com/likebe1-1/lan-transfer-android
+
+---
+
+### 应用简介（中文）
+
+LanLink 是一款**不依赖云端**的 Android 局域网文件传输工具，面向「两台设备之间直接搬文件」的场景：
+手机↔手机、手机↔NAS/服务器、手机↔电脑。无需账号、不收集任何数据。
+
+### 主要功能
+
+- **四种协议**：FTP、FTPS、SFTP、SCP。既能连接 NAS 或其他服务器，也能把手机变成服务器（本机服务器模式）。
+- **快速传文件**：选择文件后自动开启临时服务器并显示 **8 位接收码**；对方输入接收码或扫码即可接收。
+  支持文件夹传输、断点续传、接收后自动保存到系统下载目录。
+- **传输队列**：3 路并发、实时速度/进度/剩余时间、失败自动重试、历史记录，
+  支持从通知或历史记录打开已下载文件。
+- **网络工具**：局域网设备扫描（含 AP 隔离提示）、网络诊断、端口连通性测试。
+- **一键组网**：扫描热点二维码自动加入对方热点，解决路由器 AP 隔离导致无法互传的问题。
+- **界面语言**：中文与英文。
+
+### 安全设计
+
+- **不只是加密，还要认证对端**：快速传文件对 FTPS 证书与 SSH 主机密钥做 SHA-256 指纹固定，
+  指纹通过二维码/局域网广播带外下发；同网段的中间人无法出示相同指纹，因此无法冒充。
+- **默认只用加密协议**：自动回退顺序为 SFTP → SCP → FTPS，明文 FTP 需用户手动选择。
+- **服务端防爆破**：单来源逐级锁定 + 全局失败速率上限，FTP/FTPS/SFTP/SCP 统一生效
+  （仅靠客户端限流可被任意 FTP/SSH 客户端绕过）。
+- **凭据加密存储**：服务器密码使用 Android Keystore（AES-256-GCM，密钥不可导出）加密落盘；
+  `allowBackup` 关闭。
+- **更新可验证**：清单仅接受 HTTPS + Ed25519 签名；下载的 APK 再校验大小、SHA-256、签名证书与 versionCode。
+
+### 隐私
+
+不收集任何数据，无广告、无统计、无崩溃上报；文件只在局域网内传输。
+唯一的对外网络请求是可选的「检查更新」（读取 GitHub/Gitee 版本清单），且在本仓库分发的版本中已禁用。
+
+### 许可证
+
+GPL-3.0-or-later，源码：https://github.com/likebe1-1/lan-transfer-android
 ```
 
 ---
