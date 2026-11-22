@@ -23,7 +23,7 @@
     --bump {patch,minor}  递增 app/build.gradle.kts 的 versionCode(+1) 与 versionName
     --dry-run             dry-run（默认，可显式写出；与 --execute 互斥）
     --execute             真正修改文件/构建/签名/同步
-    --skip-build          跳过 assembleRelease，直接使用现有 APK 产物
+    --skip-build          跳过 assembleGithubRelease，直接使用现有 APK 产物
     --skip-gitee          跳过 Gitee 镜像同步（GitHub Release 尚未发布时使用）
     --changelog TEXT      可选：覆盖 update.json 的 changelog 正文；
                           脚本会自动保证首行为「LanLink vX.Y.Z：…」
@@ -63,7 +63,8 @@ from bump_version import (  # noqa: E402
 GITHUB_REPO = "likebe1-1/lan-transfer-android"
 GRADLE_FILE = ROOT / "app" / "build.gradle.kts"
 MANIFEST_FILE = ROOT / "docs" / "update.json"
-APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "release"
+# github 渠道产物目录（flavor 化之后 release APK 在 github/release 下）
+APK_DIR = ROOT / "app" / "build" / "outputs" / "apk" / "github" / "release"
 STAGING_ROOT = ROOT / "app" / "build" / "outputs" / "release-assets"
 SIGNING_KEY = ROOT / ".update-signing" / "update_signing_private.pem"
 
@@ -71,7 +72,7 @@ SIGNING_KEY = ROOT / ".update-signing" / "update_signing_private.pem"
 ABI_ORDER = ("arm64-v8a", "armeabi-v7a", "universal")
 MANAGED_MANIFEST_KEYS = ("versionCode", "versionName", "changelog", "releasePageUrl", "apks", "sig")
 
-DEFAULT_BUILD_TASK = ":app:assembleRelease"
+DEFAULT_BUILD_TASK = ":app:assembleGithubRelease"
 
 
 class ReleaseError(Exception):
@@ -239,7 +240,7 @@ def manifest_text(data: dict) -> str:
 
 
 def collect_apks():
-    """扫描 app/build/outputs/apk/release 下的 Release APK。
+    """扫描 app/build/outputs/apk/github/release 下的 Release APK（github 渠道）。
 
     返回 (found, ignored)：found 为 {abi: {path,name,size,sha256}}，ignored 为不发布的文件名。
     排除 unsigned APK；只保留 ABI_ORDER 中的三个 ABI。
@@ -601,7 +602,7 @@ def _run(args, execute: bool, state: dict) -> int:
         if bump_plan is not None:
             print(f"  - {rel_path(GRADLE_FILE)}（versionCode/versionName）")
         print(f"  - {rel_path(MANIFEST_FILE)}（版本/URL/apks/changelog/sig）")
-        print("  - app/build/outputs/apk/release/（构建产物，build 目录已 gitignore）")
+        print("  - app/build/outputs/apk/github/release/（构建产物，build 目录已 gitignore）")
         print(f"  - app/build/outputs/release-assets/v{target_version}/（3 个重命名 APK 副本）")
         if not args.skip_gitee and token_source is not None:
             print("  - docs/gitee/files.json（sync_gitee.py 生成/更新）")
@@ -655,7 +656,7 @@ def parse_args(argv=None):
     parser.add_argument("--bump", choices=["patch", "minor"], default=None, help="递增版本号：patch 递增 Z，minor 递增 Y 并清零 Z（同 versionCode+1）")
     parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=True, help="dry-run：只打印计划与命令（默认行为）")
     parser.add_argument("--execute", dest="dry_run", action="store_false", help="真正执行：写版本号/构建/更新清单/签名/同步（默认关闭）")
-    parser.add_argument("--skip-build", action="store_true", help="跳过 :app:assembleRelease，直接使用现有 APK 产物")
+    parser.add_argument("--skip-build", action="store_true", help="跳过 :app:assembleGithubRelease，直接使用现有 APK 产物")
     parser.add_argument("--skip-gitee", action="store_true", help="跳过 Gitee 镜像同步（GitHub Release 尚未发布时使用）")
     parser.add_argument("--changelog", default=None, help="可选：覆盖 update.json 的 changelog 正文；脚本自动补「LanLink vX.Y.Z：」首行")
     args = parser.parse_args(argv)

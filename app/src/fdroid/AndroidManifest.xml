@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  F-Droid / IzzyOnDroid 分发变体：
+  - 移除 REQUEST_INSTALL_PACKAGES：该渠道的更新由商店客户端负责，应用不应自行下载安装 APK；
+  - 其余声明沿用 main manifest。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+</manifest>

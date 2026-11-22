@@ -48,6 +48,24 @@ android {
         resourceConfigurations += listOf("zh", "en")
     }
 
+    // ---------------------------------------------------------------- 分发渠道（flavor）
+    // github：官网 / GitHub Release / 蓝奏云分发，保留应用内更新与 ABI 拆分（体积更小）；
+    // fdroid：F-Droid / IzzyOnDroid 分发，关闭应用内更新（更新由商店客户端负责）、
+    //         移除 REQUEST_INSTALL_PACKAGES、输出单个 universal APK。
+    // 两个 flavor 的 applicationId / versionCode / versionName 完全一致，且使用同一签名配置，
+    // 因此包名相同、可相互覆盖安装（前提是签名由同一 keystore 签出；F-Droid 主库会用它自己的密钥重签）。
+    flavorDimensions += "dist"
+    productFlavors {
+        create("github") {
+            dimension = "dist"
+            buildConfigField("boolean", "IN_APP_UPDATES", "true")
+        }
+        create("fdroid") {
+            dimension = "dist"
+            buildConfigField("boolean", "IN_APP_UPDATES", "false")
+        }
+    }
+
     signingConfigs {
         if (hasSigningMaterial) {
             create("release") {
@@ -98,8 +116,8 @@ android {
         disable += setOf("TrustAllX509TrustManager", "CustomX509TrustManager")
     }
 
-    // ABI 拆分：为每种 ABI 生成独立 APK（含 universal 兜底），减小下载体积；
-    // 说明：当前 App 原生库很小（~40KB），实际收益有限，但可为后续引入原生库做好准备。
+    // ABI 拆分：仅 github 渠道做拆分（含 universal 兜底），减小下载体积；
+    // fdroid 渠道输出单个 universal APK（F-Droid 不支持按 ABI 分发矩阵）。
     splits {
         abi {
             isEnable = true

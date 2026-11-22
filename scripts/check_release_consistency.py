@@ -66,11 +66,11 @@ def main():
 
     if not args.skip_apk:
         variant = {
-            "arm64-v8a": "app-arm64-v8a-release.apk",
-            "armeabi-v7a": "app-armeabi-v7a-release.apk",
-            "universal": "app-universal-release.apk",
+            "arm64-v8a": "app-github-arm64-v8a-release.apk",
+            "armeabi-v7a": "app-github-armeabi-v7a-release.apk",
+            "universal": "app-github-universal-release.apk",
         }
-        release_dir = os.path.join("app", "build", "outputs", "apk", "release")
+        release_dir = os.path.join("app", "build", "outputs", "apk", "github", "release")
         for apk in manifest.get("apks", []):
             filename = variant.get(apk.get("abi"))
             if not filename:

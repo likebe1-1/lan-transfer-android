@@ -509,3 +509,16 @@ LanLink 以 **GPL-3.0-or-later**（GNU General Public License v3 或更高版本
 
 **升级路径**：如需 Gradle 9.x，必须同时升 AGP 到 9.0+（要求 Gradle 9.1+、KGP ≥ 2.2.10、Build Tools 36），
 并回归 Compose BOM 与全部测试——见 docs/DEPENDENCIES.md 升级清单。
+
+## 24. 分发渠道 flavor（github / fdroid）
+
+| flavor | 用途 | BuildConfig.IN_APP_UPDATES | REQUEST_INSTALL_PACKAGES | ABI 拆分 |
+| --- | --- | --- | --- | --- |
+| `github` | 官网 / GitHub Release / 蓝奏云 | `true` | 保留 | 拆分 + universal |
+| `fdroid` | F-Droid / IzzyOnDroid | `false` | 通过 flavor manifest `tools:node="remove"` 移除 | 使用 universal 单包 |
+
+- 两者 `applicationId` 与版本号一致，且都用同一 keystore 签名 → **可互相覆盖安装**（F-Droid 主库若重签则不可）；
+- `DefaultUpdateManager` 的更新开关 = `!BuildConfig.DEBUG && BuildConfig.IN_APP_UPDATES`：
+  debug 包与 fdroid 渠道都跳过更新检查，并给出对应提示（“改用商店客户端更新”）；
+- 应用内更新入口在 fdroid 渠道仍可见但点击后提示走商店，避免用户困惑；
+- 上架流程与签名策略详见 `docs/FDROID.md`。

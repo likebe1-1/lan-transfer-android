@@ -1,0 +1,1 @@
+v2.3.0: 3-way concurrent transfer queue; FTPS certificate and SSH host key pinning; server-side auth throttling; Android Keystore credential encryption; Ed25519-signed update manifest.

@@ -1,0 +1,27 @@
+# 提交 F-Droid 主库时把本文件内容作为 metadata/com.manst.lantransfer.yml 提交给 fdroiddata。
+# 前置：仓库根目录有 LICENSE(GPL-3.0-or-later)、可从源码构建、无 proprietary/ads/tracking 依赖。
+Categories:
+  - File Transfer
+License: GPL-3.0-or-later
+AuthorName: likebe1-1
+SourceCode: https://github.com/likebe1-1/lan-transfer-android
+IssueTracker: https://github.com/likebe1-1/lan-transfer-android/issues
+Changelog: https://github.com/likebe1-1/lan-transfer-android/releases
+
+AutoName: LanLink
+
+RepoType: git
+Repo: https://github.com/likebe1-1/lan-transfer-android
+
+Builds:
+  - versionName: 2.3.0
+    versionCode: 11
+    commit: v2.3.0
+    subdir: app
+    gradle:
+      - fdroid
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 2.3.0
+CurrentVersionCode: 11

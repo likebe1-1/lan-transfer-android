@@ -229,6 +229,7 @@ App 同时是客户端和服务端：
 | [docs/CI.md](docs/CI.md) | GitHub Actions CI（单测 + lint + debug 构建）、本地复现、badge |
 | [docs/RELEASING.md](docs/RELEASING.md) | 一键发版 SOP（bump → 构建 → 清单签名 → Gitee → 自检） |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 关键依赖版本、风险与升级检查清单 |
+| [docs/FDROID.md](docs/FDROID.md) | 上架 F-Droid / IzzyOnDroid：渠道 flavor、签名与兼容性、提交步骤 |
 | [docs/SECRETS.md](docs/SECRETS.md) | 凭据/密钥清单、备份恢复、轮换与泄露应急 |
 
 常用命令：
@@ -243,6 +244,11 @@ powershell -File scripts/backup_signing_key.ps1 -Destination D:\lanlink-backup  
 前置：JDK 17+（推荐 21）、Android SDK（platform 35、build-tools，设置 `ANDROID_HOME` 或 `local.properties`）、Gradle 由 wrapper 提供。
 
 ```powershell
+# 分发渠道（flavor）：github = 官网/GitHub 分发（保留应用内更新 + ABI 拆分）
+#                    fdroid = 商店分发（关闭自更新、移除 REQUEST_INSTALL_PACKAGES）
+cmd /c "scripts\gw.cmd" :app:assembleGithubRelease
+cmd /c "scripts\gw.cmd" :app:assembleFdroidRelease
+
 # 统一入口（Windows）：优先使用调用方已设置的 JAVA_HOME；
 # 未设置且存在 D:\SDK\JDK21 时使用该路径，否则回退 PATH 中的 java
 cmd /c "scripts\gw.cmd" :app:assembleDebug

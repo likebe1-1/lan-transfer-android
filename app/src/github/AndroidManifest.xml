@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 官网 / GitHub Release 分发变体：保留应用内更新所需权限（REQUEST_INSTALL_PACKAGES 来自 main）。 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

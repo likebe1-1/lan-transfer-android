@@ -39,7 +39,13 @@ class DefaultUpdateManager(
      * 与 Release APK 的签名不一致，系统/校验都会拒绝覆盖安装。
      * 因此 debug 版不提供更新能力，只提示用户安装正式版。
      */
-    private val allowUpdates: Boolean = !BuildConfig.DEBUG
+    /**
+     * 是否允许应用内更新：
+     * - debug 包永远关闭（debug 证书与 release 不同，无法覆盖安装）；
+     * - fdroid 渠道关闭（更新由 F-Droid/IzzyOnDroid 客户端负责，政策要求）；
+     * - github 渠道保留（官网/GitHub 分发，应用内更新是核心体验）。
+     */
+    private val allowUpdates: Boolean = !BuildConfig.DEBUG && BuildConfig.IN_APP_UPDATES
 ) : UpdateManager {
 
     private val appContext = context.applicationContext
@@ -69,7 +75,11 @@ class DefaultUpdateManager(
                         checking = false,
                         info = null,
                         dismissed = false,
-                        error = "当前是调试版，不支持应用内更新。请安装正式版（com.manst.lantransfer），或在设置中关闭调试包后重试。"
+                        error = if (BuildConfig.DEBUG) {
+                            "当前是调试版，不支持应用内更新。请安装正式版（com.manst.lantransfer），或在设置中关闭调试包后重试。"
+                        } else {
+                            "当前版本由应用商店分发，请在 F-Droid / IzzyOnDroid 客户端中更新；也可从官网手动下载。"
+                        }
                     )
                 }
             }
@@ -107,7 +117,9 @@ class DefaultUpdateManager(
 
     override fun downloadAndInstall() {
         if (!allowUpdates) {
-            mutableState.update { it.copy(error = "调试版不支持应用内更新，请安装正式版") }
+            mutableState.update {
+                it.copy(error = if (BuildConfig.DEBUG) "调试版不支持应用内更新，请安装正式版" else "当前版本由应用商店分发，请在商店客户端中更新")
+            }
             return
         }
         val info = mutableState.value.info ?: return

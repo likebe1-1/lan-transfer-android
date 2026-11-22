@@ -36,7 +36,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests, lint and assemble debug
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+        run: ./gradlew testGithubDebugUnitTest lintGithubDebug assembleGithubDebug assembleFdroidRelease --console=plain
 
       # 失败也上传，便于定位是哪个单测 / 哪条 lint 规则出问题
       - name: Upload unit test results
@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: app/build/test-results/testDebugUnitTest
+          path: app/build/test-results/testGithubDebugUnitTest
           if-no-files-found: ignore
 
       - name: Upload lint reports
