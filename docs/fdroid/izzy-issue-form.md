@@ -193,7 +193,7 @@ Two notes about distribution:
    same key, so they can replace each other on-device (a re-signed F-Droid build could not).
 
 Store-flavor test APK:
-<PASTE THE URL OF LanLink-v2.3.1-fdroid-universal.apk FROM THE v2.3.1 RELEASE HERE>
+https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-fdroid-universal.apk
 SHA-256: 7a54f2d6cc9332a62c8f2362e96b1eeca16a3cc23a20e4e6794c3d02a2c9583c
 
 Permissions: INTERNET / network state (LAN transfer), CAMERA (QR scanning only), NEARBY_WIFI_DEVICES
@@ -210,7 +210,7 @@ POST_NOTIFICATIONS. No storage permissions (SAF / MediaStore only).
 
 ## 提交前清单
 
-- [ ] 已把 `LanLink-v2.3.1-fdroid-universal.apk` 追加到 v2.3.1 Release（否则 Further Notices 里的链接无内容）
+- [x] 已把 `LanLink-v2.3.1-fdroid-universal.apk` 追加到 v2.3.1 Release（已验证下载哈希一致）
 - [ ] 标题带应用名：`[App Inclusion] LanLink`
 - [ ] Categories 选 `File Transfer`
 - [ ] License 填 `GPL-3.0-or-later`
