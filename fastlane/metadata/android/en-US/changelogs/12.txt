@@ -1,0 +1,1 @@
+v2.3.1: debug builds no longer offer in-app updates; added github/fdroid distribution flavors (same signing key, cross-installable); aligned Gradle 8.9 + AGP 8.7 so lint is enforced again; released under GPL-3.0-or-later.

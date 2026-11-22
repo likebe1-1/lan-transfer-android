@@ -38,7 +38,8 @@
 
 | 版本 | 说明 | 直接下载 |
 | --- | --- | --- |
-| **v2.3.0（最新）** | **性能与安全专项：3 路并发传输 / 证书与主机密钥指纹固定 / 服务端限流 / 凭据 Keystore 加密 / 更新清单 Ed25519 签名** | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-universal.apk) |
+| **v2.3.1（最新）** | **修复与工程化：调试版不再误报更新 / 新增 github·fdroid 双分发渠道（保留原有签名，可互相覆盖安装）/ Gradle 8.9 + AGP 8.7 对齐（lint 恢复）/ GPL-3.0 开源** | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-universal.apk) |
+| v2.3.0 | **性能与安全专项：3 路并发传输 / 证书与主机密钥指纹固定 / 服务端限流 / 凭据 Keystore 加密 / 更新清单 Ed25519 签名** | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.0/LanLink-v2.3.0-universal.apk) |
 | v2.2.0 | 应用内更新 / 快速传文件安全加固 / 中英文界面 / 网络工具 / 一键组网 | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-universal.apk) |
 | v2.1.1 | ABI 拆分 + 资源精简：arm64 包 10.44 MiB | [arm64-v8a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-arm64-v8a.apk) · [armeabi-v7a](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-armeabi-v7a.apk) · [universal](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.1/LanLink-v2.1.1-universal.apk) |
 | v2.1.0 | LanLink 品牌版 + 断点续传 / 文件夹 / 历史 / 分享 / 扫码快传 | [LanLink-v2.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.1.0/LanLink-v2.1.0.apk) |
@@ -50,9 +51,9 @@
 | v1.1.0 | 本机服务器（手机互传） | [LanTransfer-v1.1.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.1.0/LanTransfer-v1.1.0.apk) |
 | v1.0.0 | 局域网文件传输（客户端） | [LanTransfer-v1.0.0.apk](https://github.com/likebe1-1/lan-transfer-android/releases/download/v1.0.0/LanTransfer-v1.0.0.apk) |
 
-> APK 与 `v1.0.0` ~ `v2.3.0` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
+> APK 与 `v1.0.0` ~ `v2.3.1` 标签一一对应，均由同一签名密钥（CN=LanTransfer）签名；安装新版本可直接覆盖旧版本。
 
-**v2.3.0 分 ABI 下载**（GitHub Releases）：
+**v2.3.1 分 ABI 下载**（GitHub Releases）：
 
 | 架构 | 直接下载 |
 | --- | --- |
