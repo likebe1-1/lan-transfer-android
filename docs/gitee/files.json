@@ -1,9 +1,64 @@
 {
-  "generatedAt": "2026-11-21T22:28:43+08:00",
+  "generatedAt": "2026-11-22T12:41:33+08:00",
   "repo": "likebe1-1/lanlink-android",
   "version": 1,
   "primaryHost": "gitee",
   "files": [
+    {
+      "id": "v2.3.1/v2.3.1.zip",
+      "name": "v2.3.1.zip",
+      "tag": "v2.3.1",
+      "size": 0,
+      "sha256": "",
+      "url": "https://gitee.com/likebe1-1/lanlink-android/archive/refs/tags/v2.3.1.zip",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-22T12:39:37+08:00",
+      "mirrorable": false
+    },
+    {
+      "id": "v2.3.1/v2.3.1.tar.gz",
+      "name": "v2.3.1.tar.gz",
+      "tag": "v2.3.1",
+      "size": 0,
+      "sha256": "",
+      "url": "https://gitee.com/likebe1-1/lanlink-android/archive/refs/tags/v2.3.1.tar.gz",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-22T12:39:37+08:00",
+      "mirrorable": false
+    },
+    {
+      "id": "v2.3.1/LanLink-v2.3.1-universal.apk",
+      "name": "LanLink-v2.3.1-universal.apk",
+      "tag": "v2.3.1",
+      "size": 0,
+      "sha256": "",
+      "url": "https://gitee.com/likebe1-1/lanlink-android/releases/download/v2.3.1/LanLink-v2.3.1-universal.apk",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-22T12:39:37+08:00",
+      "mirrorable": false
+    },
+    {
+      "id": "v2.3.1/LanLink-v2.3.1-armeabi-v7a.apk",
+      "name": "LanLink-v2.3.1-armeabi-v7a.apk",
+      "tag": "v2.3.1",
+      "size": 0,
+      "sha256": "",
+      "url": "https://gitee.com/likebe1-1/lanlink-android/releases/download/v2.3.1/LanLink-v2.3.1-armeabi-v7a.apk",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-22T12:39:37+08:00",
+      "mirrorable": false
+    },
+    {
+      "id": "v2.3.1/LanLink-v2.3.1-arm64-v8a.apk",
+      "name": "LanLink-v2.3.1-arm64-v8a.apk",
+      "tag": "v2.3.1",
+      "size": 0,
+      "sha256": "",
+      "url": "https://gitee.com/likebe1-1/lanlink-android/releases/download/v2.3.1/LanLink-v2.3.1-arm64-v8a.apk",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-22T12:39:37+08:00",
+      "mirrorable": false
+    },
     {
       "id": "v2.3.0/v2.3.0.zip",
       "name": "v2.3.0.zip",
