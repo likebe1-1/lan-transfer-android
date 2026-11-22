@@ -1,3 +1,25 @@
+## 分发渠道总览
+
+| 渠道 | 状态 | 签名 | 更新方式 | 材料 |
+| --- | --- | --- | --- | --- |
+| GitHub Releases | ✅ 已发 v2.3.1 | 自己 | 应用内更新 | — |
+| Gitee Releases | ✅ 已同步 | 自己 | 应用内更新 / 站内下载 | `docs/gitee/` |
+| 官网 + 下载页（GitHub Pages） | ✅ 在线 | 自己 | 镜像自动回落 | `docs/index.html`、`docs/downloads.html` |
+| 蓝奏云 | ✅ 已配密码 | 自己 | 手动 | 官网 FAQ |
+| **IzzyOnDroid** | 🔄 **已提交 #939，审核中** | 自己 | izzy 客户端自动跟进 Release | `docs/fdroid/izzy-issue-form.md` |
+| **F-Droid 主库** | 📝 材料已备，待提交 MR | F-Droid 密钥（或 RB） | F-Droid 客户端 | `docs/fdroid/com.manst.lantransfer.yml` |
+| **酷安** | 📝 材料已备，待发布 | 自己 | 应用内更新（用 github flavor） | `docs/distribution/coolapk.md` |
+| **Aptoide** | 📝 材料已备，待上传 | 自己 | Aptoide Uploader / 应用内更新 | `docs/distribution/aptoide.md` |
+| 自建 F-Droid 仓库 | 可选，未做 | 自己 | fdroidserver index | — |
+| Google Play / 国内五大商店 | 未做（需实名/备案/审核） | 平台重签 | 平台内更新 | — |
+
+**通用素材**
+
+- 图标 512：`build/icons/render/store_512.png`（同时复制到 `fastlane/.../images/icon.png`）
+- 截图：`docs/screenshots/01..16`
+- 宣传图 1280×720：`docs/distribution/feature_graphic.png`（中文）、`feature_graphic_en.png`（英文）
+- 商店描述文案：F-Droid 见本文档；酷安见 `docs/distribution/coolapk.md`；Aptoide 见 `docs/distribution/aptoide.md`
+
 # 上架 F-Droid / IzzyOnDroid
 
 ## 渠道与更新方式

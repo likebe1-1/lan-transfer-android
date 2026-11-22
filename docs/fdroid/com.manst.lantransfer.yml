@@ -1,5 +1,10 @@
-# 提交 F-Droid 主库时把本文件内容作为 metadata/com.manst.lantransfer.yml 提交给 fdroiddata。
-# 前置：仓库根目录有 LICENSE(GPL-3.0-or-later)、可从源码构建、无 proprietary/ads/tracking 依赖。
+# LanLink — fdroiddata metadata
+# 提交方式：在 https://gitlab.com/fdroid/fdroiddata 基于 master 新建分支，
+# 把本文件内容 PUT 到 metadata/com.manst.lantransfer.yml，然后开 MR。
+# 注意：F-Droid 会用 fdroid flavor 从源码构建（不联网下载任何预编译二进制）。
+# 默认 F-Droid 用自己的密钥重签 → 与官网/GitHub 版签名不同，切换渠道需卸载重装。
+# 若要保持开发者签名，需走 Reproducible Builds（先有 izzy 收录与 RB 校验结果再做）。
+
 Categories:
   - File Transfer
 License: GPL-3.0-or-later
@@ -20,8 +25,39 @@ Builds:
     subdir: app
     gradle:
       - fdroid
+    prebuild: sed -i '/org.gradle.java.home/d' ../gradle.properties || true
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 CurrentVersion: 2.3.1
 CurrentVersionCode: 12
+
+Description: |-
+  LanLink is a LAN-only file transfer tool for Android: two devices on the same Wi-Fi or hotspot move files directly, with no cloud service and no account.
+  
+  <b>Features:</b>
+  
+  * <b>Four protocols</b> — FTP, FTPS, SFTP and SCP. Use it as a client to reach a NAS or any server, or turn the phone itself into a server (built-in server mode with one shared folder).
+  * <b>Quick transfer</b> — pick files and a local server starts showing an 8-digit code; the other device enters the code or scans a QR code. Folders, resume and auto-save into the system Downloads folder are supported.
+  * <b>Transfer queue</b> — 3 concurrent tasks, live speed/progress/ETA, automatic retry, history, and opening finished files from the notification or history list.
+  * <b>Network tools</b> — LAN device discovery (with AP-isolation hints), network diagnostics, port reachability tests.
+  * <b>One-click hotspot</b> — scan the hotspot QR code to join the sender's hotspot; works even when the router enforces AP isolation.
+  
+  <b>Security:</b>
+  
+  * Quick transfer pins the FTPS certificate and SSH host key by SHA-256 fingerprint (delivered through the QR code / LAN beacon), so a man-in-the-middle cannot impersonate the peer.
+  * Automatic protocol fallback only uses encrypted transports (SFTP → SCP → FTPS); plain FTP must be selected explicitly.
+  * Server-side authentication throttling: per-source escalating lockout plus a global failure-rate cap.
+  * Saved server passwords are encrypted with Android Keystore (AES-256-GCM); allowBackup is disabled.
+  * The update manifest is loaded over HTTPS only and verified with an Ed25519 signature.
+  
+  <b>Privacy:</b>
+  
+  No data collection, no ads, no analytics, no crash reporting. Files never leave the local network.
+
+# 审查者常见问题的答复（提交 MR 时直接贴进描述）：
+# * REQUEST_INSTALL_PACKAGES：fdroid flavor 已移除（app/src/fdroid/AndroidManifest.xml tools:node="remove"），
+#   应用内更新通过 BuildConfig.IN_APP_UPDATES=false 关闭。
+# * ACCESS_FINE/COARSE_LOCATION 带 maxSdkVersion=32，仅用于 Android 12 及以下加入热点；13+ 用 NEARBY_WIFI_DEVICES。
+# * CAMERA 仅用于扫描局域网会话/热点二维码。
+# * lint 中的 TrustAllX509TrustManager 属 FTPS 证书固定的显式分支，默认路径走严格校验。
