@@ -22,6 +22,8 @@ LanLink v2.3.0 是一次**性能与安全**专项更新，无破坏性变更，�
 
 从 v2.2.0 起支持应用内直接更新，也可在 App 首页手动「检查更新」。
 
+安全设计与已知取舍详见：https://likebe1-1.github.io/lan-transfer-android/security.html
+
 ## 说明
 
 单个大文件的 SFTP 传输速度提升有限——SFTP 的数据包尺寸由 JSch 库硬编码为 32 KiB，

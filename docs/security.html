@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LanLink 安全设计 · 证书固定 / 凭据加密 / 更新签名</title>
+<meta name="description" content="LanLink 的安全设计：FTPS 证书固定、SFTP/SCP 主机密钥固定、8 位接收码与服务端多层限流、Android Keystore 凭据加密、HTTPS + Ed25519 签名更新，以及已知取舍。" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" type="image/svg+xml" href="site/logo.svg" />
+<link rel="canonical" href="https://likebe1-1.github.io/lan-transfer-android/security.html" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="LanLink 安全设计" />
+<meta property="og:description" content="证书与主机密钥指纹固定、服务端多层限流、Keystore 凭据加密、Ed25519 签名更新。" />
+<meta property="og:image" content="https://likebe1-1.github.io/lan-transfer-android/screenshots/01_server_list.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="stylesheet" href="site/style.css" />
+<style>
+  .sec-table { width: 100%; border-collapse: collapse; margin: 18px 0 6px; font-size: .94rem; }
+  .sec-table th, .sec-table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--card-border); vertical-align: top; }
+  .sec-table th { color: var(--accent); font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
+  .sec-table td:first-child { white-space: nowrap; color: var(--text); font-weight: 600; }
+  .sec-card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 20px 22px; }
+  .sec-card h3 { margin: 0 0 8px; font-size: 1.02rem; }
+  .sec-card p { margin: 0; color: var(--muted); font-size: .94rem; line-height: 1.65; }
+  .sec-list { margin: 10px 0 0; padding-left: 1.1em; color: var(--muted); font-size: .94rem; line-height: 1.7; }
+  .sec-note { border-left: 3px solid var(--accent); padding: 12px 16px; background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 10px; color: var(--muted); margin: 22px 0; }
+</style>
+</head>
+<body>
+<div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html">
+      <img src="site/logo.svg" alt="" width="34" height="34" />
+      <span>LanLink <em class="brand-sub">安全设计</em></span>
+    </a>
+    <nav class="nav" id="siteNav" aria-label="主导航">
+      <a href="index.html#features">功能</a>
+      <a href="index.html#screenshots">截图</a>
+      <a href="index.html#download">下载</a>
+      <a href="security.html">安全</a>
+      <a href="downloads.html">文件下载</a>
+      <a class="nav-github" href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="切换深浅色主题" title="切换深浅色主题"><span class="theme-icon" aria-hidden="true">◐</span></button>
+      <button class="icon-btn menu-btn" id="menuToggle" type="button" aria-label="打开菜单" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero container">
+    <div class="hero-copy">
+      <div class="badge"><span class="dot"></span><span>v2.3.0 安全基线</span></div>
+      <h1>局域网传输，<br><span class="grad">也要能证明“对面是谁”。</span></h1>
+      <p class="lead">LanLink 不上传云端、不收集数据；同时用证书/主机密钥固定、服务端限流、系统级凭据加密与签名更新，把“同网段就能伪造”的常见风险挡在外面。下面是全部安全机制与已知取舍。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="index.html#download">下载最新版</a>
+        <a class="btn btn-ghost" href="https://github.com/likebe1-1/lan-transfer-android/security/advisories/new" target="_blank" rel="noopener">报告安全问题 ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <div class="eyebrow">传输认证</div>
+      <h2>不只是“加密”，还要防冒充</h2>
+      <p class="section-sub">自签证书只加密不认证时，同网段中间人可以完整解密。LanLink 让发送方把身份指纹随二维码/广播下发，接收方只信任该指纹。</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>FTPS 证书固定</h3>
+        <p>发送方把自签名证书的 SHA-256 指纹写入二维码/局域网广播；接收方只接受该指纹的证书，指纹不符直接握手失败。</p>
+      </div>
+      <div class="feature">
+        <h3>SFTP / SCP 主机密钥固定</h3>
+        <p>同理固定 SSH 主机密钥指纹（OpenSSH 线格式 blob 的 SHA-256），中间人无法出示同指纹主机密钥。</p>
+      </div>
+      <div class="feature">
+        <h3>加密协议优先</h3>
+        <p>自动连接顺序为 SFTP → SCP → FTPS；明文 FTP 不再自动尝试，只能由用户手动指定。</p>
+      </div>
+      <div class="feature">
+        <h3>旧版兼容且不降级</h3>
+        <p>对端是旧版本、没有指纹时退回首次信任，但界面会明确提示“本次未校验证书/主机密钥”。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <div class="eyebrow">认证与防爆破</div>
+      <h2>接收码很短，防线在服务端</h2>
+      <p class="section-sub">6~8 位数字的熵有限，仅靠客户端限流可以被任意 FTP/SSH 客户端绕过；LanLink 在三层做服务端限流。</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>8 位接收码</h3>
+        <p>空间从 90 万提升到 1 亿（兼容旧版 6 位）；接收码只通过对方屏幕或二维码传递，UDP 广播不携带。</p>
+      </div>
+      <div class="feature">
+        <h3>单来源逐级锁定</h3>
+        <p>同一 IP 10 分钟内失败 5 次即锁定；可信来源（近期成功认证过）按 1/5/10 分钟阶梯升级，减少 NAT 后邻居误伤。</p>
+      </div>
+      <div class="feature">
+        <h3>全局失败速率上限</h3>
+        <p>全服务 60 次失败/分钟触发 30 秒全局冷却，阻断“换 IP 水平爆破”；冷却期快速失败，不产生状态膨胀。</p>
+      </div>
+      <div class="feature">
+        <h3>四协议统一生效</h3>
+        <p>FTP、FTPS、SFTP、SCP 共用同一限流器；SSH 密码认证与 FTP USER/PASS 阶段都会拦截。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <div class="eyebrow">本地数据</div>
+      <h2>手机上的密码不再明文</h2>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>Keystore AES-256-GCM</h3>
+        <p>服务器密码与传输队列里的凭据使用 Android Keystore 密钥加密落盘（<code>enc:v1:</code> 前缀，随机 IV），密钥不可导出。</p>
+      </div>
+      <div class="feature">
+        <h3>不参与云备份</h3>
+        <p><code>allowBackup=false</code>，凭据不会被系统备份带到其他设备；解密失败时要求重新输入而不是崩溃。</p>
+      </div>
+      <div class="feature">
+        <h3>密钥与令牌不入库</h3>
+        <p>签名 keystore、更新签名私钥、Gitee/GitHub 令牌全部放在项目外并通过环境变量注入，仓库内无明文凭据。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <div class="eyebrow">更新链</div>
+      <h2>镜像站也改不了更新内容</h2>
+      <p class="section-sub">更新清单必须带 Ed25519 签名；下载的 APK 再校验大小、SHA-256、签名证书与版本号，任何一步不符都取消安装。</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>仅 HTTPS + 签名清单</h3>
+        <p>非 HTTPS 来源直接跳过；清单签名无效或缺失即拒绝，签名公钥内置在 App 内。</p>
+      </div>
+      <div class="feature">
+        <h3>APK 多层校验</h3>
+        <p>下载后校验 size / SHA-256 / APK 签名证书 / versionCode，全部一致才拉起系统安装器。</p>
+      </div>
+      <div class="feature">
+        <h3>调试版隔离</h3>
+        <p>debug 包与 release 包证书不同，调试版直接禁用应用内更新并提示安装正式版，避免“下载完才发现签名不匹配”。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <div class="eyebrow">已知取舍</div>
+      <h2>透明说明边界，而不是“绝对安全”</h2>
+    </div>
+    <div class="sec-card">
+      <table class="sec-table">
+        <thead><tr><th>场景</th><th>现状与原因</th></tr></thead>
+        <tbody>
+          <tr><td>局域网可见性</td><td>发现依赖 UDP 广播（明文，但不含接收码）；同一 Wi-Fi 内的设备可以看到设备名/IP/端口。这是“附近设备”功能的前提。</td></tr>
+          <tr><td>服务端监听 0.0.0.0</td><td>为支持热点/多网卡场景绑定全部网卡；已由服务端限流与加密协议降低风险，后续可加“仅私有网段来源”开关。</td></tr>
+          <tr><td>普通客户端首次信任</td><td>手动连接任意 FTPS/SFTP 服务器时，默认严格校验证书；用户显式勾选“信任任意证书”才会放宽。快速传文件走指纹固定。</td></tr>
+          <tr><td>明文 FTP</td><td>仍保留（兼容老设备），但自动回退不选它；需要用户手动指定，并自行承担明文风险。</td></tr>
+          <tr><td>SCP 能力边界</td><td>SCP 不支持断点续传与结构化列目录；应用优先 SFTP，失败才回退 SCP。</td></tr>
+          <tr><td>签名私钥</td><td>更新签名私钥离线保管、不入库；丢失后无法再为已发布 App 签发可验证的新清单。</td></tr>
+        </tbody>
+      </table>
+      <div class="sec-note">
+        发现漏洞请通过 <a href="https://github.com/likebe1-1/lan-transfer-android/security/advisories/new" target="_blank" rel="noopener">GitHub Security Advisories</a> 私下报告，或在 Issue 中只描述影响、不公开利用细节。更技术性的实现说明见仓库 <a href="https://github.com/likebe1-1/lan-transfer-android/blob/master/docs/ARCHITECTURE.md" target="_blank" rel="noopener">docs/ARCHITECTURE.md</a>。
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div>
+      <a class="brand" href="index.html"><img src="site/logo.svg" alt="" width="28" height="28" /><span>LanLink</span></a>
+      <p class="muted small">纯局域网文件传输 · 无需登录 · 不上传云端</p>
+    </div>
+    <div class="footer-links">
+      <a href="index.html">官网</a>
+      <a href="downloads.html">文件下载</a>
+      <a href="security.html">安全设计</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/likebe1-1/lan-transfer-android/issues" target="_blank" rel="noopener">反馈</a>
+    </div>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" type="button" aria-label="回到顶部">↑</button>
+<script src="site/app.js" defer></script>
+</body>
+</html>

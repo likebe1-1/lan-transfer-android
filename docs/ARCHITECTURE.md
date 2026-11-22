@@ -211,7 +211,7 @@ LocalServerService（dataSync 前台服务，保活 + 运行中通知）
 ### 11.2 会话模型
 
 ```
-A：选文件 → 生成 6 位接收码 → SessionFileStore 复制到会话目录
+A：选文件 → 生成 8 位接收码 → SessionFileStore 复制到会话目录
    → LocalServerManager.start(四协议 + 派生帐号 + shareRootOverride=会话目录 + 自动选空闲端口)
    → UdpBeaconBroadcaster 每秒广播 {code, deviceName, addresses, ftp/ftps/ssh ports, protocols}
 B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+码
@@ -322,7 +322,7 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 
 - **广播不再携带接收码**：`QuickBeaconCodec.VERSION = 2`，`encode` 只输出 `v/name/addrs/ftp/ftps/ssh/protocols/ts`；`decode` 只接受 v2，code 恒为空（即使伪造报文带 code 也不采信），v1 旧报文忽略；
 - **接收码来源**：发送方屏幕显示 + 发送页二维码（`QuickQrCodec` 仍是 Base64(JSON) 且含 code），或用户手动输入；
-- **附近设备交互**：接收页附近设备卡片只显示设备名/IP/端口/协议，点击后弹窗要求输入 6 位接收码再连接；
+- **附近设备交互**：接收页附近设备卡片只显示设备名/IP/端口/协议，点击后弹窗要求输入 8 位接收码再连接；
 - **错误次数限制**：新增 `QuickJoinAttemptLimiter`（纯 JVM，key = host+三端口）：连续 5 次认证失败后锁定 10 分钟，成功连接清除记录；`DefaultQuickReceiveManager.join` 前置检查并在认证失败时按一次失败计数（协议自动回退不重复计数），锁定期间直接返回中文提示；
 - **测试**：JVM 单测新增广播 v2 编码不含 code/v1 忽略、限流器 5 次/10 分钟/成功清除/目标隔离等；设备端 beacon 回环测试改为断言 code 为空且 `hasCode=false`。
 
@@ -465,3 +465,16 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 因此 `DefaultUpdateManager` 在 `BuildConfig.DEBUG` 下**跳过更新检查**，手动检查时提示
   「当前是调试版，不支持应用内更新。请安装正式版」；
 - 真机验证：debug 2.2.0 点击检查更新 → 提示如上（不再出现误导性的「下载完成后签名校验失败」）。
+
+
+## 21. 公开安全页（对外说明）
+
+官网新增 `docs/security.html`（https://likebe1-1.github.io/lan-transfer-android/security.html），
+面向用户说明 v2.3.0 的安全基线与已知取舍：
+- 传输认证：FTPS 证书固定、SFTP/SCP 主机密钥固定、加密协议优先、明文 FTP 仅手动；
+- 认证防爆破：8 位接收码、单来源逐级锁定、全局失败速率上限、四协议统一；
+- 本地数据：Android Keystore AES-256-GCM 凭据加密、`allowBackup=false`、密钥/令牌不入库；
+- 更新链：仅 HTTPS + Ed25519 清单签名 + APK 多层校验、debug 版禁用更新；
+- 已知取舍：局域网可见性、0.0.0.0 监听、首次信任、明文 FTP、SCP 能力边界、签名私钥离线保管。
+
+维护要求：安全机制变更时同步更新 `docs/security.html`、README「安全说明」与本文件对应章节。
