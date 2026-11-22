@@ -1,0 +1,67 @@
+name: CI
+
+# 触发：推送到 master、以及所有 pull_request
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# 最小权限：CI 只读仓库内容（上传 artifact 不需要写权限）
+permissions:
+  contents: read
+
+# 同一分支/PR 的新构建会取消旧构建，避免排队浪费 runner
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-lint-build:
+    name: Unit tests + lint + debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # gradle.properties 里写死了本机 Windows 路径 org.gradle.java.home=D:/SDK/JDK21，
+      # 该路径在 Linux runner 上不存在，会让 Gradle 直接报 "Java home supplied is invalid"。
+      # 这里在 GRADLE_USER_HOME 的 gradle.properties 中覆盖它（用户级 gradle.properties
+      # 优先级高于项目根目录的 gradle.properties，已用 Gradle 9.6.0 实测），
+      # 这样无需修改仓库里的任何 Gradle 配置。
+      - name: Point Gradle at the CI JDK
+        run: |
+          GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$GRADLE_USER_HOME"
+          echo "org.gradle.java.home=$JAVA_HOME" >> "$GRADLE_USER_HOME/gradle.properties"
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run unit tests, lint and assemble debug
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+
+      # 失败也上传，便于定位是哪个单测 / 哪条 lint 规则出问题
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/test-results/testDebugUnitTest
+          if-no-files-found: ignore
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: app/build/reports/lint-results*.html
+          if-no-files-found: ignore

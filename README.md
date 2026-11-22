@@ -219,6 +219,22 @@ App 同时是客户端和服务端：
 - 协议适配层是**纯 JVM 代码**（不依赖 Android API），可直接用 JVM 单元测试对接内嵌 FTP/SSH 服务器做真实报文测试。
 - 每任务独立连接、任务结束即关闭；取消传输 = 关闭连接。
 
+## 工程化与发布文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/CI.md](docs/CI.md) | GitHub Actions CI（单测 + lint + debug 构建）、本地复现、badge |
+| [docs/RELEASING.md](docs/RELEASING.md) | 一键发版 SOP（bump → 构建 → 清单签名 → Gitee → 自检） |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 关键依赖版本、风险与升级检查清单 |
+| [docs/SECRETS.md](docs/SECRETS.md) | 凭据/密钥清单、备份恢复、轮换与泄露应急 |
+
+常用命令：
+
+```bash
+python scripts/release.py --dry-run                 # 预演发版流程（默认 dry-run，不改文件）
+powershell -File scripts/backup_signing_key.ps1 -Destination D:\lanlink-backup   # 备份签名材料
+```
+
 ## 构建
 
 前置：JDK 17+（推荐 21）、Android SDK（platform 35、build-tools，设置 `ANDROID_HOME` 或 `local.properties`）、Gradle 由 wrapper 提供。

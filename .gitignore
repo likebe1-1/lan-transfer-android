@@ -52,3 +52,7 @@ dsh-plugins/
 # 构建/测试日志（本地临时产物）
 build-*.log
 *.log.tmp
+
+# Python ����
+__pycache__/
+*.pyc

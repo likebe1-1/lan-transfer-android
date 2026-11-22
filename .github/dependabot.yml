@@ -1,0 +1,95 @@
+# Dependabot 配置：LanLink（Android / Gradle 单模块工程）
+# 官方文档：https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# 策略概览：
+#   - 只管理 Gradle 依赖（版本统一收敛在 gradle/libs.versions.toml）；
+#   - 每周检查一次，最多同时开 5 个 PR，避免刷屏；
+#   - minor / patch 自动开 PR，按依赖族分组减少 PR 数量；
+#   - major 一律不自动开 PR（见下方 ignore 处的中文说明），由人工评估后手测升级。
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    target-branch: "master"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    # 为什么默认忽略所有 major 升级（不自动开 PR）：
+    # 1) AGP / Kotlin / Compose BOM 三者版本强耦合：Kotlin 2.x 起 Compose 编译器随 Kotlin 发布，
+    #    major 升级往往还要同步改 compileSdk、Compose 插件与 Gradle 版本，Dependabot 生成的
+    #    单包变更几乎不可能直接构建通过，只会制造噪音；
+    # 2) Apache SSHD / BouncyCastle / JSch 的 major 常伴随 API 不兼容或默认 TLS/SSH 算法、
+    #    密钥格式策略变化，会直接影响 FTPS 自签证书固定（pinning）与 SshHostKey 固定逻辑，
+    #    必须真机回归，不能自动合并；
+    # 3) 工程固定 minSdk 29 / targetSdk 35（app/build.gradle.kts），AndroidX 的 major 可能抬高
+    #    compileSdk 要求，属于需要人工决策的工程级变更。
+    # 需要升 major 时：人工新建 issue/分支，按 docs/DEPENDENCIES.md 的「升级检查清单」执行，
+    # 跑完单元测试与真机协议测试后再合并（可临时把该依赖加入 allow 或手动改 libs.versions.toml）。
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+    # 分组匹配规则：一个依赖只归入自上而下第一个命中的分组，因此先放具体分组，
+    # 最后放 patterns: ["*"] 的 minor-patch 兜底组。
+    groups:
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
+        update-types:
+          - "minor"
+          - "patch"
+      compose:
+        patterns:
+          - "androidx.compose*"
+          - "androidx.compose.material*"
+        update-types:
+          - "minor"
+          - "patch"
+      androidx:
+        patterns:
+          - "androidx.activity*"
+          - "androidx.core*"
+          - "androidx.lifecycle*"
+          - "androidx.navigation*"
+          - "androidx.documentfile*"
+          - "androidx.test*"
+        update-types:
+          - "minor"
+          - "patch"
+      sshd-bc-jsch:
+        patterns:
+          - "org.apache.sshd*"
+          - "org.bouncycastle*"
+          - "com.github.mwiede*"
+          - "org.slf4j*"
+        update-types:
+          - "minor"
+          - "patch"
+      ftp-test:
+        patterns:
+          - "commons-net*"
+          - "org.mockftpserver*"
+        update-types:
+          - "minor"
+          - "patch"
+      zxing:
+        patterns:
+          - "com.google.zxing*"
+          - "com.journeyapps*"
+        update-types:
+          - "minor"
+          - "patch"
+      minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
