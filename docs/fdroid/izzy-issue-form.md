@@ -6,13 +6,29 @@
 
 ---
 
-## Summary
+## Summary（Markdown）
 
-```
-LanLink is a LAN-only file transfer app for Android: two devices on the same Wi-Fi or hotspot move files directly over FTP/FTPS/SFTP/SCP — as a client, or by turning the phone into a server. No cloud, no account.
+```markdown
+**LanLink** is a LAN-only file transfer app for Android: two devices on the same Wi-Fi or hotspot move files
+directly over **FTP / FTPS / SFTP / SCP** — as a client, or by turning the phone into a server.
+No cloud, no account, no data collection.
 
-（中文）
-LanLink 是纯局域网的 Android 文件传输工具：同一 Wi-Fi 或热点下两台设备直传文件，支持 FTP/FTPS/SFTP/SCP，既可作为客户端也可让手机自建服务器，不经过云端、无需账号。
+- **Quick transfer:** pick files → an 8-digit code / QR code → the other device receives them
+- **Built-in server:** share one folder over FTP/FTPS/SFTP/SCP
+- **Transfer queue:** 3 concurrent tasks, resume, retry, history
+- **Network tools:** LAN discovery, diagnostics, port tests, one-click hotspot join
+- **Hardened by design:** FTPS certificate & SSH host-key pinning, encrypted-transport-only auto fallback,
+  server-side auth throttling, Keystore-encrypted credentials, Ed25519-signed update manifest
+
+**中文**：**LanLink** 是纯局域网的 Android 文件传输工具 —— 同一 Wi-Fi 或热点下两台设备通过
+**FTP / FTPS / SFTP / SCP** 直传文件，既可作客户端，也可让手机自建服务器；不经过云端、无需账号、不收集数据。
+
+- **快速传文件**：选文件 → 8 位接收码 / 二维码 → 对方直接接收
+- **本机服务器**：一个共享目录即可对外提供 FTP/FTPS/SFTP/SCP
+- **传输队列**：3 路并发、断点续传、失败重试、历史记录
+- **网络工具**：局域网发现、诊断、端口测试、一键加入热点
+- **默认安全**：FTPS 证书与 SSH 主机密钥指纹固定、自动回退仅用加密协议、
+  服务端认证限流、Keystore 加密凭据、Ed25519 签名更新清单
 ```
 
 ---
