@@ -458,3 +458,10 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 本机（Windows + JDK 21）`:app:lintDebug` 的 lint worker 会崩，故 `checkReleaseBuilds` 仍为 false，
   静态检查移交 CI（Linux/JDK17）执行；注释已写明原因与命令；
 - 接收码展示分组注释与实现一致：8 位「1234 5678」、旧版 6 位「123 456」，并有单元测试锁定。
+
+### 20.3 调试包与应用内更新
+- Debug APK（包名 `com.manst.lantransfer.debug`）使用 debug 证书签名，与 Release APK 签名不同，
+  系统层不允许覆盖安装；下载后也会被「APK 签名与已安装应用不一致」的安全校验拒绝；
+- 因此 `DefaultUpdateManager` 在 `BuildConfig.DEBUG` 下**跳过更新检查**，手动检查时提示
+  「当前是调试版，不支持应用内更新。请安装正式版」；
+- 真机验证：debug 2.2.0 点击检查更新 → 提示如上（不再出现误导性的「下载完成后签名校验失败」）。

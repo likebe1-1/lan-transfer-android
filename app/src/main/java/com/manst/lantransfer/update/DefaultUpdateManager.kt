@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.manst.lantransfer.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,7 +32,15 @@ import java.security.MessageDigest
  * - 下载后校验大小、SHA-256、APK 签名（必须与已安装应用一致），再拉起系统安装器；
  * - 失败时保留错误状态，界面可引导使用蓝奏云浏览器下载。
  */
-class DefaultUpdateManager(context: Context) : UpdateManager {
+class DefaultUpdateManager(
+    context: Context,
+    /**
+     * 是否允许应用内更新：调试版（debug）安装包用 debug 证书签名，
+     * 与 Release APK 的签名不一致，系统/校验都会拒绝覆盖安装。
+     * 因此 debug 版不提供更新能力，只提示用户安装正式版。
+     */
+    private val allowUpdates: Boolean = !BuildConfig.DEBUG
+) : UpdateManager {
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -53,6 +62,20 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
     private var manualCheckRequested = false
 
     override fun check(auto: Boolean) {
+        if (!allowUpdates) {
+            if (!auto) {
+                mutableState.update {
+                    it.copy(
+                        checking = false,
+                        info = null,
+                        dismissed = false,
+                        error = "当前是调试版，不支持应用内更新。请安装正式版（com.manst.lantransfer），或在设置中关闭调试包后重试。"
+                    )
+                }
+            }
+            Log.i(TAG, "调试版跳过应用内更新检查")
+            return
+        }
         if (mutableState.value.downloading) return
         if (mutableState.value.checking) {
             if (!auto) manualCheckRequested = true
@@ -83,6 +106,10 @@ class DefaultUpdateManager(context: Context) : UpdateManager {
     }
 
     override fun downloadAndInstall() {
+        if (!allowUpdates) {
+            mutableState.update { it.copy(error = "调试版不支持应用内更新，请安装正式版") }
+            return
+        }
         val info = mutableState.value.info ?: return
         if (mutableState.value.downloading) return
         mutableState.update {
