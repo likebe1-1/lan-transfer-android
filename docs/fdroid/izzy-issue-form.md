@@ -1,43 +1,50 @@
-# IzzyOnDroid 上架：issue 填写稿（LanLink v2.3.1）
+# IzzyOnDroid App Inclusion Request · 填写稿（英中双语）
 
 模板：**App Inclusion Request**　标题：`[App Inclusion] LanLink`
 
-> 说明：本文件是逐字段的填写稿，直接对照表单粘贴即可。表单字段名与显示语言可能略有差异。
+> 建议：英文在前、中文在后（审核以英文为主）。每段可整段粘贴。
 
 ---
 
-## App meta-data
+## Summary
 
-**Link to the source code**
 ```
-https://github.com/likebe1-1/lan-transfer-android
-```
+LanLink is a LAN-only file transfer app for Android: two devices on the same Wi-Fi or hotspot move files directly over FTP/FTPS/SFTP/SCP — as a client, or by turning the phone into a server. No cloud, no account.
 
-**Link to app in another app store**
-```
-（留空——尚未上架 Google Play / F-Droid；若只想填一个可填）
-https://github.com/likebe1-1/lan-transfer-android/releases
-```
-
-**License used**
-```
-GPL-3.0-or-later
-```
-
-**Categories**（最多 5 个，建议只选一个最贴切的）
-```
-File Transfer
-```
-（备选可加：Networking / Utilities）
-
-**Summary**（1-2 句）
-```
+（中文）
 LanLink 是纯局域网的 Android 文件传输工具：同一 Wi-Fi 或热点下两台设备直传文件，支持 FTP/FTPS/SFTP/SCP，既可作为客户端也可让手机自建服务器，不经过云端、无需账号。
 ```
 
-**Description**
+---
+
+## Description
+
 ```
-LanLink 是一款不依赖云端的 Android 局域网文件传输工具，面向"两台设备之间直接搬文件"的场景（手机↔手机、手机↔NAS/服务器、手机↔电脑）。
+LanLink is an Android file transfer tool that works entirely on your local network — no cloud, no account. It is designed for moving files directly between devices: phone to phone, phone to NAS/server, or phone to desktop.
+
+Features
+• Four protocols — FTP, FTPS, SFTP and SCP. Connect to a NAS or any server, or turn the phone itself into a server (built-in server mode).
+• Quick transfer — pick files and LanLink starts a temporary server and shows an 8-digit code; the other device types the code or scans a QR code. Supports folders, resume, and auto-save into the system Downloads folder.
+• Transfer queue — 3 concurrent tasks, live speed/progress/ETA, automatic retry, history, and opening finished files from the notification or history list.
+• Network tools — LAN device discovery (with AP-isolation hints), network diagnostics, and port reachability tests.
+• One-click hotspot — scan the hotspot QR code to join the sender's hotspot, which works even when the router enforces AP isolation.
+
+Security
+• Quick transfer pins the FTPS certificate and SSH host key by SHA-256 fingerprint (delivered through the QR code / LAN beacon), so a man-in-the-middle cannot impersonate the peer.
+• Automatic protocol fallback only uses encrypted transports (SFTP → SCP → FTPS); plain FTP must be selected explicitly.
+• Server-side authentication throttling: per-source escalating lockout plus a global failure-rate cap, applied to FTP/FTPS/SFTP/SCP alike.
+• Saved server passwords are encrypted with Android Keystore (AES-256-GCM, non-exportable key); allowBackup is disabled.
+• The update manifest is fetched over HTTPS only and verified with an Ed25519 signature; downloaded APKs are additionally checked by size, SHA-256, signing certificate and versionCode.
+
+Privacy
+No data collection, no ads, no analytics, no crash reporting. Files never leave the local network. The only outbound request is the optional update check (GitHub/Gitee release metadata), and it is disabled in the store flavor.
+
+Open source
+Released under GPL-3.0-or-later — audit it, build it, fork it.
+
+──────────────── 中文 ────────────────
+
+LanLink 是一款不依赖云端的 Android 局域网文件传输工具，面向「两台设备之间直接搬文件」的场景（手机↔手机、手机↔NAS/服务器、手机↔电脑）。
 
 主要功能
 • 四种协议：FTP、FTPS、SFTP、SCP。既能连接 NAS 或其他服务器，也能把手机变成服务器（本机服务器模式）。
@@ -54,7 +61,7 @@ LanLink 是一款不依赖云端的 Android 局域网文件传输工具，面向
 • 更新清单仅接受 HTTPS + Ed25519 签名，下载的 APK 再校验 size/SHA-256/签名/versionCode。
 
 隐私
-不收集任何数据，无广告、无统计、无崩溃上报；文件只在局域网内传输。唯一的对外网络请求是"检查更新"读取 GitHub/Gitee 的版本清单，且商店分发版（fdroid flavor）已禁用应用内更新。
+不收集任何数据，无广告、无统计、无崩溃上报；文件只在局域网内传输。唯一的对外网络请求是「检查更新」读取 GitHub/Gitee 的版本清单，且商店分发版（fdroid flavor）已禁用应用内更新。
 
 开源
 源码以 GPL-3.0-or-later 发布，欢迎审计与自建。
@@ -62,69 +69,54 @@ LanLink 是一款不依赖云端的 Android 局域网文件传输工具，面向
 
 ---
 
-## Technical instructions
+## Build instructions
 
-**Build instructions**（命令行）
 ```
-Prerequisites: JDK 17+ (tested with JDK 21), Android SDK platform 35 + build-tools 34+.
-The Gradle wrapper (8.9) is committed; no local Gradle install needed.
+Prerequisites: JDK 17+ (tested with JDK 21), Android SDK platform 35 and build-tools 34+.
+The Gradle wrapper (8.9) is committed, so no local Gradle installation is required.
 
     git clone https://github.com/likebe1-1/lan-transfer-android.git
     cd lan-transfer-android
     git checkout v2.3.1
 
-Build the flavor used for store distribution (in-app updater disabled,
-REQUEST_INSTALL_PACKAGES removed, single universal APK):
+Build the flavor used for store distribution (in-app updater disabled, REQUEST_INSTALL_PACKAGES removed, single universal APK):
 
     export JAVA_HOME=/path/to/jdk-21
     ./gradlew :app:assembleFdroidRelease
 
 Output: app/build/outputs/apk/fdroid/release/app-fdroid-universal-release.apk
 
-Notes:
-- Release builds are signed from ~/.lanlink/keystore.properties (see
-  scripts/migrate_keystore_to_userdir.ps1); without signing material Gradle
-  produces *-unsigned.apk only. F-Droid's buildserver signs with its own key.
-- No Google Play Services, no ads/analytics SDKs. Dependencies come from
-  Maven Central / Google Maven only.
-- CI (GitHub Actions) runs ./gradlew testGithubDebugUnitTest lintGithubDebug
-  assembleGithubDebug assembleFdroidRelease.
+Notes
+- Release builds are signed from ~/.lanlink/keystore.properties (see scripts/migrate_keystore_to_userdir.ps1). Without signing material Gradle emits *-unsigned.apk only. F-Droid's buildserver signs with its own key.
+- Dependencies come from Maven Central / Google Maven only; no Google Play Services, no ads or analytics SDKs.
+- CI (GitHub Actions) runs: ./gradlew testGithubDebugUnitTest lintGithubDebug assembleGithubDebug assembleFdroidRelease
 ```
 
 ---
 
 ## AI Tools Usage
 
-**Assistance Level**
-```
-Significant — 大部分实现代码由 AI 编码代理在开发者主导下编写与重构（架构、协议层、UI、测试），
-开发者负责需求、评审、真机验证与最终取舍。
-```
-（如果下拉选项为 None / Minor / Moderate / Significant / Extensive，选 **Significant**；若实际以手写为主，可下调为 Moderate——**请按真实情况选择**。）
+**Assistance Level**: `Significant`
 
-**"AI" Tool(s)**
+**"AI" Tool(s)**:
 ```
-DeepSeek Harness (AI coding agent, model: DeepSeek), GitHub Copilot 辅助补全
+DeepSeek Harness (AI coding agent, model: DeepSeek)
 ```
-（请按实际使用情况增删，例如 ChatGPT / Claude / Cursor / 通义灵码 等。）
 
 **What did the tools help with, and how?**
 ```
-- 架构与模块划分：把 FTP/FTPS/SFTP/SCP 适配层、传输队列、本机服务器、快速传文件拆成独立模块并生成接口草稿；
-- 样板代码：Compose 页面、JSON 持久化、前台服务、通知与权限流程；
-- 安全加固：Ed25519 清单验签的纯 Kotlin 实现、FTPS 证书与 SSH 主机密钥指纹固定、服务端认证限流、
-  Android Keystore 凭据加密（均由开发者提出需求并逐项评审）；
-- 调试：并发问题（传输队列、服务端会话快照）、JSch/SSHD 在 Android 上的兼容性问题；
-- 文档：README、架构文档、发布说明、上架文档。
-所有 AI 产出均经过代码审查、单元测试（350+）与真机/模拟器集成测试验证后合入。
-```
+- Architecture and module split: FTP/FTPS/SFTP/SCP adapters, transfer queue, built-in server, quick-transfer engine.
+- Boilerplate: Compose screens, JSON persistence, foreground services, notifications and permission flows.
+- Security hardening: a pure-Kotlin Ed25519 verifier for update manifests, FTPS certificate / SSH host-key
+  fingerprint pinning, server-side authentication throttling, Android Keystore credential encryption —
+  all requested and reviewed by the developer.
+- Debugging: concurrency issues (transfer queue, server session snapshots) and JSch/SSHD compatibility on Android.
+- Documentation: README, architecture notes, release notes and store listing.
 
-**AI Accountability**（勾选确认项）
-```
-☑ 我（开发者）对提交的代码负全部责任，理解并能维护其中每一部分；
-☑ AI 生成的代码已通过人工评审与自动化测试验证；
-☑ 代码中不含来路不明的第三方代码，所有依赖的许可证均已核对（GPL-3.0 兼容）；
-☑ 无隐藏遥测/跟踪，AI 工具未引入任何第三方服务调用。
+All AI output was reviewed, unit-tested (350+ tests) and validated on emulator and real devices before merging.
+
+（中文）架构与模块划分、样板代码、安全加固、并发与 Android 兼容性调试、文档撰写；
+所有 AI 产出均经人工评审、350+ 单元测试与真机/模拟器集成测试验证后合入。
 ```
 
 ---
@@ -132,18 +124,35 @@ DeepSeek Harness (AI coding agent, model: DeepSeek), GitHub Copilot 辅助补全
 ## Further Notices
 
 ```
-我是本应用的开发者（账号 likebe1-1）。应用以 GPL-3.0-or-later 开源，仓库根目录含完整 LICENSE。
+I am the developer of this app (GitHub account likebe1-1). It is released under GPL-3.0-or-later; the full
+license text is in the repository root.
 
-关于分发的两点说明：
-1) 商店分发使用 "fdroid" flavor：已禁用应用内更新并移除 REQUEST_INSTALL_PACKAGES 权限，
-   由仓库客户端负责更新；GitHub/官网分发使用 "github" flavor，保留应用内更新。
-2) 两个 flavor 的 applicationId（com.manst.lantransfer）与版本号一致，且由同一密钥签名，
-   因此与官网版可互相覆盖安装（F-Droid 主库若重签则不可互换）。
+Two notes about distribution:
+1) The store flavor ("fdroid") disables the in-app updater and removes REQUEST_INSTALL_PACKAGES, so updates are
+   handled by the repository client. The GitHub/website flavor ("github") keeps the built-in updater.
+2) Both flavors share the same applicationId (com.manst.lantransfer) and version code, and are signed with the
+   same key, so they can replace each other on-device (a re-signed F-Droid build could not).
 
-想测试商店版可以下载：<请在这里填 v2.3.1 Release 里 LanLink-v2.3.1-fdroid-universal.apk 的链接>
+Store-flavor test APK:
+<PASTE THE URL OF LanLink-v2.3.1-fdroid-universal.apk FROM THE v2.3.1 RELEASE HERE>
 SHA-256: 7a54f2d6cc9332a62c8f2362e96b1eeca16a3cc23a20e4e6794c3d02a2c9583c
 
-安全相关：权限仅 INTERNET/网络状态（局域网传输）、CAMERA（仅扫码）、NEARBY_WIFI_DEVICES（Android 13+
-加入热点）、ACCESS_FINE/COARSE_LOCATION（maxSdkVersion 32，旧系统热点检测）、前台服务（dataSync 传输 +
-specialUse 长驻本机服务器）、POST_NOTIFICATIONS；无存储权限（使用 SAF/MediaStore）。
+Permissions: INTERNET / network state (LAN transfer), CAMERA (QR scanning only), NEARBY_WIFI_DEVICES
+(Android 13+, joining a hotspot), ACCESS_FINE/COARSE_LOCATION (maxSdkVersion 32, hotspot detection on older
+systems), foreground services (dataSync for transfers, specialUse for the long-running local server),
+POST_NOTIFICATIONS. No storage permissions (SAF / MediaStore only).
+
+（中文）我是本应用开发者，应用以 GPL-3.0-or-later 开源，仓库根目录含完整 LICENSE。
+商店分发使用 fdroid flavor（禁用应用内更新、移除安装权限）；官网/GitHub 分发保留应用内更新。
+两个 flavor 包名、版本号一致且同签名，可互相覆盖安装。权限清单同上，无存储权限。
 ```
+
+---
+
+## 提交前清单
+
+- [ ] 已把 `LanLink-v2.3.1-fdroid-universal.apk` 追加到 v2.3.1 Release（否则 Further Notices 里的链接无内容）
+- [ ] 标题带应用名：`[App Inclusion] LanLink`
+- [ ] Categories 选 `File Transfer`
+- [ ] License 填 `GPL-3.0-or-later`
+- [ ] AI Tools Usage 如实填写（Assistance Level: Significant）
