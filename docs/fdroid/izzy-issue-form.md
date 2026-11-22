@@ -192,9 +192,15 @@ Two notes about distribution:
 2) Both flavors share the same applicationId (com.manst.lantransfer) and version code, and are signed with the
    same key, so they can replace each other on-device (a re-signed F-Droid build could not).
 
-Store-flavor test APK:
-https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-fdroid-universal.apk
-SHA-256: 7a54f2d6cc9332a62c8f2362e96b1eeca16a3cc23a20e4e6794c3d02a2c9583c
+Store-flavor APK: the "fdroid" flavor is not published as a GitHub release asset on purpose (the release
+assets are the GitHub-flavor builds that keep the in-app updater). You can build the store flavor yourself
+in one command:
+
+    ./gradlew :app:assembleFdroidRelease
+    # -> app/build/outputs/apk/fdroid/release/app-fdroid-universal-release.apk
+
+It is signed with the same key as the GitHub-flavor releases, disables the in-app updater and removes
+REQUEST_INSTALL_PACKAGES.
 
 Permissions: INTERNET / network state (LAN transfer), CAMERA (QR scanning only), NEARBY_WIFI_DEVICES
 (Android 13+, joining a hotspot), ACCESS_FINE/COARSE_LOCATION (maxSdkVersion 32, hotspot detection on older

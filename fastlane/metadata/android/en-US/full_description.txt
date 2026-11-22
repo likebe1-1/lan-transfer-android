@@ -16,3 +16,9 @@ Security
 
 Privacy
 No data collection, no ads or analytics, no cloud storage. The only network access outside the LAN is fetching release metadata from GitHub/Gitee. Source is GPL-3.0-or-later.
+
+Updating
+• Installed from F-Droid (or IzzyOnDroid)? Updates are delivered by the F-Droid client; the in-app updater is disabled in that build.
+• Prefer in-app updates? Install LanLink from GitHub or Gitee instead:
+  GitHub — https://github.com/likebe1-1/lan-transfer-android/releases
+  Gitee — https://gitee.com/likebe1-1/lanlink-android/releases

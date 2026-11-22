@@ -79,6 +79,12 @@
     return index >= 0 ? String(name).slice(index + 1).toLowerCase() : "";
   }
 
+  // 商店分发专用产物（F-Droid/izzy 的 fdroid flavor）不作为公开下载项，
+  // 避免用户在官网下到关闭了应用内更新的包。
+  function isStoreOnlyArtifact(name) {
+    return /-fdroid-/i.test(String(name));
+  }
+
   function kindOf(name) {
     const ext = extensionOf(name);
     if (ext === "apk" || ext === "aab" || ext === "ipa") return "apk";
@@ -129,7 +135,8 @@
     }
     try {
       const result = await fetchJSON(candidates, { perUrlTimeout: 4000, totalBudget: 20000 });
-      const files = Array.isArray(result.data.files) ? result.data.files : [];
+      const files = (Array.isArray(result.data.files) ? result.data.files : [])
+        .filter((file) => !isStoreOnlyArtifact(file.name));
       return { files, source: result.url, generatedAt: result.data.generatedAt || "" };
     } catch (error) {
       // 兜底：GitHub API（未登录每小时 60 次，仅在清单不可用时使用），结果本地缓存 24 小时
@@ -149,6 +156,7 @@
       for (const release of releases) {
         if (release.draft) continue;
         for (const asset of release.assets || []) {
+          if (isStoreOnlyArtifact(asset.name)) continue;
           files.push({
             id: release.tag_name + "/" + asset.name,
             name: asset.name,

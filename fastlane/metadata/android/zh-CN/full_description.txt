@@ -16,3 +16,9 @@ LanLink 是一款纯局域网的 Android 文件传输工具：两台设备连上
 
 隐私
 不收集任何数据、不含广告与统计、不访问云端（仅检查更新时访问 GitHub/Gitee 获取版本信息）。源码以 GPL-3.0-or-later 开源。
+
+更新方式
+• 从 F-Droid（或 IzzyOnDroid）安装的版本：更新由 F-Droid 客户端推送，该版本已关闭应用内更新。
+• 希望使用应用内更新：请从 GitHub 或 Gitee 下载安装：
+  GitHub —— https://github.com/likebe1-1/lan-transfer-android/releases
+  Gitee —— https://gitee.com/likebe1-1/lanlink-android/releases

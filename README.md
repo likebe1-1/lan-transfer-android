@@ -34,6 +34,9 @@
 
 ## 下载安装包
 
+> **更新方式**：从 **F-Droid / IzzyOnDroid** 安装的版本由商店客户端负责更新（该渠道版本已关闭应用内更新）；
+> 如需**应用内更新**，请使用本仓库 GitHub / Gitee 发布的正式版（同一签名，可直接覆盖安装并保留数据）。
+
 历史版本签名 APK 已发布在 [GitHub Releases](https://github.com/likebe1-1/lan-transfer-android/releases)（要求 Android 10+ / minSdk 29）：
 
 | 版本 | 说明 | 直接下载 |

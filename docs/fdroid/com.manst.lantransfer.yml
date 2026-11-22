@@ -51,9 +51,21 @@ Description: |-
   * Saved server passwords are encrypted with Android Keystore (AES-256-GCM); allowBackup is disabled.
   * The update manifest is loaded over HTTPS only and verified with an Ed25519 signature.
   
+  <b>Updating:</b>
+
+  This build is distributed through F-Droid: updates are delivered by the F-Droid client, and the in-app updater is disabled in this variant. If you prefer in-app updates, install LanLink from GitHub or Gitee instead:
+
+  * GitHub: https://github.com/likebe1-1/lan-transfer-android/releases
+  * Gitee: https://gitee.com/likebe1-1/lanlink-android/releases
+
   <b>Privacy:</b>
   
   No data collection, no ads, no analytics, no crash reporting. Files never leave the local network.
+
+# 更新方式说明（提交 MR 时一并说明）：
+#   fdroid flavor 关闭了应用内更新，用户通过 F-Droid 客户端更新；
+#   若用户希望应用内更新，请从 GitHub（https://github.com/likebe1-1/lan-transfer-android/releases）
+#   或 Gitee（https://gitee.com/likebe1-1/lanlink-android/releases）下载 github flavor 版本。
 
 # 审查者常见问题的答复（提交 MR 时直接贴进描述）：
 # * REQUEST_INSTALL_PACKAGES：fdroid flavor 已移除（app/src/fdroid/AndroidManifest.xml tools:node="remove"），

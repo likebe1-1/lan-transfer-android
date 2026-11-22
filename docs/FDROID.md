@@ -22,6 +22,16 @@
 
 # 上架 F-Droid / IzzyOnDroid
 
+## 更新方式说明（重要）
+
+| 安装来源 | 更新方式 |
+| --- | --- |
+| F-Droid / IzzyOnDroid | **由 F-Droid 客户端更新**（fdroid flavor 已关闭应用内更新） |
+| GitHub / Gitee / 官网 / 蓝奏云 | **应用内更新**（github flavor 保留）+ 也可手动下载 |
+| 从商店版切到官网版（或反向） | 两者同签名（izzy/官网）可直接覆盖安装；**F-Droid 主库版为其密钥重签，需卸载重装** |
+
+> F-Droid 元数据描述与 Fastlane 描述均已写明：“本版本通过 F-Droid 客户端更新；如需应用内更新，请从 GitHub/Gitee 下载。”
+
 ## 渠道与更新方式
 
 | 渠道 | flavor | 应用内更新 | 签名 | 覆盖安装 |

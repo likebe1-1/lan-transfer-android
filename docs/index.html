@@ -229,6 +229,7 @@
       <details><summary>两台手机同一个 Wi-Fi，为什么搜不到对方？</summary><p>路由器可能开启了 AP 隔离/客户端隔离。可以先用「网络工具 → 扫描局域网」诊断；如果提示疑似 AP 隔离，可关闭路由器的隔离设置，或使用「一键组网」：一台开热点、另一台扫码加入后再传。</p></details>
       <details><summary>应用提示「安装未知应用」怎么办？</summary><p>在系统设置中允许当前浏览器/文件管理器安装应用即可；这是 Android 对非商店安装包的安全限制。LanLink 的 Release APK 已签名，SHA-256 校验值见版本说明。</p></details>
       <details><summary>为什么从旧版本升级没有自动提示更新？</summary><p>应用内更新是 v2.2.0 才加入的功能，v2.1.1 及更早版本没有更新代码，因此需要手动安装一次 v2.2.0；之后的版本会正常收到更新提示。</p></details>
+      <details><summary>从 F-Droid / IzzyOnDroid 装的版本怎么更新？</summary><p>这些渠道分发的版本关闭了应用内更新，更新由 F-Droid 客户端（或 IzzyOnDroid 源）推送。如果你更喜欢在 App 内直接更新，请改为从 <a href="https://github.com/likebe1-1/lan-transfer-android/releases" target="_blank" rel="noopener">GitHub Releases</a> 或 <a href="https://gitee.com/likebe1-1/lanlink-android/releases" target="_blank" rel="noopener">Gitee Release</a> 下载正式版——两者使用同一签名，可直接覆盖安装并保留数据。</p></details>
       <details><summary>LAN 传输需要联网吗？</summary><p>不需要互联网，只需要两台设备在同一局域网（或同一热点）。LanLink 不上传文件到云端，也不要求登录账号。</p></details>
       <details><summary>支持哪些协议？</summary><p>客户端支持 FTP、FTPS、SFTP、SCP；本机服务器同样四种协议都支持。SCP 不支持断点续传，其他三种支持。</p></details>
       <details><summary>源码在哪里？</summary><p>GitHub：<a href="https://github.com/likebe1-1/lan-transfer-android" target="_blank" rel="noopener">likebe1-1/lan-transfer-android</a>。欢迎提交 Issue 与 PR。</p></details>
