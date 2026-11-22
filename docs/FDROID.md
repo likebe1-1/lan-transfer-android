@@ -23,12 +23,64 @@
 
 产物：`app/build/outputs/apk/<flavor>/release/`。发布脚本 `scripts/release.py` 已指向 github flavor。
 
+## IzzyOnDroid 提交材料（v2.3.1，已构建）
+
+| 项 | 值 |
+| --- | --- |
+| 提交入口 | https://codeberg.org/IzzyOnDroid/repodata/issues （New issue，标题 `[App Inclusion] LanLink`） |
+| 商店分发 APK | `build/izzy-assets/LanLink-v2.3.1-fdroid-universal.apk`（fdroid flavor，universal） |
+| 大小 | 11,169,966 字节（约 10.7 MiB，< izzy 的 30 MB 上限） |
+| SHA-256 | `7a54f2d6cc9332a62c8f2362e96b1eeca16a3cc23a20e4e6794c3d02a2c9583c` |
+| package / 版本 | `com.manst.lantransfer` / versionCode 12 / 2.3.1 |
+| 签名 | `CN=LanTransfer`，证书 SHA-256 `928480fb…d56564`（与官网版同一密钥 → 可互相覆盖安装） |
+| 权限 | **不含** `REQUEST_INSTALL_PACKAGES`（已移除），无自更新 |
+
+> 该 APK 需要上传到某个公开位置供 izzy 审核附加/下载（izzy 通常要求开发者把 APK 挂在 Release 上）。
+> 方案：在 v2.3.1 Release 里**追加**一个资产 `LanLink-v2.3.1-fdroid-universal.apk`（不影响现有 github 版资产与 update.json）。
+
 ## 提交 IzzyOnDroid（推荐先做）
 
-1. 用 `assembleFdroidRelease` 产出的 universal APK 作为 izzy 的发布资产；
-2. 在 https://izzyondroid.org/contributing/NewAppInclusions/ 填表提交（仓库地址 + 包名 + 说明）；
-3. izzy 会跟随 GitHub Release 自动更新，你照常发版即可；
-4. 因为用你自己的签名，用户可在官网版与 izzy 版之间覆盖安装。
+**提交入口**：https://codeberg.org/IzzyOnDroid/repodata/issues （新建 issue，标题建议 `[App Inclusion] LanLink`）
+
+**已满足的前置条件（izzy 审核会逐条核对）**
+
+| 检查项 | 状态 |
+| --- | --- |
+| FOSS 许可证 | ✅ GPL-3.0-or-later（仓库根 `LICENSE`） |
+| Fastlane 已配置 | ✅ `fastlane/metadata/android/{en-US,zh-CN}`（title / short_description ≤80 字符 / full_description / changelogs / icon / phoneScreenshots） |
+| 有 tag 且与 versionName 对应 | ✅ `v2.3.1` = versionName 2.3.1 |
+| Release 附带 APK 且 < 30 MB | ✅ v2.3.1 三个资产各约 11.2 MB |
+| 无 proprietary / ads / tracking | ✅ 无 Play Services、无统计 SDK |
+| `usesCleartextTraffic` | ✅ 未设置（默认禁止明文） |
+| 权限说明 | ✅ 见下方 issue 正文模板 |
+
+**issue 正文模板（可直接粘贴）**
+
+```markdown
+### App
+- Name: LanLink
+- Package: com.manst.lantransfer
+- Source: https://github.com/likebe1-1/lan-transfer-android
+- License: GPL-3.0-or-later
+- Releases: https://github.com/likebe1-1/lan-transfer-android/releases (latest v2.3.1, APKs ~11.2 MB)
+- Fastlane metadata: present (en-US, zh-CN)
+
+### What it does
+LAN-only file transfer for Android. Two devices on the same Wi-Fi/hotspot can move files and folders
+directly (no cloud, no account) using FTP/FTPS/SFTP/SCP — either as client, or by turning the phone
+into a server. Includes quick transfer with a short code/QR, transfer queue with resume, LAN tools.
+
+### Notes for reviewers
+- Distribution flavor used for stores: fdroid (in-app updater disabled, REQUEST_INSTALL_PACKAGES removed).
+- Permissions: INTERNET/network state (local transfer), CAMERA (QR scanning only),
+  NEARBY_WIFI_DEVICES (Android 13+, hotspot join), ACCESS_FINE/COARSE_LOCATION (maxSdkVersion 32, older
+  hotspot detection), Foreground service types dataSync + specialUse (transfer & long-running local server),
+  POST_NOTIFICATIONS. No storage permissions (SAF/MediaStore).
+- No ads, no analytics, no crash reporting; only outbound requests are GitHub/Gitee release metadata for
+  the optional updater (disabled in the store flavor).
+```
+
+**流程**：开 issue → izzy 机器人做 APK 扫描/人工测试（可能要求 you attach APK，我们的 Release 已有）→ 审核通过后自动纳入仓库，并跟随 GitHub Release 自动更新。
 
 ## 提交 F-Droid 主库（可选）
 

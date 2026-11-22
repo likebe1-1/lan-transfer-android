@@ -53,6 +53,9 @@ dsh-plugins/
 build-*.log
 *.log.tmp
 
-# Python ����
+# Python ����
 __pycache__/
 *.pyc
+
+# 上架提交用临时资产（本地构建产物）
+build/izzy-assets/
