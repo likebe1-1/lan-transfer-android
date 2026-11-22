@@ -478,3 +478,16 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 - 已知取舍：局域网可见性、0.0.0.0 监听、首次信任、明文 FTP、SCP 能力边界、签名私钥离线保管。
 
 维护要求：安全机制变更时同步更新 `docs/security.html`、README「安全说明」与本文件对应章节。
+
+## 22. 许可证
+
+LanLink 以 **GPL-3.0-or-later**（GNU General Public License v3 或更高版本）发布，全文见仓库根目录 `LICENSE`。
+
+- **来源**：许可证全文取自 SPDX 官方文本（`GPL-3.0-or-later`），未做任何删改；
+- **第三方依赖**：AndroidX/Compose（Apache-2.0）、Apache Commons Net（Apache-2.0）、BouncyCastle（MIT 类）、
+  Apache MINA SSHD（Apache-2.0）、JSch(mwiede, BSD 类)、ZXing（Apache-2.0）、slf4j（MIT），
+  均为 GPLv3 兼容许可，分发的 APK 内附带的 LGPL/Apache 声明不受影响；
+- **分发义务**：分发修改版时需提供完整对应源码并以 GPL-3.0-or-later 授权；应用内更新下载的 APK 与源码
+  对应关系由 Release 说明中的 tag 保证；
+- **商店/仓库要求**：F-Droid、IzzyOnDroid 等 FOSS 仓库均认可 GPLv3；提交前需保证 `LICENSE` 在仓库根目录、
+  `gradle.properties` 不包含本机绝对路径、构建可从源码在 Linux 上完成。
