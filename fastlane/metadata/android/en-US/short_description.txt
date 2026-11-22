@@ -1,1 +1,1 @@
-Direct LAN file transfer over FTP/FTPS/SFTP/SCP
+FTP/FTPS/SFTP/SCP server & client for your LAN

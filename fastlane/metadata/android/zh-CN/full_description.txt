@@ -1,4 +1,8 @@
-LanLink 是一款纯局域网的 Android 文件传输工具：两台设备连上同一个 Wi-Fi 或热点，就能直接互传文件与文件夹，不经过云端、不需要账号。
+LanLink 可以把手机变成局域网里的 FTP / SFTP 服务器，也是一个 FTP/FTPS/SFTP/SCP 客户端，不经过云端、不需要账号。
+
+服务器模式：在手机上开启 FTP、FTPS、SFTP、SCP 服务，共享一个目录，电脑端（FileZilla、WinSCP、Windows 资源管理器、ssh/scp）或其他手机即可浏览与传输。
+客户端模式：连接 NAS 或任意 FTP/FTPS/SFTP/SCP 服务器，支持断点续传、文件夹与传输队列。
+手机之间：快速传文件功能提供 8 位接收码与二维码，对方输入或扫码即可接收。
 
 主要功能
 • 四种协议：FTP、FTPS、SFTP、SCP，既能连接 NAS/服务器，也能让手机自己开服务器

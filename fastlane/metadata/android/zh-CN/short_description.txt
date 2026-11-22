@@ -1,1 +1,1 @@
-同一 Wi-Fi 内直传文件，支持 FTP/FTPS/SFTP/SCP
+手机变 FTP/SFTP 服务器，局域网直传文件

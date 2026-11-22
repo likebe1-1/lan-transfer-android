@@ -18,13 +18,13 @@
 
 **Short description（≤ 80 字符）**
 ```
-Direct LAN file transfer over FTP/FTPS/SFTP/SCP — no cloud, no account.
+FTP/SFTP server & client for your LAN — no cloud, no account.
 ```
 
 **Full description**
 ```
-LanLink is an Android file transfer tool that works entirely on your local network — no cloud, no account.
-Move files directly between devices: phone to phone, phone to NAS/server, phone to desktop.
+LanLink turns your Android phone into a LAN file server and a file transfer client — no cloud, no account.
+Run an FTP, FTPS, SFTP and SCP server on the phone and connect from a PC (FileZilla, WinSCP, Windows Explorer, ssh/scp) or another phone; or use it as a client to reach your NAS or any server.
 
 • Four protocols — FTP, FTPS, SFTP and SCP. Use it as a client, or turn the phone into a server.
 • Quick transfer — pick files, get an 8-digit code or QR code, the other device receives them. Folders,
