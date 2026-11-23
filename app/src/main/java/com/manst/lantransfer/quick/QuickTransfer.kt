@@ -29,15 +29,22 @@ object QuickTransferDefaults {
     )
 
     /**
-     * 自动选择协议时的优先级：只使用加密协议（SFTP → SCP → FTPS）。
+     * 自动选择协议时的优先级：只使用加密协议，并按实测速度排序（FTPS → SFTP → SCP）。
+     *
+     * 为什么 FTPS 排第一：快速传文件对 FTPS 已做证书指纹固定——发送方在广播里下发自签证书的
+     * SHA-256，接收方用 [com.manst.lantransfer.core.ServerProfile.pinnedCertificateSha256] 严格校验
+     * （SFTP/SCP 同样固定 SSH 主机密钥），所以排到最前并不会降低安全性；
+     * 同时 FTPS 实测吞吐比 SFTP 高 1.5–3×
+     * （SFTP 受 JSch 默认 32 KiB 分包/窗口限制）。SFTP 次之（支持断点续传与结构化列目录），
+     * SCP 最后（无偏移续传能力）。
      *
      * 明文 FTP 不参与自动回退：它会把接收码派生的临时密码以明文发到局域网，
      * 同网段抓包即可拿到凭据。用户仍可在接收页手动指定 FTP（已知风险）。
      */
     val PROTOCOL_PREFERENCE: List<TransferProtocol> = listOf(
+        TransferProtocol.FTPS,
         TransferProtocol.SFTP,
-        TransferProtocol.SCP,
-        TransferProtocol.FTPS
+        TransferProtocol.SCP
     )
 
     const val DEFAULT_FTP_PORT = 2121
@@ -222,7 +229,7 @@ data class QuickTransferProgress(
     enum class Direction { RECEIVE, SEND }
 }
 
-/** 接收端连接目标（协议为 null 时按 SFTP→SCP→FTPS→FTP 自动回退）。 */
+/** 接收端连接目标（协议为 null 时按 FTPS→SFTP→SCP 自动回退；明文 FTP 不参与自动回退）。 */
 data class QuickJoinTarget(
     val code: String,
     val host: String,

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transfer_tuning_title">传输设置</string>
+    <string name="cd_transfer_tuning">传输设置</string>
+    <string name="transfer_tuning_concurrency_title">并发传输路数</string>
+    <string name="transfer_tuning_concurrency_value">%1$d 路</string>
+    <string name="transfer_tuning_concurrency_hint">并发越多越快，但受服务端连接数限制：每个传输任务会占用一条独立连接，服务端允许的会话数较少时请调低。默认 5 路，建议 3–6 路。</string>
+    <string name="transfer_tuning_concurrency_range_hint">可调范围 1–6 路（默认 %1$d 路）</string>
+    <string name="transfer_tuning_apply_hint">设置保存在本机；对之后加入传输队列的任务生效，正在传输的任务不受影响。</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transfer_tuning_title">Transfer settings</string>
+    <string name="cd_transfer_tuning">Transfer settings</string>
+    <string name="transfer_tuning_concurrency_title">Parallel transfers</string>
+    <string name="transfer_tuning_concurrency_value">%1$d parallel</string>
+    <string name="transfer_tuning_concurrency_hint">More parallel transfers are faster, but the server limits concurrent connections: each transfer uses its own connection, so lower the value when the server allows only a few sessions. Default 5, recommended 3–6.</string>
+    <string name="transfer_tuning_concurrency_range_hint">Range: 1–6 (default %1$d)</string>
+    <string name="transfer_tuning_apply_hint">Saved on this device; applies to transfers queued afterwards. Transfers already running are unaffected.</string>
+</resources>

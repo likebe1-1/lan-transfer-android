@@ -48,7 +48,7 @@ Description: |-
   <b>Security:</b>
   
   * Quick transfer pins the FTPS certificate and SSH host key by SHA-256 fingerprint (delivered through the QR code / LAN beacon), so a man-in-the-middle cannot impersonate the peer.
-  * Automatic protocol fallback only uses encrypted transports (SFTP → SCP → FTPS); plain FTP must be selected explicitly.
+  * Automatic protocol fallback only uses encrypted transports (FTPS → SFTP → SCP); plain FTP must be selected explicitly.
   * Server-side authentication throttling: per-source escalating lockout plus a global failure-rate cap.
   * Saved server passwords are encrypted with Android Keystore (AES-256-GCM); allowBackup is disabled.
   * The update manifest is loaded over HTTPS only and verified with an Ed25519 signature.

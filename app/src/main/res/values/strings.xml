@@ -101,7 +101,7 @@
     <string name="label_trust_cert">信任自签名证书</string>
     <string name="hint_trust_cert">局域网设备常见自签名证书；关闭后按系统 CA 严格校验</string>
     <string name="editor_default_port">默认端口 %1$d</string>
-    <string name="quick_protocol_auto">自动（优先 SFTP）</string>
+    <string name="quick_protocol_auto">自动（优先 FTPS）</string>
     <string name="quick_entry_title">快速传文件</string>
     <string name="quick_entry_description">两台设备连同一 Wi-Fi，直接互传文件（FTP/FTPS/SFTP/SCP），无需配置服务器。</string>
     <string name="quick_action_send">发送文件</string>
@@ -174,7 +174,7 @@
     <string name="quick_recv_manual_title">手动输入</string>
     <string name="label_peer_ip">对方 IP 地址</string>
     <string name="label_six_digit_code">8 位接收码</string>
-    <string name="quick_recv_protocol_hint">「自动」会按加密优先尝试 SFTP → SCP → FTPS → FTP</string>
+    <string name="quick_recv_protocol_hint">「自动」按 FTPS → SFTP → SCP 尝试，只用加密协议（明文 FTP 需手动选择）</string>
     <string name="quick_connecting">连接中…</string>
     <string name="quick_recv_connecting_title">正在连接…</string>
     <string name="quick_recv_connecting_detail">%1$s · 接收码 %2$s</string>

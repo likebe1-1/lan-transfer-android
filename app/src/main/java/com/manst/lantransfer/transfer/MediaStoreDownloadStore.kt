@@ -4,7 +4,10 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.IOException
@@ -17,6 +20,10 @@ import java.util.Locale
  * Android 10+ 通过 MediaStore 写入公共目录无需存储权限。写入过程遵循 IS_PENDING 约定：
  * 先插入 pending 记录 -> 写入字节 -> 提交（IS_PENDING=0）；失败时删除 pending 记录，避免留下空文件。
  * 文件名在「目标子目录」内查重（MediaStore 现有文件 + 进程内预留），重名追加 " (1)"、" (2)"……
+ *
+ * 断点续传支持：传输层把远端字节流直接写进 pending 文件（[openPendingSink]），
+ * 失败后保留 pending 记录，下一次尝试读取磁盘实际大小（[localFileSize]）从该偏移续写，
+ * 无需 cacheDir 暂存文件，也就没有「先写暂存再复制到下载目录」的二次写盘。
  */
 internal class MediaStoreDownloadStore(private val context: Context) {
 
@@ -94,6 +101,74 @@ internal class MediaStoreDownloadStore(private val context: Context) {
     fun commitAndGetUri(uri: Uri): Uri {
         commit(uri)
         return uri
+    }
+
+    /**
+     * 下载记录当前在磁盘上的字节数（pending 或已提交均可）；记录不存在或不可读时返回 null。
+     *
+     * 断点续传以「磁盘实际大小」为续写偏移，而不是任务快照里的 transferredBytes：
+     * 快照持久化有 500ms 节流，进程被杀时可能落后于磁盘，用快照续写会写坏文件。
+     */
+    fun localFileSize(uri: Uri): Long? {
+        return try {
+            resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.statSize.takeIf { it >= 0L }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "读取下载文件大小失败：" + uri, e)
+            null
+        }
+    }
+
+    /** 该记录是否仍处于 IS_PENDING=1（已插入但尚未提交、对用户不可见）状态。 */
+    fun isPending(uri: Uri): Boolean {
+        return try {
+            resolver.query(
+                uri,
+                arrayOf(MediaStore.Downloads.IS_PENDING),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                cursor.moveToFirst() && !cursor.isNull(0) && cursor.getInt(0) != 0
+            } ?: false
+        } catch (e: Exception) {
+            Log.w(TAG, "查询下载文件 pending 状态失败：" + uri, e)
+            false
+        }
+    }
+
+    /**
+     * 以 [offset] 为起点打开 pending 文件的写入流（下载主体直接写它，避免「暂存 + 复制」二次写盘）。
+     *
+     * - offset == 0：先截断文件，避免重新下载时残留旧内容；
+     * - offset > 0：定位到该偏移续写；磁盘实际大小必须恰好等于 offset，否则抛 [IOException]，
+     *   让上层按「无法续传」重新下载，绝不写坏文件。
+     */
+    fun openPendingSink(uri: Uri, offset: Long): OutputStream {
+        if (offset < 0L) throw IOException("续传偏移不能为负数：" + offset)
+        val descriptor = try {
+            resolver.openFileDescriptor(uri, "rw")
+        } catch (e: Exception) {
+            throw IOException("无法打开下载文件写入流", e)
+        } ?: throw IOException("无法打开下载文件写入流")
+        try {
+            val fileDescriptor = descriptor.fileDescriptor
+            if (offset == 0L) {
+                Os.ftruncate(fileDescriptor, 0L)
+            } else {
+                val actual = descriptor.statSize
+                if (actual != offset) {
+                    throw IOException("下载文件续传位置不一致：磁盘 " + actual + " 字节，预期 " + offset)
+                }
+                Os.lseek(fileDescriptor, offset, OsConstants.SEEK_SET)
+            }
+            return ParcelFileDescriptor.AutoCloseOutputStream(descriptor)
+        } catch (e: Exception) {
+            runCatching { descriptor.close() }
+            if (e is IOException) throw e
+            throw IOException("无法定位下载文件写入位置", e)
+        }
     }
 
     /** 删除未完成的 pending 记录（失败清理，尽力而为）。 */

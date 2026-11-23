@@ -33,7 +33,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -42,15 +41,16 @@ import java.util.concurrent.ConcurrentHashMap
  * 传输队列默认实现（v2：持久化 / 历史 / 自动重试 / 断点续传 / 文件夹递归）。
  *
  * 设计：
- * - 有限并发执行队列：最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时传输
+ * - 有限并发执行队列：默认 5 路（可配置 1–6，见 [TransferTuning]），最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时传输
  *   （小文件多时显著减少 connect/认证/断开的固定开销），并发决策见 [TransferScheduler]；
  *   调度循环只负责分配槽位，真正的生产工作在各自协程的 withContext(Dispatchers.IO) 中执行；
  * - [tasks] 是 UI 的唯一数据源；同一个 taskId 同一时刻最多只有一个执行体；
  * - 每个任务使用独立的 [RemoteFileSystem] 连接，任务结束（含失败、取消）立即关闭；
  * - 队列与历史通过 [TransferStore] 持久化（500ms 节流）：进程重启后未完成任务恢复为 QUEUED 并自动继续，
  *   已结束任务作为历史保留（默认最多 200 条，见 [TransferHistoryLimit]）；
- * - 下载先写入 cacheDir/transfer/<taskId>.part（支持断点续传），完成后复制到 MediaStore 下载目录并删除 staging；
- *   失败时保留 staging 以便重试或重启后续传；
+ * - 下载直接写入 MediaStore 的 pending 文件（IS_PENDING=1），完成后仅提交（IS_PENDING=0），
+ *   不再经过 cacheDir 暂存文件 + 复制，同一份数据只落盘一次；断点续传时按 pending 文件的磁盘实际大小续写
+ *   （详见 [downloadToMediaStore] 的取舍说明与残留清理策略）；
  * - 自动重试：非用户取消的 IO/网络错误最多重试 3 次（退避 2s/4s/8s），认证/路径错误不重试；
  * - 文件夹传输：递归列出远端目录 / 遍历 SAF 目录树，拆分为逐文件任务，按上面同一套并发调度执行；
  * - 有活动任务时启动 [TransferService] 前台保活，队列清空后停止。
@@ -62,19 +62,25 @@ class DefaultTransferManager(
         File(context.applicationContext.filesDir, TRANSFER_STORE_FILE_NAME),
         // 传输队列里也会保存 profile（含密码），统一用 Keystore 加密落盘
         com.manst.lantransfer.data.AndroidKeystoreSecretCipher()
-    )
+    ),
+    /** 传输并发配置（默认 5 路，范围 1–6）；用户可在「传输设置」页调整。 */
+    private val transferTuning: TransferTuningStore =
+        TransferTuningStore.fromContext(context.applicationContext)
 ) : TransferManager {
 
     private val appContext: Context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val stateLock = Any()
 
-    private val stagingDirectory: File = File(appContext.cacheDir, STAGING_DIRECTORY_NAME)
-
     private val queueModel = TransferQueueModel()
 
     /** 有限并发调度策略（纯 JVM 逻辑，可单元测试）。 */
-    private val scheduler = TransferScheduler()
+    /**
+     * 并发调度器：按 [transferTuning] 的当前值创建；设置页修改后通过下面的 collector 热替换，
+     * 对新入队的任务立即生效（正在传输的任务不受影响）。
+     */
+    @Volatile
+    private var scheduler = TransferScheduler(transferTuning.maxConcurrentTasks)
 
     /**
      * 当前已被 worker 占用的任务 id：同一 taskId 同一时刻只会有一个执行体，
@@ -98,7 +104,19 @@ class DefaultTransferManager(
     override val activeCount: StateFlow<Int> = mutableActiveCount.asStateFlow()
 
     init {
-        stagingDirectory.mkdirs()
+        // 并发配置热更新：设置页修改后，对新入队任务立即生效（正在传输的不受影响）
+        scope.launch {
+            transferTuning.tuning.collect { tuning ->
+                val desired = tuning.maxConcurrentTasks
+                if (desired != scheduler.maxConcurrency) {
+                    scheduler = TransferScheduler(desired)
+                    Log.i(TAG, "传输并发上限已更新为 " + desired)
+                }
+            }
+        }
+        // 旧版本把下载暂存文件放在 cacheDir/transfer；升级后改为直接写 MediaStore pending 文件，
+        // 启动时清理这些不再使用的旧暂存文件（失败的任务已在 old 版本持久化里，逻辑见 restoreActiveTask）。
+        cleanupLegacyStaging()
         restorePersistedTasks()
         scope.launch { runQueueLoop() }
     }
@@ -381,7 +399,7 @@ class DefaultTransferManager(
     // ------------------------------------------------------------ 队列执行
 
     /**
-     * 队列调度循环：维持最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时执行。
+     * 队列调度循环：维持最多 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS] 个任务同时执行（可通过「传输设置」调整）。
      *
      * 调度决策全部交给纯 JVM 的 [TransferScheduler]（可单元测试），本循环只负责
      * 「占槽位 -> 启动子协程 -> 等待槽位释放或新任务出现」，不执行任何 IO：
@@ -453,7 +471,7 @@ class DefaultTransferManager(
                 fileSystem.connect()
                 updateTask(taskId) { it.copy(resumable = fileSystem.supportsResume) }
                 when (val request = execution.request) {
-                    is TransferRequest.Download -> downloadWithStaging(taskId, request, fileSystem)
+                    is TransferRequest.Download -> downloadToMediaStore(taskId, request, fileSystem)
                     is TransferRequest.Upload -> uploadWithResume(taskId, request, fileSystem)
                 }
             }
@@ -463,12 +481,16 @@ class DefaultTransferManager(
                 recordProfileUsage(completed.profileId)
             }
         } catch (e: CancellationException) {
+            // 用户取消/进程内取消：丢弃未提交的 pending 文件，避免残留（已提交的可见文件不受影响）。
+            discardPendingDownload(taskId)
             finishTask(taskId, TransferState.CANCELLED, null)
             throw e
         } catch (e: TransferCancelledException) {
+            discardPendingDownload(taskId)
             finishTask(taskId, TransferState.CANCELLED, null)
         } catch (e: Exception) {
             if (cancelRequests.contains(taskId)) {
+                discardPendingDownload(taskId)
                 finishTask(taskId, TransferState.CANCELLED, null)
             } else {
                 retryBackoffMillis = handleTaskFailure(taskId, execution.request.direction, e)
@@ -482,6 +504,7 @@ class DefaultTransferManager(
             safeClose(fileSystem)
             if (cancelledDuringFailure && retryBackoffMillis > 0L) {
                 retryBackoffMillis = 0L
+                discardPendingDownload(taskId)
                 finishTask(taskId, TransferState.CANCELLED, null)
             }
             stopForegroundIfIdle()
@@ -523,6 +546,8 @@ class DefaultTransferManager(
             message
         }
         Log.w(TAG, "传输任务最终失败：" + taskId + " attempts=" + attempts, error)
+        // 最终失败不再自动重试：清理未提交的 pending 下载文件，避免不可见的磁盘残留。
+        discardPendingDownload(taskId)
         val failed = finishTask(taskId, TransferState.FAILED, finalError)
         if (failed != null) TransferNotifications.notifyResult(appContext, failed)
         return 0L
@@ -556,68 +581,151 @@ class DefaultTransferManager(
         Execution(running, request, tracker)
     }
 
-    // ------------------------------------------------------------ 下载（staging + MediaStore）
+    // ------------------------------------------------------------ 下载（直接写 MediaStore pending 文件）
 
-    private suspend fun downloadWithStaging(
+    /**
+     * 下载主体：远端字节流直接写进 MediaStore 的 pending 文件（IS_PENDING=1），完成后只提交、不再复制。
+     *
+     * 方案取舍（任务 #2 的方案 B，替代旧实现「cacheDir staging + 复制到下载目录」）：
+     * - 旧实现同一份数据写两次磁盘：先写 cacheDir/transfer/<taskId>.part，完成后整文件读+写复制进
+     *   MediaStore，大文件耗时与存储分配都接近翻倍；方案 A（把 staging 移到 getExternalFilesDir）
+     *   只能减少跨分区开销，复制本身仍存在，因此这里选更彻底的方案 B：直接写最终 pending 文件，
+     *   完成时仅把 IS_PENDING 置 0，没有全量复制步骤；
+     * - 代价是续传必须「续写 pending 文件」而不是独立的暂存文件，所以用
+     *   [MediaStoreDownloadStore.openPendingSink] 按偏移定位写入；
+     * - 续传偏移以「pending 文件磁盘实际大小」为准（[MediaStoreDownloadStore.localFileSize]），
+     *   不用任务快照里的 transferredBytes（持久化有 500ms 节流，进程被杀时可能落后于磁盘）；
+     * - 远端文件变小（被替换）时丢弃旧 pending 重新下载，绝不把新旧内容拼在一起。
+     *
+     * 残留清理策略（pending 文件对用户不可见，但会占磁盘）：
+     * 1) 自动重试（网络/IO 抖动）保留 pending，下一次尝试走 [RemoteFileSystem.downloadPartial] 续写；
+     * 2) 进程被杀/重启：localUri 已持久化在任务里，恢复后按磁盘实际大小继续续写；
+     * 3) 最终失败、用户取消、删除任务、清空历史：调用方通过 [discardPendingDownload] 主动删除
+     *    pending 记录，不留残骸（已提交的可见文件绝不删除）；
+     * 4) 若进程在 localUri 持久化（<500ms）之前被杀，该 pending 记录无人引用，
+     *    由 MediaStore 自身对长期未提交 pending 项的过期回收兜底。
+     */
+    private suspend fun downloadToMediaStore(
         taskId: String,
         request: TransferRequest.Download,
         fileSystem: RemoteFileSystem
     ) {
-        if (currentTask(taskId) == null) throw TransferCancelledException()
-        val staging = stagingFile(taskId)
+        val initialTask = currentTask(taskId) ?: throw TransferCancelledException()
         val remoteSize = resolveRemoteSize(fileSystem, request)
+        var displayName: String? = null
+        var targetUri: Uri? = null
         var startOffset = 0L
-        if (fileSystem.supportsResume && staging.isFile && staging.length() > 0L && remoteSize > 0L) {
-            startOffset = if (staging.length() <= remoteSize) {
-                staging.length()
-            } else {
-                // 远端文件变小（可能被替换），旧暂存已不可用，重新下载
-                staging.delete()
-                0L
+        var skipTransfer = false
+
+        // 1) 复用上一次尝试 / 进程崩溃遗留下来的 pending 文件（断点续传的关键路径）。
+        val previousUri = initialTask.localUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        val previousName = initialTask.localDisplayName
+        if (previousUri != null && !previousName.isNullOrBlank()) {
+            val existingBytes = downloadStore.localFileSize(previousUri)
+            val pending = existingBytes != null && downloadStore.isPending(previousUri)
+            if (pending && !fileSystem.supportsResume) {
+                // 协议不支持续传（如 SCP）：旧 pending 无法续写，丢弃后从头下载，避免每次重试残留一个文件。
+                downloadStore.discard(previousUri)
+            } else if (pending) {
+                when (val decision = DownloadResumePolicy.decide(true, existingBytes, remoteSize)) {
+                    is DownloadResumePolicy.Decision.Resume -> {
+                        displayName = previousName
+                        targetUri = previousUri
+                        startOffset = decision.offset
+                    }
+                    DownloadResumePolicy.Decision.AlreadyComplete -> {
+                        // 上次已写满但因进程被杀没来得及提交：直接提交即可。
+                        displayName = previousName
+                        targetUri = previousUri
+                        startOffset = existingBytes ?: 0L
+                        skipTransfer = true
+                    }
+                    DownloadResumePolicy.Decision.Restart -> {
+                        // 远端文件变小/被替换，或本地无可续传字节：丢弃旧 pending 重新创建目标。
+                        downloadStore.discard(previousUri)
+                    }
+                }
+            } else if (existingBytes != null && remoteSize > 0L && existingBytes == remoteSize) {
+                // 进程在 commit 与「任务标记完成」之间被杀：文件其实已完整可见，直接按完成收尾。
+                displayName = previousName
+                targetUri = previousUri
+                startOffset = existingBytes
+                skipTransfer = true
+            } else if (existingBytes != null) {
+                Log.w(TAG, "下载任务已有不可续传的本地文件，重新下载：" + previousUri)
             }
         }
-        if (startOffset == 0L && staging.exists()) staging.delete()
-        updateTask(taskId) {
-            it.copy(
-                totalBytes = if (remoteSize > 0L) remoteSize else it.totalBytes,
-                transferredBytes = startOffset,
-                resumable = fileSystem.supportsResume
-            )
-        }
-        if (remoteSize <= 0L || startOffset < remoteSize) {
-            FileOutputStream(staging, startOffset > 0L).use { sink ->
-                if (startOffset > 0L) {
-                    fileSystem.downloadPartial(request.remotePath, sink, startOffset) { transferred ->
-                        reportProgress(taskId, transferred)
-                    }
-                } else {
-                    fileSystem.download(request.remotePath, sink) { transferred ->
-                        reportProgress(taskId, transferred)
+
+        var reserved = false
+        try {
+            if (targetUri == null) {
+                // 2) 新建 pending 目标（沿用原有文件名查重 + localRelativeDir 子目录逻辑）。
+                displayName = downloadStore.reserveFileName(request.entry.name, request.localRelativeDir)
+                reserved = true
+                targetUri = downloadStore.createPendingFile(displayName, request.localRelativeDir)
+                updateTask(taskId) {
+                    it.copy(
+                        localDisplayName = displayName,
+                        localUri = targetUri.toString(),
+                        totalBytes = if (remoteSize > 0L) remoteSize else it.totalBytes,
+                        transferredBytes = 0L,
+                        resumable = fileSystem.supportsResume
+                    )
+                }
+            } else {
+                updateTask(taskId) {
+                    it.copy(
+                        localDisplayName = displayName,
+                        localUri = targetUri.toString(),
+                        totalBytes = if (remoteSize > 0L) remoteSize else it.totalBytes,
+                        transferredBytes = startOffset,
+                        resumable = fileSystem.supportsResume
+                    )
+                }
+            }
+
+            // 3) 远端数据直接写进 pending 文件；startOffset > 0 时从该偏移续写（断点续传不退化）。
+            if (!skipTransfer && (remoteSize <= 0L || startOffset < remoteSize)) {
+                val sink = try {
+                    downloadStore.openPendingSink(targetUri, startOffset)
+                } catch (e: IOException) {
+                    // 兜底：极少数设备/自定义 MediaProvider 可能不支持 "rw" 定位写入。此时降级为普通
+                    // 输出流从头重写——仍然只写一份数据（直接写 pending 文件），只是本次退化为不可续传，
+                    // 而不是让整个下载失败。
+                    Log.w(TAG, "无法按偏移写入 pending 文件，降级为从头写入：" + targetUri, e)
+                    startOffset = 0L
+                    updateTask(taskId) { it.copy(transferredBytes = 0L) }
+                    downloadStore.openSink(targetUri)
+                }
+                sink.use { out ->
+                    if (startOffset > 0L) {
+                        fileSystem.downloadPartial(request.remotePath, out, startOffset) { transferred ->
+                            reportProgress(taskId, transferred)
+                        }
+                    } else {
+                        fileSystem.download(request.remotePath, out) { transferred ->
+                            reportProgress(taskId, transferred)
+                        }
                     }
                 }
             }
-        }
-        // staging 下载完成：复制到系统「下载」目录（支持 localRelativeDir 子目录）
-        val stagedLength = staging.length()
-        val displayName = downloadStore.reserveFileName(request.entry.name, request.localRelativeDir)
-        updateTask(taskId) { it.copy(localDisplayName = displayName) }
-        var pendingUri: Uri? = null
-        try {
-            val uri = downloadStore.createPendingFile(displayName, request.localRelativeDir)
-            pendingUri = uri
-            downloadStore.openSink(uri).use { sink ->
-                staging.inputStream().use { source -> source.copyTo(sink, COPY_BUFFER_SIZE) }
+
+            // 4) 提交 pending 记录使文件对用户可见：这是唯一的「落盘完成」动作，没有任何复制。
+            val committedUri = downloadStore.commitAndGetUri(targetUri)
+            val finalBytes = downloadStore.localFileSize(committedUri)
+                ?: if (remoteSize > 0L) remoteSize else startOffset
+            updateTask(taskId) {
+                it.copy(localUri = committedUri.toString(), localDisplayName = displayName)
             }
-            val committedUri = downloadStore.commitAndGetUri(uri)
-            pendingUri = null
-            updateTask(taskId) { it.copy(localUri = committedUri.toString(), localDisplayName = displayName) }
-            staging.delete()
-            reportProgress(taskId, stagedLength)
+            reportProgress(taskId, finalBytes)
         } catch (e: Exception) {
-            pendingUri?.let { downloadStore.discard(it) }
+            // 保留 pending 供自动重试/重启后续传；最终失败与取消由调用方统一 discard（见方法注释的清理策略）。
+            Log.w(TAG, "下载中断，保留 pending 目标等待续传：" + targetUri, e)
             throw e
         } finally {
-            downloadStore.releaseFileName(displayName, request.localRelativeDir)
+            if (reserved) {
+                downloadStore.releaseFileName(displayName ?: request.entry.name, request.localRelativeDir)
+            }
         }
     }
 
@@ -802,7 +910,6 @@ class DefaultTransferManager(
             emptyList()
         }
         if (loaded.isEmpty()) {
-            cleanupOrphanStaging(emptySet())
             return
         }
         val restored = ArrayList<TransferTask>(loaded.size)
@@ -818,10 +925,6 @@ class DefaultTransferManager(
             restored.forEach { queueModel.add(it) }
             publishLocked()
         }
-        val keepStagingIds = restored
-            .filter { it.state != TransferState.COMPLETED }
-            .mapTo(HashSet()) { it.id }
-        cleanupOrphanStaging(keepStagingIds)
         if (activeIds.isNotEmpty()) {
             // 不能在 AppContainer 懒初始化路径里同步启动前台服务：
             // TransferService.onCreate 会再次访问 container.transferManager（同一个 lazy），
@@ -867,9 +970,10 @@ class DefaultTransferManager(
             )
         }
         val protocolSupportsResume = profile.protocol != TransferProtocol.SCP
-        val staged = if (task.direction == TransferDirection.DOWNLOAD) stagingFile(task.id) else null
         val hasLocalProgress = when (task.direction) {
-            TransferDirection.DOWNLOAD -> staged?.isFile == true && staged.length() > 0L
+            // 下载：localUri 指向尚未提交的 pending 文件（写入时即持久化），实际大小与可用性
+            // 由 downloadToMediaStore 在 IO 线程校验，避免在初始化线程里做 MediaStore 查询。
+            TransferDirection.DOWNLOAD -> !task.localUri.isNullOrBlank()
             TransferDirection.UPLOAD -> task.transferredBytes > 0L
         }
         val resumable = protocolSupportsResume && hasLocalProgress
@@ -949,7 +1053,11 @@ class DefaultTransferManager(
             }
         }
         if (running) closeActiveConnection(taskId)
-        if (cancelledQueued) Log.i(TAG, "已取消排队中的传输任务：" + taskId)
+        if (cancelledQueued) {
+            // 排队中取消的任务可能已经带着上次失败留下的 pending 文件：一并清理。
+            discardPendingDownload(taskId)
+            Log.i(TAG, "已取消排队中的传输任务：" + taskId)
+        }
         stopForegroundIfIdle()
     }
 
@@ -994,8 +1102,11 @@ class DefaultTransferManager(
 
     override fun remove(taskId: String) {
         var running = false
+        var localUri: String? = null
         synchronized(stateLock) {
             val task = queueModel.get(taskId) ?: return
+            // 已完成任务的文件一定已提交、对用户可见，不需要再查询 pending 状态。
+            localUri = if (task.state == TransferState.COMPLETED) null else task.localUri
             if (task.state == TransferState.RUNNING) {
                 cancelRequests.add(taskId)
                 running = true
@@ -1006,7 +1117,8 @@ class DefaultTransferManager(
             publishLocked()
         }
         if (running) closeActiveConnection(taskId)
-        deleteStaging(taskId)
+        // 删除任务时清理它未提交的 pending 下载文件（已提交的可见文件保留给用户）。
+        discardPendingUri(localUri)
         stopForegroundIfIdle()
     }
 
@@ -1022,28 +1134,40 @@ class DefaultTransferManager(
             publishLocked()
             cleared
         }
-        removed.forEach { deleteStaging(it.id) }
+        removed.filter { it.state != TransferState.COMPLETED }
+            .forEach { discardPendingUri(it.localUri) }
     }
 
-    // ------------------------------------------------------------ staging / 前台服务 / 连接管理
+    // ------------------------------------------------------------ 下载残留清理 / 前台服务 / 连接管理
 
-    private fun stagingFile(taskId: String): File = File(stagingDirectory, taskId + STAGING_SUFFIX)
-
-    private fun deleteStaging(taskId: String) {
-        val file = stagingFile(taskId)
-        if (file.exists() && !file.delete()) {
-            Log.w(TAG, "删除下载暂存文件失败：" + file.absolutePath)
-        }
-    }
-
-    private fun cleanupOrphanStaging(keepTaskIds: Set<String>) {
-        val files = stagingDirectory.listFiles() ?: return
+    /** 旧版本把下载暂存文件放在 cacheDir/transfer/<taskId>.part；升级后不再使用，启动时清理。 */
+    private fun cleanupLegacyStaging() {
+        val directory = File(appContext.cacheDir, LEGACY_STAGING_DIRECTORY_NAME)
+        val files = directory.listFiles() ?: return
         for (file in files) {
-            val taskId = file.name.removeSuffix(STAGING_SUFFIX)
-            if (taskId !in keepTaskIds) {
-                if (!file.delete()) Log.w(TAG, "清理无用下载暂存文件失败：" + file.absolutePath)
-            }
+            if (!file.delete()) Log.w(TAG, "清理旧版下载暂存文件失败：" + file.absolutePath)
         }
+        if (!directory.delete()) Log.w(TAG, "删除旧版下载暂存目录失败：" + directory.absolutePath)
+    }
+
+    /**
+     * 丢弃任务当前关联的、尚未提交（IS_PENDING=1）的下载文件。
+     *
+     * 只在「任务最终失败 / 用户取消 / 删除任务 / 清空历史」时调用：自动重试与进程重启恢复
+     * 需要保留 pending 文件继续续传。已提交（用户可见）的文件绝不删除。
+     */
+    private fun discardPendingDownload(taskId: String) {
+        val task = currentTask(taskId) ?: return
+        val uri = task.localUri?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return
+        if (!downloadStore.isPending(uri)) return
+        downloadStore.discard(uri)
+        updateTask(taskId) { it.copy(localUri = null, localDisplayName = null) }
+    }
+
+    /** 同上，但用于任务已从队列移除（remove / clearHistory）后按 Uri 字符串清理。 */
+    private fun discardPendingUri(uriString: String?) {
+        val uri = uriString?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return
+        if (downloadStore.isPending(uri)) downloadStore.discard(uri)
     }
 
     private fun ensureForegroundService() {
@@ -1158,9 +1282,44 @@ class DefaultTransferManager(
     private companion object {
         const val TAG = "DefaultTransferManager"
         const val TRANSFER_STORE_FILE_NAME = "transfer_tasks.json"
-        const val STAGING_DIRECTORY_NAME = "transfer"
-        const val STAGING_SUFFIX = ".part"
-        const val COPY_BUFFER_SIZE = 64 * 1024
+        /** 旧版本（staging 方案）的 cacheDir 子目录名，仅用于升级时清理。 */
+        const val LEGACY_STAGING_DIRECTORY_NAME = "transfer"
         const val PERSIST_THROTTLE_MILLIS = 500L
+    }
+}
+
+/**
+ * 下载断点续传决策（纯 JVM 逻辑，可单元测试）。
+ *
+ * 输入是「pending 文件在磁盘上的实际字节数」与「远端文件大小」，输出下一步动作：
+ * - [Decision.Resume]：从指定偏移续写（offset 可能为 0，表示重新从头写）；
+ * - [Decision.AlreadyComplete]：本地已写满（上次写完但没来得及 commit），直接提交即可；
+ * - [Decision.Restart]：旧 pending 不可用（远端文件变小/被替换、协议不支持续传、大小未知），丢弃重下。
+ *
+ * 之所以以磁盘实际大小为准：任务快照里的 transferredBytes 有 500ms 持久化节流，
+ * 进程被杀时可能落后于磁盘，用快照偏移续写会把数据写歪；磁盘大小才是唯一可信的续传位置。
+ */
+internal object DownloadResumePolicy {
+
+    sealed interface Decision {
+        data class Resume(val offset: Long) : Decision
+        data object AlreadyComplete : Decision
+        data object Restart : Decision
+    }
+
+    fun decide(
+        protocolSupportsResume: Boolean,
+        pendingBytes: Long?,
+        remoteBytes: Long
+    ): Decision {
+        if (!protocolSupportsResume) return Decision.Restart
+        if (pendingBytes == null || pendingBytes <= 0L) return Decision.Resume(0L)
+        // 远端大小未知时无法校验本地字节是否仍属于同一份内容，保守重下，避免拼接出损坏文件。
+        if (remoteBytes <= 0L) return Decision.Restart
+        return when {
+            pendingBytes > remoteBytes -> Decision.Restart
+            pendingBytes == remoteBytes -> Decision.AlreadyComplete
+            else -> Decision.Resume(pendingBytes)
+        }
     }
 }

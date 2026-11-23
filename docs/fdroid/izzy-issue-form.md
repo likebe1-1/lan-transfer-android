@@ -63,7 +63,7 @@ or another phone, use it as a client to reach a NAS or any server, or hand files
 - **Peer authentication, not just encryption** — quick transfer pins the FTPS certificate and the SSH host key
   by SHA-256 fingerprint, delivered out-of-band via the QR code / LAN beacon. A man-in-the-middle on the same
   network cannot impersonate the peer, because it cannot present a matching fingerprint.
-- **Encrypted transports by default** — automatic fallback only tries SFTP → SCP → FTPS; plain-text FTP must be
+- **Encrypted transports by default** — automatic fallback only tries FTPS → SFTP → SCP; plain-text FTP must be
   selected explicitly by the user.
 - **Server-side brute-force protection** — per-source escalating lockout plus a global failure-rate cap, applied
   to FTP/FTPS/SFTP/SCP alike (the client-side limiter alone would be bypassable by any FTP/SSH client).
@@ -110,7 +110,7 @@ LanLink 是一款**不依赖云端**的 Android 局域网文件传输工具，�
 
 - **不只是加密，还要认证对端**：快速传文件对 FTPS 证书与 SSH 主机密钥做 SHA-256 指纹固定，
   指纹通过二维码/局域网广播带外下发；同网段的中间人无法出示相同指纹，因此无法冒充。
-- **默认只用加密协议**：自动回退顺序为 SFTP → SCP → FTPS，明文 FTP 需用户手动选择。
+- **默认只用加密协议**：自动回退顺序为 FTPS → SFTP → SCP，明文 FTP 需用户手动选择。
 - **服务端防爆破**：单来源逐级锁定 + 全局失败速率上限，FTP/FTPS/SFTP/SCP 统一生效
   （仅靠客户端限流可被任意 FTP/SSH 客户端绕过）。
 - **凭据加密存储**：服务器密码使用 Android Keystore（AES-256-GCM，密钥不可导出）加密落盘；

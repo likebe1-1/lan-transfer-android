@@ -30,6 +30,7 @@ import com.manst.lantransfer.ui.quick.QuickReceiveViewModel
 import com.manst.lantransfer.ui.network.NetworkToolsScreen
 import com.manst.lantransfer.ui.network.NetworkToolsViewModel
 import com.manst.lantransfer.ui.quick.QuickSendScreen
+import com.manst.lantransfer.ui.settings.TransferTuningScreen
 import com.manst.lantransfer.ui.setup.NetworkSetupScreen
 import com.manst.lantransfer.ui.setup.NetworkSetupViewModel
 import com.manst.lantransfer.ui.quick.QuickSendViewModel
@@ -51,6 +52,7 @@ object Routes {
     const val QUICK_RECEIVE = "quick/receive"
     const val NETWORK_TOOLS = "network/tools"
     const val NETWORK_SETUP = "network/setup"
+    const val TRANSFER_TUNING = "settings/transfer"
 
     /** 桌面快捷方式 Intent action（与 res/xml/shortcuts.xml、MainActivity 的 intent-filter 保持一致）。 */
     const val ACTION_QUICK_SEND = "com.manst.lantransfer.action.QUICK_SEND"
@@ -129,6 +131,7 @@ fun LanTransferApp(container: AppContainer) {
                 onOpenQuickSend = { navController.navigate(Routes.QUICK_SEND) },
                 onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) },
                 onOpenNetworkTools = { navController.navigate(Routes.NETWORK_TOOLS) },
+                onOpenTransferTuning = { navController.navigate(Routes.TRANSFER_TUNING) },
                 updateManager = container.updateManager
             )
         }
@@ -159,6 +162,15 @@ fun LanTransferApp(container: AppContainer) {
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
                 onOpenQuickReceive = { navController.navigate(Routes.QUICK_RECEIVE) }
+            )
+        }
+
+        composable(Routes.TRANSFER_TUNING) {
+            val tuning by container.transferTuning.tuning.collectAsStateWithLifecycle()
+            TransferTuningScreen(
+                tuning = tuning,
+                onSelectMaxConcurrentTasks = { container.transferTuning.setMaxConcurrentTasks(it) },
+                onBack = { navController.popBackStack() }
             )
         }
 

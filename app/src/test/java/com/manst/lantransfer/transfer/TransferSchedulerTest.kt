@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * 传输队列「有限并发」调度的单元测试。
  *
  * 覆盖面：
- * - 并发上限（默认 3）生效，且按入队顺序补满槽位；
+ * - 并发上限（默认 5，可配置 1–6）生效，且按入队顺序补满槽位；
  * - 同一个 taskId 不会被重复启动（[TransferQueueModel.beginAttempt] 原子抢占 + 已占用集合排除）；
  * - 失败重试退避期间任务不被其它 worker 提前取出，退避结束后可再次执行；
  * - 取消（排队中 / 执行中 / 退避期间）后不再被调度；
@@ -23,9 +23,38 @@ import java.util.concurrent.atomic.AtomicInteger
 class TransferSchedulerTest {
 
     @Test
-    fun `默认并发上限为 3`() {
-        assertEquals(3, TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS)
-        assertEquals(3, TransferScheduler().maxConcurrency)
+    fun `默认并发上限为 5`() {
+        assertEquals(5, TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS)
+        assertEquals(5, TransferScheduler().maxConcurrency)
+        // 默认值来自可配置的 TransferTuning（用户在「传输设置」中修改前即 5 路）
+        assertEquals(TransferTuning.DEFAULT, TransferScheduler().maxConcurrency)
+        assertEquals(5, TransferTuning.DEFAULT)
+    }
+
+    @Test
+    fun `默认 5 路并发 - 可同时启动 5 个任务`() {
+        val simulation = Simulation(ids = (1..5).map { "t" + it })
+        assertEquals(listOf("t1", "t2", "t3", "t4", "t5"), simulation.fill())
+        assertEquals(5, simulation.running.size)
+        // 槽位已满，再调度不会启动新任务
+        assertEquals(emptyList<String>(), simulation.fill())
+    }
+
+    @Test
+    fun `默认 5 路并发 - 超出任务按入队顺序依次等待`() {
+        val simulation = Simulation(ids = (1..8).map { "t" + it })
+        assertEquals(listOf("t1", "t2", "t3", "t4", "t5"), simulation.fill())
+        assertEquals(emptyList<String>(), simulation.fill())
+        // 每完成一个，就按入队顺序补上下一个
+        simulation.complete("t1")
+        assertEquals(listOf("t6"), simulation.fill())
+        simulation.complete("t2")
+        assertEquals(listOf("t7"), simulation.fill())
+        simulation.complete("t3")
+        assertEquals(listOf("t8"), simulation.fill())
+        assertEquals(emptyList<String>(), simulation.fill())
+        assertEquals(8, simulation.startCounts.size)
+        assertTrue(simulation.startCounts.values.all { it == 1 })
     }
 
     @Test
@@ -105,7 +134,7 @@ class TransferSchedulerTest {
 
     @Test
     fun `重复调度不会重复启动同一任务`() {
-        val simulation = Simulation(ids = (1..10).map { "t" + it })
+        val simulation = Simulation(concurrency = 3, ids = (1..10).map { "t" + it })
         assertEquals(listOf("t1", "t2", "t3"), simulation.fill())
         // 槽位已满，反复调度也不会有新任务启动
         repeat(5) { assertEquals(emptyList<String>(), simulation.fill()) }
@@ -115,7 +144,7 @@ class TransferSchedulerTest {
 
     @Test
     fun `任务结束后按入队顺序补位`() {
-        val simulation = Simulation(ids = (1..6).map { "t" + it })
+        val simulation = Simulation(concurrency = 3, ids = (1..6).map { "t" + it })
         simulation.fill()
         simulation.complete("t2")
         assertEquals(listOf("t4"), simulation.fill())
@@ -132,7 +161,7 @@ class TransferSchedulerTest {
 
     @Test
     fun `排队中被取消的任务不会被启动`() {
-        val simulation = Simulation(ids = listOf("t1", "t2", "t3", "t4", "t5"))
+        val simulation = Simulation(concurrency = 3, ids = listOf("t1", "t2", "t3", "t4", "t5"))
         simulation.cancelQueued("t2")
         assertEquals(listOf("t1", "t3", "t4"), simulation.fill())
         assertNull(simulation.startCounts["t2"])
@@ -141,7 +170,7 @@ class TransferSchedulerTest {
 
     @Test
     fun `执行中被取消的任务释放槽位且不再重试`() {
-        val simulation = Simulation(ids = listOf("t1", "t2", "t3", "t4"))
+        val simulation = Simulation(concurrency = 3, ids = listOf("t1", "t2", "t3", "t4"))
         simulation.fill()
         // 用户取消正在执行的任务：任务转为 CANCELLED，执行体退出并释放槽位
         simulation.cancel("t2")
@@ -197,7 +226,7 @@ class TransferSchedulerTest {
 
     @Test
     fun `activeCount 在并发执行时等于排队中加执行中的任务数`() {
-        val simulation = Simulation(ids = (1..6).map { "t" + it })
+        val simulation = Simulation(concurrency = 3, ids = (1..6).map { "t" + it })
         // 只有排队中任务
         assertEquals(6, simulation.model.countActive())
         simulation.fill()

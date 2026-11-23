@@ -44,7 +44,7 @@ import java.io.IOException
  * 能力：
  * - 局域网发现：[startDiscovery] 用 [UdpBeaconScanner] 监听 UDP 广播（配合 WifiManager.MulticastLock），
  *   按接收码去重、按最近收到时间排序，6 秒未再收到即过期清理；
- * - 连接：[join] 用接收码派生临时帐号，按指定协议或 SFTP -> SCP -> FTPS -> FTP 顺序依次尝试，
+ * - 连接：[join] 用接收码派生临时帐号，按指定协议或 FTPS -> SFTP -> SCP 顺序依次尝试（明文 FTP 仅用户手动指定），
  *   第一个 connect + 根目录 list 成功的协议即会话协议，随后递归列出对方根目录（子目录文件也纳入
  *   remoteFiles），并后台自动 [downloadAll]（不阻塞 join 返回）；
  * - 接收：[downloadAll] / [download] 顺序下载到 [QuickDownloadSink]：文件夹传输时用

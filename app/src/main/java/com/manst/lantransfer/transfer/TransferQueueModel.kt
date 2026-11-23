@@ -75,7 +75,8 @@ internal class TransferQueueModel {
  * 与改造前的串行 worker 相比，这里只做「还能不能再启动一个任务 / 下一个该启动谁」的判断，
  * 真正的连接与数据传输仍由 [DefaultTransferManager] 中每个任务各自的协程完成：
  * - 每个任务使用自己的 [com.manst.lantransfer.protocol.RemoteFileSystem] 连接，绝不共享；
- * - 并发上限默认为 [DEFAULT_MAX_CONCURRENT_TASKS]，同时按入队顺序优先，保持用户可见的先后感；
+ * - 并发上限默认为 [DEFAULT_MAX_CONCURRENT_TASKS]（5 路，可配置 1–6 路，见 [TransferTuning]），
+ *   同时按入队顺序优先，保持用户可见的先后感；
  * - [startableTaskIds] 会排除「已被 worker 占用」的任务（其中也包括正在失败退避中的任务），
  *   避免同一任务被重复启动，或在退避窗口内被其它 worker 提前重新取出而绕过退避。
  */
@@ -121,11 +122,12 @@ internal class TransferScheduler(
 
     companion object {
         /**
-         * 默认并发上限：3 路。
+         * 默认并发上限：5 路（可配置 1–6 路，见 [TransferTuning]）。
          *
          * 大量小文件传输时，优化的是「连接/认证/断开」这类固定开销的并行度；
-         * 3 路既能明显减少串行等待，又不至于打满服务端的连接数上限（FTP 常见限制为 3~10 个会话）。
+         * 5 路能明显减少串行等待，又不超过服务端的常见连接数上限（FTP 常见限制为 3~10 个会话）；
+         * 用户在「传输设置」中调低后由上层用 [TransferTuning.maxConcurrentTasks] 构造本调度器。
          */
-        const val DEFAULT_MAX_CONCURRENT_TASKS = 3
+        const val DEFAULT_MAX_CONCURRENT_TASKS = TransferTuning.DEFAULT
     }
 }

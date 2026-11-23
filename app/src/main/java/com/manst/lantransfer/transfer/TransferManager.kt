@@ -50,7 +50,7 @@ data class TransferTask(
 }
 
 /**
- * 传输队列。任务有限并发执行（默认 3 路，见 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS]）：
+ * 传输队列。任务有限并发执行（默认 5 路，可在「传输设置」中调整 1–6，见 [TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS]）：
  * 大量小文件时减少「连接/认证/断开」的固定开销；每个任务使用独立连接，
  * 如遇服务端连接数限制可把并发上限调为 1 退回串行。
  *

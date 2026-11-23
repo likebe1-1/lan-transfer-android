@@ -33,7 +33,7 @@ Run an FTP, FTPS, SFTP and SCP server on the phone and connect from a PC (FileZi
 • Network tools — LAN discovery, diagnostics, port tests, one-click hotspot join.
 
 Security: quick transfer pins the FTPS certificate and SSH host key fingerprints; automatic fallback only
-uses encrypted transports (SFTP → SCP → FTPS); server-side auth throttling; credentials encrypted with
+uses encrypted transports (FTPS → SFTP → SCP); server-side auth throttling; credentials encrypted with
 Android Keystore; update manifest verified with an Ed25519 signature.
 
 Privacy: no data collection, no ads, no analytics. Files never leave the local network.

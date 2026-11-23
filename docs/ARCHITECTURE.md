@@ -215,7 +215,7 @@ A：选文件 → 生成 8 位接收码 → SessionFileStore 复制到会话目�
    → LocalServerManager.start(四协议 + 派生帐号 + shareRootOverride=会话目录 + 自动选空闲端口)
    → UdpBeaconBroadcaster 每秒广播 {code, deviceName, addresses, ftp/ftps/ssh ports, protocols}
 B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+码
-   → QuickSessionCode.deriveCredentials(code) 得到帐号 → 按 SFTP→SCP→FTPS→FTP 回退连接
+   → QuickSessionCode.deriveCredentials(code) 得到帐号 → 按 FTPS→SFTP→SCP 回退连接（速度优先，均为加密协议；明文 FTP 不参与自动回退）
    → 列出文件 → 自动逐个下载（MediaStore.Downloads，直接写入 Download/ 根目录）
    → 互传：同一个连接把 B 的文件上传回 A（A 端「收到的文件」+ 导出到下载）
 ```
@@ -243,7 +243,7 @@ B：UdpBeaconScanner 监听 47823 → 附近设备列表 → 点击/输入 IP+�
 
 - 接收码仅为临时会话凭证，会话结束后服务端关闭、目录删除；派生帐号只在本会话有效；
 - 广播报文包含接收码与设备名，同网段可见（定位为可信局域网内的临时互传，与 AirDrop「对所有人」同类）；
-- 文件传输仍走各协议自身的 TLS/SSH 加密（SFTP/SCP/FTPS）；FTP 为明文，自动回退顺序把明文 FTP 放在最后；
+- 文件传输仍走各协议自身的 TLS/SSH 加密（FTPS/SFTP/SCP，自动回退按此顺序尝试）；FTP 为明文，不参与自动回退，只能手动选择；
 - 不引入云服务，所有流量仅局域网内。
 
 ### 11.5 实现中修复的 Android 兼容问题

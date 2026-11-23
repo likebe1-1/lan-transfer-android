@@ -23,6 +23,7 @@ import com.manst.lantransfer.quick.SessionFileStore
 import com.manst.lantransfer.server.DefaultLocalServerManager
 import com.manst.lantransfer.server.LocalServerManager
 import com.manst.lantransfer.transfer.TransferManager
+import com.manst.lantransfer.transfer.TransferTuningStore
 import com.manst.lantransfer.net.LanScanner
 import com.manst.lantransfer.setup.HotspotInfoProvider
 import com.manst.lantransfer.setup.WifiNetworkJoiner
@@ -46,7 +47,19 @@ class AppContainer(context: Context) {
     }
 
     val transferManager: TransferManager by lazy {
-        DefaultTransferManager(appContext, serverRepository)
+        DefaultTransferManager(
+            context = appContext,
+            serverRepository = serverRepository,
+            transferTuning = transferTuning
+        )
+    }
+
+    /**
+     * 传输调优配置（并发路数，默认 5 路、可调 1–6 路）。
+     * 由「传输设置」页写入 SharedPreferences；传输层在构造调度器时读取。
+     */
+    val transferTuning: TransferTuningStore by lazy {
+        TransferTuningStore.fromContext(appContext)
     }
 
     val shareRepository: ShareRepository by lazy {

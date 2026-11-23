@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -82,6 +83,7 @@ fun ServerListScreen(
     onOpenQuickSend: () -> Unit,
     onOpenQuickReceive: () -> Unit,
     onOpenNetworkTools: () -> Unit,
+    onOpenTransferTuning: () -> Unit,
     updateManager: UpdateManager
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -115,6 +117,12 @@ fun ServerListScreen(
                         Icon(
                             imageVector = Icons.Filled.Radar,
                             contentDescription = stringResource(R.string.cd_network_tools)
+                        )
+                    }
+                    IconButton(onClick = onOpenTransferTuning) {
+                        Icon(
+                            imageVector = Icons.Filled.Tune,
+                            contentDescription = stringResource(R.string.cd_transfer_tuning)
                         )
                     }
                     IconButton(onClick = {
