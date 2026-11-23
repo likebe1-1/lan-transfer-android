@@ -42,7 +42,12 @@ import javax.net.ssl.X509TrustManager
  *   列表解析器处理；
  * - 被动模式为默认，[ServerProfile.passiveMode] 为 false 时使用主动模式；
  * - 数据连接使用 128 KiB 的流缓冲（setBufferSize）与数据 socket 收发缓冲，
- *   兼顾局域网吞吐与 Android 内存占用（详见 [applyDataTransferBufferTuning]）；
+ *   兼顾局域网吞吐与 Android 内存占用（128/256 KiB 实测对照见 [DATA_TRANSFER_BUFFER_SIZE] 注释与
+ *   FtpDataBufferTuningTest#dataTransferBuffer128Vs256KiBEndToEndBenchmark）；
+ * - TCP_NODELAY：FTPClient 没有直接 API，数据 socket 由 `_socketFactory_` 创建且只暴露
+ *   SO_RCVBUF/SO_SNDBUF 配置；理论上可用自定义 SocketFactory 设置 TCP_NODELAY，但批量数据连接
+ *   （128 KiB 的整块写）不需要关闭 Nagle，实测也没有收益（见 FtpDataBufferTuningTest 的 TCP_NODELAY
+ *   对照用例），因此不启用、也不使用反射；
  * - [ServerProfile.allowInsecureTls] 为 true 时信任任意服务端证书（局域网自签证书常见），为 false 时使用
  *   JVM 默认信任库做严格校验；
  * - 全部阻塞调用都放在 [Dispatchers.IO] 上执行，类本身是纯 JVM 实现（不依赖 Android API）。
@@ -663,14 +668,20 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
 }
 
 /**
- * 数据连接缓冲区大小（128 KiB），用于数据流包装与数据 socket 的 SO_RCVBUF/SO_SNDBUF。
+ * FTP/FTPS 数据连接缓冲区大小：128 KiB，用于数据流包装与数据 socket 的 SO_RCVBUF/SO_SNDBUF。
  *
  * 选择依据：
  * - Commons Net 默认不为数据流指定缓冲（内部退化为 8 KiB），在局域网千兆/Wi-Fi 下 syscall 与
- *   TLS 记录层开销会明显限制吞吐；
- * - 128 KiB 足以覆盖多个 TCP MSS 与多份 TLS 记录，单次读写即可摊薄系统调用开销；
- * - 每条连接额外内存约为 3 × 128 KiB（读流缓冲、写流缓冲、socket 收发缓冲），
- *   低于 256 KiB 方案的一半，对 Android 低端设备与并行传输更友好，故取 128 KiB。
+ *   TLS 记录层开销会明显限制吞吐；128 KiB 足以覆盖多个 TCP MSS 与多份 TLS 记录；
+ * - 128 KiB vs 256 KiB 的真实端到端对照（8 MiB 上传 + 下载，正反两遍顺序消除 JIT/缓存偏差，
+ *   见 FtpDataBufferTuningTest#dataTransferBuffer128Vs256KiBEndToEndBenchmark）：
+ *   · FTP 128→256：两次采样下载吞吐比 0.96×–0.98×、上传 0.83×–1.03×；
+ *   · FTPS 128→256：两次采样下载 0.96×–1.00×、上传 1.13×–1.16×；
+ *   · 方向并不完全一致（FTPS 上传时快时慢），没有稳定收益。
+ * - 结论：该常量同时作用于数据流缓冲、数据 socket 收发缓冲，每条连接内存约 3 × 128 KiB，
+ *   默认 5 路并发下改 256 KiB 会多占约 1.9 MiB。回环测试是 CPU-bound、真实局域网是网络-bound，
+ *   收益会进一步缩小，因此保留 128 KiB，对 Android 低端设备与并行传输更友好；
+ *   若后续有真机 Wi-Fi 的 FTPS 专项数据，可再按协议分别调参。
  */
 internal const val DATA_TRANSFER_BUFFER_SIZE = 128 * 1024
 
@@ -687,9 +698,22 @@ internal const val DATA_TRANSFER_BUFFER_SIZE = 128 * 1024
  *
  * 注意：SocketClient.setReceiveBufferSize/setSendBufferSize 作用于控制连接，
  * 且只在 connect() 内部创建 socket 时读取；控制连接仅传输少量命令，调大没有吞吐收益，故不在此设置。
+ *
+ * [bufferSize] 只为端到端缓冲对照测试（128 KiB vs 256 KiB）保留参数化能力，生产路径始终使用
+ * [DATA_TRANSFER_BUFFER_SIZE]；不要把它接到运行时配置上，避免同一传输链路出现多种缓冲尺寸。
+ *
+ * TCP_NODELAY：FTPClient/FTPSClient 没有任何直接的 TCP_NODELAY setter，数据 socket 由
+ * `_socketFactory_` 创建（FTPClient 与 FTPSClient 的 `_openDataConnection_` 都是先
+ * `_socketFactory_.createSocket()` 再 connect）。Commons Net 只在该 socket 上设置
+ * SO_RCVBUF/SO_SNDBUF，因此「能否设置 TCP_NODELAY」完全取决于自定义 SocketFactory；
+ * 这是公开 API，不需要反射。但数据连接是批量整块写，关闭 Nagle 没有稳定收益（对照与可行性见
+ * FtpDataBufferTuningTest#dataTransferBuffer128Vs256KiBEndToEndBenchmark 与
+ * #ftpDataSocketTcpNoDelayIsFeasibleViaPublicSocketFactory），反而会改变小包合并行为，
+ * 故生产路径保持系统默认（Nagle 开启），不引入自定义 socket 工厂。
  */
-internal fun applyDataTransferBufferTuning(client: FTPClient) {
-    client.setBufferSize(DATA_TRANSFER_BUFFER_SIZE)
-    client.setReceieveDataSocketBufferSize(DATA_TRANSFER_BUFFER_SIZE)
-    client.setSendDataSocketBufferSize(DATA_TRANSFER_BUFFER_SIZE)
+internal fun applyDataTransferBufferTuning(client: FTPClient, bufferSize: Int = DATA_TRANSFER_BUFFER_SIZE) {
+    require(bufferSize > 0) { "数据连接缓冲区必须为正数：" + bufferSize }
+    client.setBufferSize(bufferSize)
+    client.setReceieveDataSocketBufferSize(bufferSize)
+    client.setSendDataSocketBufferSize(bufferSize)
 }

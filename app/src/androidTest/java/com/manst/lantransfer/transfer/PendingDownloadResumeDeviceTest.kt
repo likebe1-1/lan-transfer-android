@@ -23,9 +23,11 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 覆盖断点续传的关键实现点：
  * 1) 按磁盘实际大小定位续写（[MediaStoreDownloadStore.openPendingSink] offset > 0），提交后内容完整；
  * 2) offset == 0 时截断旧内容，重新下载不会残留上次的字节；
- * 3) 续写偏移与磁盘实际大小不一致时抛 IOException（宁可重下也不写坏文件）；
+ * 3) 续写偏移越过文件末尾时抛 IOException（宁可重下也不写坏文件）；
  * 4) [MediaStoreDownloadStore.isPending] 能区分 pending / 已提交；
- * 5) [MediaStoreDownloadStore.discard] 能删除未提交记录，不留残骸。
+ * 5) [MediaStoreDownloadStore.discard] 能删除未提交记录，不留残骸；
+ * 6) [MediaStoreDownloadStore.preallocate]（ftruncate）能把 pending 文件预分配成远端大小，
+ *    预分配后文件大小 == 远端大小但内容仍是空的，按偏移写入的内容必须落点正确。
  *
  * 说明：本机当前没有在线模拟器/真机时只要求 assembleGithubDebugAndroidTest 编译通过。
  */
@@ -132,6 +134,116 @@ class PendingDownloadResumeDeviceTest {
     }
 
     @Test
+    fun preallocate_reservesRemoteSizeAndOffsetWriteLandsAtCorrectPosition() {
+        val relativeDir = newRelativeDir("preallocate")
+        val displayName = downloadStore.reserveFileName("preallocate-device.bin", relativeDir)
+        val uri = downloadStore.createPendingFile(displayName, relativeDir)
+        createdUris += uri
+        val payload = "world".toByteArray(Charsets.UTF_8)
+
+        assertTrue("预分配应当成功（ftruncate 可用）", downloadStore.preallocate(uri, 64L * 1024L))
+        assertEquals(
+            "预分配后本地文件大小应等于远端大小",
+            64L * 1024L,
+            downloadStore.localFileSize(uri)
+        )
+        assertTrue("预分配不应改变 pending 状态", downloadStore.isPending(uri))
+
+        // 预分配后仍可按偏移定位写入：真实已写偏移 1024，而文件大小是远端大小，
+        // 二者不相等是正常情况（openPendingSink 只校验偏移不越过文件末尾）。
+        val offset = 1024L
+        downloadStore.openPendingSink(uri, offset).use { it.write(payload) }
+        downloadStore.releaseFileName(displayName, relativeDir)
+
+        val committed = downloadStore.commitAndGetUri(uri)
+        val bytes = readAllBytes(committed)
+        assertEquals("提交后文件大小应保持预分配大小", 64 * 1024, bytes.size)
+        assertEquals("偏移之前的字节应仍是预分配的空内容（0）", 0, bytes[0].toInt())
+        assertEquals(
+            "按 offset 写入的内容必须落在正确位置",
+            payload.toList(),
+            bytes.copyOfRange(offset.toInt(), offset.toInt() + payload.size).toList()
+        )
+    }
+
+    @Test
+    fun preallocateThenSequentialWrite_thenResumeFromRealWrittenOffset() {
+        // 模拟真实下载顺序：打开 offset=0 的写入流（截断）-> 预分配远端大小 -> 写入前段数据；
+        // 模拟中断后按「真实已写偏移」（而不是文件大小）续写剩余数据。
+        val relativeDir = newRelativeDir("prealloc-resume")
+        val displayName = downloadStore.reserveFileName("prealloc-resume-device.bin", relativeDir)
+        val uri = downloadStore.createPendingFile(displayName, relativeDir)
+        createdUris += uri
+        val head = "hello".toByteArray(Charsets.UTF_8)
+        val tail = " world".toByteArray(Charsets.UTF_8)
+        val remoteSize = 8L * 1024L
+        var writtenOffset = 0L
+
+        downloadStore.openPendingSink(uri, 0L).use { sink ->
+            assertTrue(downloadStore.preallocate(uri, remoteSize))
+            assertEquals("预分配后文件大小即远端大小", remoteSize, downloadStore.localFileSize(uri))
+            sink.write(head)
+            writtenOffset = head.size.toLong()
+        }
+        assertEquals(
+            "写入前段数据不应改变预分配出来的文件大小",
+            remoteSize,
+            downloadStore.localFileSize(uri)
+        )
+
+        // 断点续传：偏移取真实的连续已写字节（head.size），不是磁盘大小（remoteSize）。
+        downloadStore.openPendingSink(uri, writtenOffset).use { it.write(tail) }
+        downloadStore.releaseFileName(displayName, relativeDir)
+
+        val committed = downloadStore.commitAndGetUri(uri)
+        val bytes = readAllBytes(committed)
+        assertEquals("文件大小应保持不变", remoteSize.toInt(), bytes.size)
+        assertEquals(
+            "前段内容正确",
+            head.toList(),
+            bytes.copyOfRange(0, head.size).toList()
+        )
+        assertEquals(
+            "续写内容从真实已写偏移继续",
+            tail.toList(),
+            bytes.copyOfRange(head.size, head.size + tail.size).toList()
+        )
+        assertEquals("其余部分应仍是预分配的空内容", 0, bytes[head.size + tail.size].toInt())
+    }
+
+    @Test
+    fun preallocate_invalidSizeIsIgnoredSafely() {
+        val relativeDir = newRelativeDir("prealloc-invalid")
+        val displayName = downloadStore.reserveFileName("prealloc-invalid-device.bin", relativeDir)
+        val uri = downloadStore.createPendingFile(displayName, relativeDir)
+        createdUris += uri
+
+        assertFalse("未知/非法大小不应预分配", downloadStore.preallocate(uri, 0L))
+        assertFalse("负大小不应预分配", downloadStore.preallocate(uri, -1L))
+        assertEquals("非法预分配不应改变文件", 0L, downloadStore.localFileSize(uri))
+        downloadStore.releaseFileName(displayName, relativeDir)
+    }
+
+    @Test
+    fun truncateTo_shrinksPreallocatedFileToActualWrittenBytes() {
+        // 远端列表里的 size 可能过期：实际写入字节少于预分配大小时裁掉尾部 0 填充。
+        val relativeDir = newRelativeDir("truncate")
+        val displayName = downloadStore.reserveFileName("truncate-device.bin", relativeDir)
+        val uri = downloadStore.createPendingFile(displayName, relativeDir)
+        createdUris += uri
+        // 真实顺序：先打开 offset=0 的写入流（截断），再预分配，然后写入实际字节。
+        downloadStore.openPendingSink(uri, 0L).use { sink ->
+            assertTrue(downloadStore.preallocate(uri, 16L * 1024L))
+            sink.write(ByteArray(100))
+        }
+        assertEquals("下载中断后文件仍保持预分配大小", 16L * 1024L, downloadStore.localFileSize(uri))
+
+        assertTrue(downloadStore.truncateTo(uri, 100L))
+        assertEquals("应裁掉预分配的空尾巴", 100L, downloadStore.localFileSize(uri))
+        downloadStore.releaseFileName(displayName, relativeDir)
+    }
+
+    @Test
     fun discard_removesUncommittedPendingRecord() {
         val relativeDir = newRelativeDir("discard")
         val displayName = downloadStore.reserveFileName("discard-device.bin", relativeDir)
@@ -146,6 +258,9 @@ class PendingDownloadResumeDeviceTest {
     }
 
     // ------------------------------------------------------------ 辅助
+
+    private fun readAllBytes(uri: Uri): ByteArray =
+        resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取下载文件")
 
     private fun newSuffix(): String =
         System.currentTimeMillis().toString() + "-" + (Math.random() * 1000).toInt()

@@ -334,4 +334,29 @@ class SshRemoteFileSystemSftpTest {
         assertArrayEquals(bigBytes, sink.toByteArray())
     }
 
+
+    @Test
+    fun uploadsLargeFileThroughMinaEngine() = runBlocking {
+        // 9 MiB > MINA_SFTP_MIN_SIZE：上传路径改用 MINA SSHD 传输引擎（独立会话）
+        val large = randomBytes(9 * 1024 * 1024, 1_010L)
+        var lastProgress = 0L
+        withClient(profile()) { client ->
+            client.upload(ByteArrayInputStream(large), "mina-large.bin", large.size.toLong()) { lastProgress = it }
+        }
+        val stored = Files.readAllBytes(root.resolve("mina-large.bin"))
+        assertArrayEquals(large, stored)
+        assertEquals(large.size.toLong(), lastProgress)
+    }
+
+    @Test
+    fun uploadsSmallFileThroughJschSession() = runBlocking {
+        // 300 KiB < MINA_SFTP_MIN_SIZE：仍走已连接的 JSch 会话
+        val sink = ByteArrayOutputStream()
+        withClient(profile()) { client ->
+            client.upload(ByteArrayInputStream(uploadBytes), "small-upload.bin", uploadBytes.size.toLong()) {}
+            client.download("small-upload.bin", sink) {}
+        }
+        assertArrayEquals(uploadBytes, sink.toByteArray())
+    }
+
 }

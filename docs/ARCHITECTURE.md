@@ -133,12 +133,24 @@ interface RemoteFileSystem : Closeable {
 | 项 | 取值 | 说明 |
 | --- | --- | --- |
 | 自动协议顺序 | FTPS → SFTP → SCP | FTPS 实测明显快于 SFTP，且已有证书指纹固定，安全不降级；明文 FTP 仅手动选择 |
-| FTP/FTPS 数据缓冲 | 128 KiB（流 + 数据 socket SO_RCVBUF/SO_SNDBUF） | 上传与下载一致；续传跳过前缀也用 128 KiB 缓冲消费 |
+| FTP/FTPS 数据缓冲 | 128 KiB（流 + 数据 socket SO_RCVBUF/SO_SNDBUF） | 上传与下载一致；续传跳过前缀也用 128 KiB 缓冲消费；128 vs 256 KiB 实测见下方结论 |
 | SCP 上传 | 256 KiB 读块 + 512 KiB 通道输出缓冲，数据阶段不逐块 ACK | 只在 C 记录、数据结束、E 记录处同步 |
+| SSH 自有拷贝缓冲 | 128 KiB | SCP 下载 128 vs 256 KiB 正反两遍实测两次为 0.88× / 1.29×，方向不稳定，保留 128 KiB；SFTP 线上包仍 32 KiB |
 | SFTP 上传 | 源流 128 KiB BufferedInputStream | JSch 内部仍 32 KiB 包 |
 | SFTP 大文件下载 | ≥8 MiB 走 `SftpMultichannel`（多 channel 并行分段） | 需按偏移随机写，故先写临时文件再顺序拷贝到 sink |
 | 下载落盘 | 直接写 MediaStore pending 文件（IS_PENDING=1） | 完成仅提交，去掉「缓存暂存 + 复制」双重写盘 |
 | 并发路数 | 默认 5（1–6 可配置） | 设置页热更新，对新入队任务生效 |
+
+#### socket 层调优实测结论（v2.3.2）
+
+测试方法：内嵌真实 FTP/FTPS 服务端（自研 `TestFtpsServer`）与真实 SCP 服务端（Apache MINA SSHD），文件 8 MiB；每档候选先预热，再按正反两遍顺序各测多轮、取最快值，以抵消 JIT/页缓存带来的顺序偏差。回环测试只比较相对快慢，不写死绝对耗时断言。用例：`FtpDataBufferTuningTest#dataTransferBuffer128Vs256KiBEndToEndBenchmark`、`SshTransferTuningTest#sshTransferBuffer128Vs256KiBEndToEndBenchmark`。
+
+- **FTP/FTPS：保留 128 KiB。** 正反两遍顺序测量（消除 JIT/缓存偏差）两次采样：FTP 256/128 下载 0.96×–0.98×、上传 0.83×–1.03×；FTPS 下载 0.96×–1.00×、上传 1.13×–1.16×；方向不完全一致，没有稳定收益。该常量同时作用于数据流缓冲与数据 socket 收发缓冲，5 路并发下改 256 KiB 多占约 1.9 MiB，且回环传输是 CPU-bound、真实局域网是网络-bound，收益会进一步缩小。
+- **SSH：保留 128 KiB。** SCP 下载 8 MiB 正反两遍测量两次：128 KiB 138 ms / 256 KiB 157 ms（256/128 吞吐 0.88×），以及 128 KiB 155 ms / 256 KiB 120 ms（1.29×）；方向随机器负载反转，没有稳定收益。该常量只影响 App 侧拷贝循环、不改变 SSH 线上分片（SFTP 上传源流缓冲是独立常量，仍为 128 KiB；JSch 线上包尺寸仍受 32 KiB 硬限制），故不做改动。
+- **TCP_NODELAY：**
+  - FTP 明文数据连接没有直接 API，但数据 socket 由公开的 `FTPClient.setSocketFactory` 创建，自定义 `SocketFactory` 可以设置 TCP_NODELAY（用例 `ftpDataSocketTcpNoDelayIsFeasibleViaPublicSocketFactory` 用真实数据 socket 验证）；实测批量整块写下关闭 Nagle 无稳定收益（开/关吞吐比 0.81×–1.40×，方向不一致），生产保持系统默认。
+  - FTPS 数据连接由 `FTPSClient` 使用 SSLContext 的 `SSLSocketFactory` 创建；把它替换成普通 SocketFactory 会让数据连接退化为明文、TLS 握手超时，因此不能直接设置，也不为此引入自定义 SSL 工厂。
+  - SSH 侧 JSch 0.2.26 的 `Session.connect()` 已无条件执行 `socket.setTcpNoDelay(true)`（Session.java:242，默认路径与自定义 SocketFactory 路径都执行，用例 `jschTransportSocketEnablesTcpNoDelayByDefault` 验证），应用层无需配置，也没有使用反射。
 
 测速脚本：`python scripts/speed_bench.py --host <ip> --user <user> --password <pass>`
 5. Keystore 加密异常时降级为明文保存（优先保证可用性，日志可查）。

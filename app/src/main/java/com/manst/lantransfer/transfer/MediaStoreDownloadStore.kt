@@ -22,8 +22,13 @@ import java.util.Locale
  * 文件名在「目标子目录」内查重（MediaStore 现有文件 + 进程内预留），重名追加 " (1)"、" (2)"……
  *
  * 断点续传支持：传输层把远端字节流直接写进 pending 文件（[openPendingSink]），
- * 失败后保留 pending 记录，下一次尝试读取磁盘实际大小（[localFileSize]）从该偏移续写，
+ * 失败后保留 pending 记录，下一次尝试从「真实已写偏移」续写，
  * 无需 cacheDir 暂存文件，也就没有「先写暂存再复制到下载目录」的二次写盘。
+ *
+ * 预分配：新下载在写第一个字节前用 [Os.ftruncate] 按远端大小预分配（[preallocate]），
+ * 减少大文件写入期反复扩展文件造成的碎片与元数据更新。预分配后文件大小立即等于远端大小，
+ * 因此「已下载多少字节」必须由传输层单独统计，**绝不能把文件大小当成进度**；
+ * [openPendingSink] 也只校验续写偏移没有越过文件末尾（允许文件因预分配而更大）。
  */
 internal class MediaStoreDownloadStore(private val context: Context) {
 
@@ -106,8 +111,10 @@ internal class MediaStoreDownloadStore(private val context: Context) {
     /**
      * 下载记录当前在磁盘上的字节数（pending 或已提交均可）；记录不存在或不可读时返回 null。
      *
-     * 断点续传以「磁盘实际大小」为续写偏移，而不是任务快照里的 transferredBytes：
-     * 快照持久化有 500ms 节流，进程被杀时可能落后于磁盘，用快照续写会写坏文件。
+     * 注意：下载前预分配（[preallocate]）过的 pending 文件，该值从一开始就等于远端大小，
+     * 并不代表已经写入的字节数；真实进度由传输层统计（见 [openPendingSink] 与
+     * [com.manst.lantransfer.transfer.DownloadPreallocationPolicy] 的说明）。
+     * 已提交的文件（IS_PENDING=0）不存在预分配问题，该值即完整文件大小。
      */
     fun localFileSize(uri: Uri): Long? {
         return try {
@@ -141,9 +148,11 @@ internal class MediaStoreDownloadStore(private val context: Context) {
     /**
      * 以 [offset] 为起点打开 pending 文件的写入流（下载主体直接写它，避免「暂存 + 复制」二次写盘）。
      *
-     * - offset == 0：先截断文件，避免重新下载时残留旧内容；
-     * - offset > 0：定位到该偏移续写；磁盘实际大小必须恰好等于 offset，否则抛 [IOException]，
-     *   让上层按「无法续传」重新下载，绝不写坏文件。
+     * - offset == 0：先截断文件，避免重新下载时残留旧内容（调用方随后可再 [preallocate] 预分配）；
+     * - offset > 0：定位到该偏移续写；只校验 offset 没有越过文件末尾（磁盘大小 < offset 时抛
+     *   [IOException]），允许文件比 offset 大——预分配过的文件磁盘大小始终等于远端大小，
+     *   而 offset 是传输层统计的「真实已写偏移」，二者不相等是正常情况；从该偏移重写尚未确认的
+     *   少量尾部字节是幂等的，不会留下空洞。
      */
     fun openPendingSink(uri: Uri, offset: Long): OutputStream {
         if (offset < 0L) throw IOException("续传偏移不能为负数：" + offset)
@@ -158,8 +167,8 @@ internal class MediaStoreDownloadStore(private val context: Context) {
                 Os.ftruncate(fileDescriptor, 0L)
             } else {
                 val actual = descriptor.statSize
-                if (actual != offset) {
-                    throw IOException("下载文件续传位置不一致：磁盘 " + actual + " 字节，预期 " + offset)
+                if (actual < offset) {
+                    throw IOException("下载文件续传位置越界：磁盘 " + actual + " 字节，续写偏移 " + offset)
                 }
                 Os.lseek(fileDescriptor, offset, OsConstants.SEEK_SET)
             }
@@ -168,6 +177,40 @@ internal class MediaStoreDownloadStore(private val context: Context) {
             runCatching { descriptor.close() }
             if (e is IOException) throw e
             throw IOException("无法定位下载文件写入位置", e)
+        }
+    }
+
+    /**
+     * 按 [size] 字节预分配下载文件（[Os.ftruncate]），大文件写入前一次性占好空间。
+     *
+     * 预分配后文件在磁盘上的大小立即等于 [size]，**此时文件大小不再等于已下载字节数**：
+     * 传输层用自己统计的「连续已写」进度作为续传偏移（见 [openPendingSink]）。
+     * 设备/自定义 MediaProvider 不支持时（无法打开 fd、ftruncate 失败等）安全忽略并返回 false，
+     * 下载照常进行，只是失去预分配带来的空间预留优化。
+     */
+    fun preallocate(uri: Uri, size: Long): Boolean {
+        if (size <= 0L) return false
+        return resize(uri, size, "预分配")
+    }
+
+    /**
+     * 把下载文件截断/扩展到 [size] 字节（写出字节数少于预分配大小时裁掉尾部 0 填充）。
+     * 失败时安全忽略并返回 false：文件保持原样，下载仍可正常提交。
+     */
+    fun truncateTo(uri: Uri, size: Long): Boolean {
+        if (size < 0L) return false
+        return resize(uri, size, "调整大小")
+    }
+
+    private fun resize(uri: Uri, size: Long, action: String): Boolean {
+        return try {
+            resolver.openFileDescriptor(uri, "rw")?.use { descriptor ->
+                Os.ftruncate(descriptor.fileDescriptor, size)
+                true
+            } ?: false
+        } catch (e: Exception) {
+            Log.w(TAG, "下载文件" + action + "失败（已忽略，继续下载）：" + uri, e)
+            false
         }
     }
 

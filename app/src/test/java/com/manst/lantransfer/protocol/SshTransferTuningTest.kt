@@ -1,5 +1,6 @@
 package com.manst.lantransfer.protocol
 
+import com.jcraft.jsch.JSch
 import com.jcraft.jsch.SftpProgressMonitor
 import com.manst.lantransfer.core.ServerProfile
 import com.manst.lantransfer.core.TransferProtocol
@@ -14,9 +15,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.Socket
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Comparator
+import java.util.Locale
 
 /**
  * SFTP/SCP 传输吞吐调优测试：
@@ -48,7 +54,9 @@ class SshTransferTuningTest {
 
     @Test
     fun transferBufferIs128KiB() {
-        assertEquals("SFTP/SCP 拷贝缓冲区应由 32 KiB 提升到 128 KiB", 128 * 1024, SSH_TRANSFER_BUFFER_SIZE)
+        // 128 vs 256 KiB 的真实 SCP 下载对照见 sshTransferBuffer128Vs256KiBEndToEndBenchmark：
+        // 三次采样方向不稳定（+10%/+18%/-31%），没有稳定收益，故保留 128 KiB。
+        assertEquals("SFTP/SCP 自有拷贝缓冲区应为 128 KiB", 128 * 1024, SSH_TRANSFER_BUFFER_SIZE)
         assertTrue(
             "缓冲区应落在 128 KiB~256 KiB 的建议区间",
             SSH_TRANSFER_BUFFER_SIZE in (128 * 1024)..(256 * 1024)
@@ -228,7 +236,111 @@ class SshTransferTuningTest {
         }
     }
 
+    // ------------------------------------------------------------ 128 KiB vs 256 KiB 端到端对照
+
+    /**
+     * SSH 自有拷贝缓冲 128 KiB vs 256 KiB 的真实端到端对照（SCP 下载，8 MiB）。
+     *
+     * 该常量只作用于本类自有拷贝循环（SCP 线协议接收、ls 输出读取、未知大小上传落盘）：
+     * SFTP get/put 的线上分片由 JSch 硬编码 32 KiB 决定，SCP 上传读块由 SCP_UPLOAD_CHUNK_SIZE 决定，
+     * 因此这里用 SCP 下载测量该常量的真实影响。不写死绝对耗时，仅打印结果与相对比值。
+     */
+    @Test
+    fun sshTransferBuffer128Vs256KiBEndToEndBenchmark() = runBlocking {
+        val payload = randomBytes(BENCHMARK_PAYLOAD_SIZE, 1_302L)
+        Files.write(root.resolve(BENCHMARK_DOWNLOAD_FILE.removePrefix("/")), payload)
+        val server = TestSshServer(root)
+        try {
+            val samples = LinkedHashMap<Int, MutableList<Double>>()
+            // 正反两遍顺序，抵消「后测的候选继承 JIT/页缓存热」的顺序偏差；每个候选取两遍中的最快值。
+            for (pass in 0 until BENCHMARK_PASSES) {
+                val sizes = if (pass == 0) listOf(128 * 1024, 256 * 1024) else listOf(256 * 1024, 128 * 1024)
+                for (bufferSize in sizes) {
+                    SshRemoteFileSystem(profile(server.port), bufferSize).use { client ->
+                        client.connect()
+                        // 预热（不计时）
+                        client.download(BENCHMARK_DOWNLOAD_FILE, OutputStream.nullOutputStream())
+                        if (pass == 0) {
+                            // 第一遍用真实 sink 校验内容；计时轮用 null sink，避免内存拷贝干扰
+                            val verifiedSink = ByteArrayOutputStream()
+                            client.download(BENCHMARK_DOWNLOAD_FILE, verifiedSink)
+                            assertArrayEquals(
+                                "SCP 下载内容应与源文件一致（" + bufferSize / 1024 + " KiB）",
+                                payload,
+                                verifiedSink.toByteArray()
+                            )
+                        }
+                        var best = Double.MAX_VALUE
+                        repeat(BENCHMARK_ROUNDS) {
+                            val millis = measureMillis {
+                                client.download(BENCHMARK_DOWNLOAD_FILE, OutputStream.nullOutputStream())
+                            }
+                            best = minOf(best, millis)
+                        }
+                        samples.getOrPut(bufferSize) { ArrayList() }.add(best)
+                    }
+                }
+            }
+            for (bufferSize in listOf(128 * 1024, 256 * 1024)) {
+                val best = samples.getValue(bufferSize).min()
+                println(
+                    "[SSH 缓冲对照] SCP 下载 " + (bufferSize / 1024) + " KiB: " +
+                        formatMillis(best) + " (" + formatThroughput(payload.size, best) + " MB/s)"
+                )
+            }
+            val base = samples.getValue(128 * 1024).min()
+            val large = samples.getValue(256 * 1024).min()
+            println(
+                "[SSH 缓冲对照] 256 KiB / 128 KiB 吞吐比=" + formatRatio(base, large) +
+                    "（>1 表示 256 KiB 更快；回环测试噪声约 ±5%）"
+            )
+            println(
+                "[SSH 缓冲对照] 最终保留 SSH_TRANSFER_BUFFER_SIZE=" +
+                    (SSH_TRANSFER_BUFFER_SIZE / 1024) + " KiB（依据见常量注释与 docs/ARCHITECTURE.md）"
+            )
+            assertTrue("SSH 缓冲对照每档应有正反两遍样本", samples.values.all { it.size == BENCHMARK_PASSES })
+            assertTrue("SSH 缓冲对照耗时应为正数", samples.values.flatten().all { it > 0.0 })
+        } finally {
+            server.close()
+        }
+    }
+
+    /**
+     * SSH TCP_NODELAY 结论验证：JSch 0.2.26 的 Session.connect() 在拿到 socket 后无条件调用
+     * socket.setTcpNoDelay(true)（Session.java:242），默认路径如此，自定义 SocketFactory 路径同样如此。
+     * 这里用只记录 socket、不自行设置 TCP_NODELAY 的公开 SocketFactory 验证 JSch 确实开启了它，
+     * 说明 SSH 侧无需应用层代码、也不需要反射。
+     */
+    @Test
+    fun jschTransportSocketEnablesTcpNoDelayByDefault() {
+        val server = TestSshServer(root)
+        try {
+            val jsch = JSch()
+            val session = jsch.getSession("tester", "127.0.0.1", server.port)
+            session.setPassword("s3cret")
+            session.setConfig("StrictHostKeyChecking", "no")
+            session.setConfig("PreferredAuthentications", "password")
+            session.setTimeout(10_000)
+            val factory = CapturingJschSocketFactory()
+            session.setSocketFactory(factory)
+            session.connect(10_000)
+            try {
+                assertEquals("握手应只创建一条传输 socket", 1, factory.sockets.size)
+                val socket = factory.sockets.single()
+                assertTrue(
+                    "JSch 应在建连时开启 TCP_NODELAY（Session.java:242），实际：" + socket.tcpNoDelay,
+                    socket.tcpNoDelay
+                )
+            } finally {
+                session.disconnect()
+            }
+        } finally {
+            server.close()
+        }
+    }
+
     // ------------------------------------------------------------ 辅助
+
 
     private fun profile(port: Int): ServerProfile = ServerProfile(
         name = "ssh-buffer-test",
@@ -248,5 +360,44 @@ class SshTransferTuningTest {
             if (len > maxRequestedLength) maxRequestedLength = len
             return super.read(b, off, len)
         }
+    }
+
+    private suspend fun measureMillis(block: suspend () -> Unit): Double {
+        val startedAt = System.nanoTime()
+        block()
+        return (System.nanoTime() - startedAt) / 1_000_000.0
+    }
+
+    private fun formatMillis(millis: Double): String = String.format(Locale.ROOT, "%.1f ms", millis)
+
+    private fun formatThroughput(bytes: Int, millis: Double): String {
+        val megabytes = bytes / (1024.0 * 1024.0)
+        return String.format(Locale.ROOT, "%.1f", megabytes / (millis / 1000.0))
+    }
+
+    /** 基准耗时 / 候选耗时：>1 表示候选更快（吞吐更高）。 */
+    private fun formatRatio(baseMillis: Double, candidateMillis: Double): String {
+        if (candidateMillis <= 0.0) return "n/a"
+        return String.format(Locale.ROOT, "%.2f×", baseMillis / candidateMillis)
+    }
+
+    /** 只记录 JSch 创建的传输 socket，不修改 TCP_NODELAY；用于验证库自身已开启该选项。 */
+    private class CapturingJschSocketFactory : com.jcraft.jsch.SocketFactory {
+
+        val sockets: MutableList<Socket> = ArrayList()
+
+        override fun createSocket(host: String, port: Int): Socket =
+            Socket(host, port).also { sockets.add(it) }
+
+        override fun getInputStream(socket: Socket): InputStream = socket.getInputStream()
+
+        override fun getOutputStream(socket: Socket): OutputStream = socket.getOutputStream()
+    }
+
+    private companion object {
+        const val BENCHMARK_PAYLOAD_SIZE = 8 * 1024 * 1024
+        const val BENCHMARK_ROUNDS = 2
+        const val BENCHMARK_PASSES = 2
+        const val BENCHMARK_DOWNLOAD_FILE = "/scp-benchmark.bin"
     }
 }

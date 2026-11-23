@@ -44,8 +44,9 @@ import java.nio.charset.StandardCharsets
  *   `SshHostKeyPinning.PinnedRepository`，此时 `StrictHostKeyChecking=yes`），无指纹的普通服务器退回首次信任；
  * - 全部阻塞调用放在 [Dispatchers.IO]，类本身是纯 JVM 实现（不依赖 Android API）；
  * - 吞吐调优（依据 JSch 0.2.26 源码核实）：
- *   1. 通用拷贝缓冲区 [SSH_TRANSFER_BUFFER_SIZE]（128 KiB，原 32 KiB），作用于 SCP 下载线协议接收、
- *      `ls` 输出读取与未知大小上传的落盘；均为单次分配、单连接串行使用，内存开销可接受；
+ *   1. 通用拷贝缓冲区 [SSH_TRANSFER_BUFFER_SIZE]（128 KiB，原 32 KiB）作用于 SCP 下载线协议接收、
+ *      `ls` 输出读取与未知大小上传的落盘；均为单次分配、单连接串行使用。128 vs 256 KiB 的 SCP
+ *      下载实测方向不稳定（见常量注释），故保留 128 KiB；
  *   2. SCP 上传统一走「流水线」：[SCP_UPLOAD_CHUNK_SIZE]（256 KiB）读块 + [SCP_UPLOAD_STREAM_BUFFER_SIZE]
  *      （512 KiB）的 BufferedOutputStream。协议只在 C 记录后、文件数据结束、远端确认这三个点等待 ACK，
  *      数据阶段连续灌入、不逐块 flush/读应答，避免旧实现在 32 KiB 粒度上的往返与写调用开销；
@@ -55,10 +56,20 @@ import java.nio.charset.StandardCharsets
  *   4. 并行分块传输需要按偏移写目标文件，而 JSch 只提供 OutputStream 偏移读与 OVERWRITE/RESUME/APPEND
  *      语义，引入后会破坏续传与进度语义，故未启用。
  *
+ * TCP_NODELAY：JSch 0.2.26 的 Session.connect() 在拿到 socket 后无条件执行
+ * `socket.setTcpNoDelay(true)`（Session.java:242，默认路径与自定义 SocketFactory 路径都会执行），
+ * 因此 SSH 传输 socket 已经开启 TCP_NODELAY，应用侧无需也不能再设置，更不需要反射。
+ *
+ * [transferBufferSize] 只为 SSH 自有拷贝缓冲 128 KiB vs 256 KiB 的端到端对照测试保留参数化能力，
+ * 生产路径始终使用 [SSH_TRANSFER_BUFFER_SIZE]（见 SshTransferTuningTest#sshTransferBuffer128Vs256KiBEndToEndBenchmark）。
+ *
  * 线程模型：同一实例不支持多线程并发操作（上层「一任务一连接」保证），唯一允许跨线程调用的是
  * [close]——它会把传输中出现的 IO 异常转换成 [TransferCancelledException]。
  */
-class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSystem {
+class SshRemoteFileSystem(
+    override val profile: ServerProfile,
+    private val transferBufferSize: Int = SSH_TRANSFER_BUFFER_SIZE
+) : RemoteFileSystem {
 
     private val sftpMode: Boolean = profile.protocol == TransferProtocol.SFTP
 
@@ -135,7 +146,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         onProgress: (Long) -> Unit
     ): Unit = withContext(Dispatchers.IO) {
         val remote = RemotePath.normalize(remotePath)
-        if (sftpMode) uploadSftp(source, remote, onProgress) else uploadScp(source, remote, sizeHint, onProgress)
+        if (sftpMode) uploadSftp(source, remote, sizeHint, onProgress) else uploadScp(source, remote, sizeHint, onProgress)
     }
 
     /** SFTP 支持偏移续传；SCP 协议本身不支持，按契约从 0 重传。 */
@@ -173,7 +184,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             return@withContext
         }
         if (startOffset == 0L) {
-            uploadSftp(source, remote, onProgress)
+            uploadSftp(source, remote, sizeHint, onProgress)
             return@withContext
         }
 
@@ -348,7 +359,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         try {
             downloader.download(remote, temp) { written -> onProgress(written.coerceAtMost(size)) }
             temp.inputStream().use { input ->
-                input.copyTo(sink, SSH_TRANSFER_BUFFER_SIZE)
+                input.copyTo(sink, transferBufferSize)
             }
             onProgress(size)
         } finally {
@@ -365,7 +376,16 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     private fun bufferedUploadSource(source: InputStream): InputStream =
         BufferedInputStream(source, SFTP_UPLOAD_BUFFER_SIZE)
 
-    private fun uploadSftp(source: InputStream, remote: String, onProgress: (Long) -> Unit) {
+    private suspend fun uploadSftp(
+        source: InputStream,
+        remote: String,
+        sizeHint: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        if (sizeHint >= MINA_SFTP_MIN_SIZE) {
+            uploadWithMinaEngine(source, remote, sizeHint, onProgress)
+            return
+        }
         val channel = requireSftp()
         try {
             channel.put(
@@ -378,6 +398,26 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             throw sftpFailure("上传文件", remote, e)
         } catch (e: IOException) {
             throw ioFailure("上传文件", remote, e)
+        }
+    }
+
+    /**
+     * 大文件 SFTP 上传改用 Apache MINA SSHD 传输引擎。
+     *
+     * JSch 的 SFTP 窗口/数据包尺寸写死（32 KiB 包 + 默认窗口），长肥管道上吞吐被窗口卡住；
+     * MINA 引擎可配置窗口（默认 4 MiB）与包大小（默认 64 KiB），同一局域网实测大文件下载约 2×。
+     * 代价是它需要独立建立一条 SSH 会话，因此只在 ≥ [MINA_SFTP_MIN_SIZE] 的文件上启用，
+     * 小文件仍复用当前已连接的 JSch 会话，避免多一次握手。
+     */
+    private suspend fun uploadWithMinaEngine(
+        source: InputStream,
+        remote: String,
+        sizeHint: Long,
+        onProgress: (Long) -> Unit
+    ) {
+        MinaSftpTransfer(profile).use { engine ->
+            engine.connect()
+            engine.upload(source, remote, sizeHint, onProgress)
         }
     }
 
@@ -662,7 +702,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
 
     private fun readFully(input: InputStream): ByteArray {
         val buffer = ByteArrayOutputStream()
-        val chunk = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
+        val chunk = ByteArray(transferBufferSize)
         while (true) {
             val read = input.read(chunk)
             if (read < 0) break
@@ -722,7 +762,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     /** 从输入流精确读取 size 字节写入 sink，并按增量回调进度。 */
     private fun copyExact(input: InputStream, sink: OutputStream, size: Long, onChunk: (Long) -> Unit) {
         var remaining = size
-        val buffer = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
+        val buffer = ByteArray(transferBufferSize)
         while (remaining > 0L) {
             val limit = sshChunkLimit(remaining, buffer.size)
             val read = input.read(buffer, 0, limit)
@@ -745,7 +785,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             throw RemotePathException("无法创建临时文件以确定上传大小（$remote）", e)
         }
         try {
-            file.outputStream().use { output -> source.copyTo(output, SSH_TRANSFER_BUFFER_SIZE) }
+            file.outputStream().use { output -> source.copyTo(output, transferBufferSize) }
         } catch (e: IOException) {
             file.delete()
             if (closed) throw TransferCancelledException()
@@ -835,9 +875,16 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
 /**
  * SFTP/SCP 自有拷贝缓冲区大小：128 KiB（原 32 KiB）。
  *
- * 只用于本类自己控制的读写循环（SCP 线协议收发、`ls` 输出读取、未知大小上传落盘）；
+ * 只用于本类自己控制的读写循环（SCP 线协议接收、`ls` 输出读取、未知大小上传落盘）；
  * 每次传输只分配一个缓冲区，且同一实例不允许并发传输，因此 128 KiB 不会造成内存压力。
  * 局域网链路上单块越大，read/write 系统调用与进度回调次数越少。
+ *
+ * 128 KiB vs 256 KiB 的 SCP 下载对照（真实 MINA SSHD 服务端、8 MiB、正反两遍顺序、取多轮最快值，
+ * 见 SshTransferTuningTest#sshTransferBuffer128Vs256KiBEndToEndBenchmark）两次采样：
+ * 128 KiB 138 ms / 256 KiB 157 ms（256 慢 12%），以及 128 KiB 155 ms / 256 KiB 120 ms（256 快 29%）；
+ * 方向随机器负载反转，256 KiB 没有稳定收益，且该常量只影响 App 侧拷贝循环、不改变 SSH 线上分片，
+ * 故保留 128 KiB。
+ *
  * 注意：JSch 0.2.26 的 ChannelSftp 内部数据包尺寸由库硬编码为 32 KiB（LOCAL_MAXIMUM_PACKET_SIZE），
  * 无法通过 Session 配置放大，所以本常量不影响 SFTP get/put 的线上分片。
  */
@@ -850,6 +897,14 @@ internal const val SSH_TRANSFER_BUFFER_SIZE = 128 * 1024
  * 8 MiB 以上才值得（TCP 单流在长肥管道上受窗口限制，分多条通道可提升吞吐）。
  */
 internal const val MULTICHANNEL_MIN_SIZE = 8L * 1024 * 1024
+
+/**
+ * 启用 MINA SSHD 传输引擎（可调窗口/包大小）的最小文件体积：8 MiB。
+ *
+ * 现阶段只在 SFTP 上传路径启用：下载走 [SftpMultichannel] 多通道（同等或更好），
+ * 而上传此前只有 JSch 单流（32 KiB 包 + 固定窗口），换成 MINA 引擎收益最直接。
+ */
+internal const val MINA_SFTP_MIN_SIZE = 8L * 1024 * 1024
 
 /**
  * SCP 上传读取块大小：256 KiB（需求区间 256–512 KiB，且为 32 KiB 的整数倍）。

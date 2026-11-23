@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -49,8 +50,8 @@ import java.util.concurrent.ConcurrentHashMap
  * - 队列与历史通过 [TransferStore] 持久化（500ms 节流）：进程重启后未完成任务恢复为 QUEUED 并自动继续，
  *   已结束任务作为历史保留（默认最多 200 条，见 [TransferHistoryLimit]）；
  * - 下载直接写入 MediaStore 的 pending 文件（IS_PENDING=1），完成后仅提交（IS_PENDING=0），
- *   不再经过 cacheDir 暂存文件 + 复制，同一份数据只落盘一次；断点续传时按 pending 文件的磁盘实际大小续写
- *   （详见 [downloadToMediaStore] 的取舍说明与残留清理策略）；
+ *   不再经过 cacheDir 暂存文件 + 复制，同一份数据只落盘一次；写入前按远端大小预分配文件（ftruncate），
+ *   续传时按「连续已写字节」续写（详见 [downloadToMediaStore] 的取舍说明与 [DownloadPreallocationPolicy]）；
  * - 自动重试：非用户取消的 IO/网络错误最多重试 3 次（退避 2s/4s/8s），认证/路径错误不重试；
  * - 文件夹传输：递归列出远端目录 / 遍历 SAF 目录树，拆分为逐文件任务，按上面同一套并发调度执行；
  * - 有活动任务时启动 [TransferService] 前台保活，队列清空后停止。
@@ -593,13 +594,19 @@ class DefaultTransferManager(
      *   完成时仅把 IS_PENDING 置 0，没有全量复制步骤；
      * - 代价是续传必须「续写 pending 文件」而不是独立的暂存文件，所以用
      *   [MediaStoreDownloadStore.openPendingSink] 按偏移定位写入；
-     * - 续传偏移以「pending 文件磁盘实际大小」为准（[MediaStoreDownloadStore.localFileSize]），
-     *   不用任务快照里的 transferredBytes（持久化有 500ms 节流，进程被杀时可能落后于磁盘）；
+     * - 开始写之前按远端大小预分配文件（[MediaStoreDownloadStore.preallocate]），减少大文件写入期
+     *   反复扩展文件造成的碎片；但预分配后文件大小立即等于远端大小，所以**不能用文件大小判断
+     *   已下载多少**：真实进度由本方法内的 [CountingOutputStream] 统计（写进目标文件的连续字节数），
+     *   并随任务快照持久化（500ms 节流，进程被杀时最多回退少量字节）；
+     * - 续传偏移取 min(文件大小, 任务快照 transferredBytes)，由 [DownloadPreallocationPolicy] 统一决策：
+     *   预分配过的文件「文件大小」区分不出空尾巴与真实数据，而多通道等乱序写实现报告的字节数
+     *   可能超过连续已写前缀；两者取小才是安全下界，续写至多重写少量尾部字节，不会留下空洞；
      * - 远端文件变小（被替换）时丢弃旧 pending 重新下载，绝不把新旧内容拼在一起。
      *
      * 残留清理策略（pending 文件对用户不可见，但会占磁盘）：
      * 1) 自动重试（网络/IO 抖动）保留 pending，下一次尝试走 [RemoteFileSystem.downloadPartial] 续写；
-     * 2) 进程被杀/重启：localUri 已持久化在任务里，恢复后按磁盘实际大小继续续写；
+     * 2) 进程被杀/重启：localUri 已持久化在任务里，恢复后按「任务快照记录的连续已写字节」续写
+     *    （持久化有 500ms 节流，最多重复写少量尾部字节，不会留下空洞）；
      * 3) 最终失败、用户取消、删除任务、清空历史：调用方通过 [discardPendingDownload] 主动删除
      *    pending 记录，不留残骸（已提交的可见文件绝不删除）；
      * 4) 若进程在 localUri 持久化（<500ms）之前被杀，该 pending 记录无人引用，
@@ -616,43 +623,48 @@ class DefaultTransferManager(
         var targetUri: Uri? = null
         var startOffset = 0L
         var skipTransfer = false
+        // 本次需要预分配到的字节数（0 表示不预分配）；只有「从 0 开始写」的新文件才需要。
+        var preallocateBytes = 0L
 
         // 1) 复用上一次尝试 / 进程崩溃遗留下来的 pending 文件（断点续传的关键路径）。
         val previousUri = initialTask.localUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
         val previousName = initialTask.localDisplayName
-        if (previousUri != null && !previousName.isNullOrBlank()) {
-            val existingBytes = downloadStore.localFileSize(previousUri)
-            val pending = existingBytes != null && downloadStore.isPending(previousUri)
-            if (pending && !fileSystem.supportsResume) {
-                // 协议不支持续传（如 SCP）：旧 pending 无法续写，丢弃后从头下载，避免每次重试残留一个文件。
-                downloadStore.discard(previousUri)
-            } else if (pending) {
-                when (val decision = DownloadResumePolicy.decide(true, existingBytes, remoteSize)) {
-                    is DownloadResumePolicy.Decision.Resume -> {
-                        displayName = previousName
-                        targetUri = previousUri
-                        startOffset = decision.offset
-                    }
-                    DownloadResumePolicy.Decision.AlreadyComplete -> {
-                        // 上次已写满但因进程被杀没来得及提交：直接提交即可。
-                        displayName = previousName
-                        targetUri = previousUri
-                        startOffset = existingBytes ?: 0L
-                        skipTransfer = true
-                    }
-                    DownloadResumePolicy.Decision.Restart -> {
-                        // 远端文件变小/被替换，或本地无可续传字节：丢弃旧 pending 重新创建目标。
-                        downloadStore.discard(previousUri)
-                    }
-                }
-            } else if (existingBytes != null && remoteSize > 0L && existingBytes == remoteSize) {
-                // 进程在 commit 与「任务标记完成」之间被杀：文件其实已完整可见，直接按完成收尾。
+        val previousBytes = if (previousUri != null && !previousName.isNullOrBlank()) {
+            downloadStore.localFileSize(previousUri)
+        } else {
+            null
+        }
+        val previousPending =
+            previousBytes != null && previousUri != null && downloadStore.isPending(previousUri)
+        if (!previousPending && previousBytes != null && remoteSize > 0L && previousBytes == remoteSize) {
+            // 进程在 commit 与「任务标记完成」之间被杀：文件其实已完整可见，直接按完成收尾。
+            displayName = previousName
+            targetUri = previousUri
+            startOffset = previousBytes
+            skipTransfer = true
+        } else {
+            // 预分配会把文件大小变成远端大小，因此「已写多少」不能只看文件大小；
+            // 统一交给 DownloadPreallocationPolicy 决策（min(文件大小, 任务快照已写字节)）。
+            val plan = DownloadPreallocationPolicy.plan(
+                remoteBytes = remoteSize,
+                recordedBytes = initialTask.transferredBytes,
+                pendingDiskBytes = if (previousPending) previousBytes else null,
+                protocolSupportsResume = fileSystem.supportsResume
+            )
+            preallocateBytes = plan.preallocateBytes
+            if (plan.reusePending) {
                 displayName = previousName
                 targetUri = previousUri
-                startOffset = existingBytes
-                skipTransfer = true
-            } else if (existingBytes != null) {
-                Log.w(TAG, "下载任务已有不可续传的本地文件，重新下载：" + previousUri)
+                startOffset = plan.startOffset
+                skipTransfer = !plan.needsTransfer
+            } else {
+                if (previousPending) {
+                    // 协议不支持续传（如 SCP）/ 远端文件变小或被替换 / 远端大小未知：
+                    // 旧 pending 无法续写，丢弃后从头下载，避免每次重试残留一个文件。
+                    downloadStore.discard(previousUri)
+                } else if (previousBytes != null) {
+                    Log.w(TAG, "下载任务已有不可续传的本地文件，重新下载：" + previousUri)
+                }
             }
         }
 
@@ -684,34 +696,49 @@ class DefaultTransferManager(
                 }
             }
 
+            val target = targetUri ?: throw IOException("下载目标文件未创建")
+
             // 3) 远端数据直接写进 pending 文件；startOffset > 0 时从该偏移续写（断点续传不退化）。
             if (!skipTransfer && (remoteSize <= 0L || startOffset < remoteSize)) {
                 val sink = try {
-                    downloadStore.openPendingSink(targetUri, startOffset)
+                    downloadStore.openPendingSink(target, startOffset)
                 } catch (e: IOException) {
                     // 兜底：极少数设备/自定义 MediaProvider 可能不支持 "rw" 定位写入。此时降级为普通
                     // 输出流从头重写——仍然只写一份数据（直接写 pending 文件），只是本次退化为不可续传，
                     // 而不是让整个下载失败。
-                    Log.w(TAG, "无法按偏移写入 pending 文件，降级为从头写入：" + targetUri, e)
+                    Log.w(TAG, "无法按偏移写入 pending 文件，降级为从头写入：" + target, e)
                     startOffset = 0L
+                    preallocateBytes = if (remoteSize > 0L) remoteSize else 0L
                     updateTask(taskId) { it.copy(transferredBytes = 0L) }
-                    downloadStore.openSink(targetUri)
+                    downloadStore.openSink(target)
                 }
-                sink.use { out ->
-                    if (startOffset > 0L) {
-                        fileSystem.downloadPartial(request.remotePath, out, startOffset) { transferred ->
-                            reportProgress(taskId, transferred)
-                        }
-                    } else {
-                        fileSystem.download(request.remotePath, out) { transferred ->
-                            reportProgress(taskId, transferred)
-                        }
+                var preallocated = false
+                var writtenTotal = startOffset
+                sink.use { raw ->
+                    // 开始写之前预分配（ftruncate 到远端大小）：只对「从 0 开始写」的新文件做。
+                    // 预分配后文件大小恒等于远端大小，真实进度只能靠 counting 统计的连续已写字节。
+                    if (preallocateBytes > 0L) {
+                        preallocated = downloadStore.preallocate(target, preallocateBytes)
                     }
+                    val counting = CountingOutputStream(raw) { written ->
+                        reportProgress(taskId, startOffset + written)
+                    }
+                    if (startOffset > 0L) {
+                        fileSystem.downloadPartial(request.remotePath, counting, startOffset) { }
+                    } else {
+                        fileSystem.download(request.remotePath, counting) { }
+                    }
+                    writtenTotal = startOffset + counting.writtenTotal
+                }
+                // 远端列表里的 size 可能已过期（文件在传输期间被替换/缩小）：实际写入字节少于
+                // 预分配大小时裁掉尾部 0 填充，避免提交一个尾部是空洞却显示「完整」的文件。
+                if (preallocated && writtenTotal < preallocateBytes) {
+                    downloadStore.truncateTo(target, writtenTotal)
                 }
             }
 
             // 4) 提交 pending 记录使文件对用户可见：这是唯一的「落盘完成」动作，没有任何复制。
-            val committedUri = downloadStore.commitAndGetUri(targetUri)
+            val committedUri = downloadStore.commitAndGetUri(target)
             val finalBytes = downloadStore.localFileSize(committedUri)
                 ?: if (remoteSize > 0L) remoteSize else startOffset
             updateTask(taskId) {
@@ -1234,6 +1261,44 @@ class DefaultTransferManager(
 
     // ------------------------------------------------------------ 内部类型
 
+    /**
+     * 统计真正写进下游输出流的字节数（下载进度与续传偏移的唯一可信来源）。
+     *
+     * 为什么不用协议回调做进度：下载前预分配会把文件大小固定成远端大小，文件大小不再是进度；
+     * 而部分协议（如多通道 SFTP）的进度来自临时文件，可能超过已经写进目标文件的连续前缀。
+     * 只有这里统计的「连续已写字节」才能安全地用作续传偏移和持久化进度：
+     * 写入下游的字节先落进 fd，再上报进度，所以它永远是真实已写数据的安全下界。
+     */
+    private class CountingOutputStream(
+        private val delegate: OutputStream,
+        private val onWritten: (Long) -> Unit
+    ) : OutputStream() {
+
+        /** 已写入下游输出流的累计字节数（不含续传偏移）。 */
+        var writtenTotal: Long = 0L
+            private set
+
+        override fun write(b: Int) {
+            delegate.write(b)
+            advance(1L)
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            delegate.write(b, off, len)
+            advance(len.toLong())
+        }
+
+        override fun flush() = delegate.flush()
+
+        override fun close() = delegate.close()
+
+        private fun advance(bytes: Long) {
+            if (bytes <= 0L) return
+            writtenTotal += bytes
+            onWritten(writtenTotal)
+        }
+    }
+
     private class Execution(
         val task: TransferTask,
         val request: TransferRequest,
@@ -1291,13 +1356,13 @@ class DefaultTransferManager(
 /**
  * 下载断点续传决策（纯 JVM 逻辑，可单元测试）。
  *
- * 输入是「pending 文件在磁盘上的实际字节数」与「远端文件大小」，输出下一步动作：
+ * 输入是「已写入的字节数」与「远端文件大小」，输出下一步动作：
  * - [Decision.Resume]：从指定偏移续写（offset 可能为 0，表示重新从头写）；
  * - [Decision.AlreadyComplete]：本地已写满（上次写完但没来得及 commit），直接提交即可；
  * - [Decision.Restart]：旧 pending 不可用（远端文件变小/被替换、协议不支持续传、大小未知），丢弃重下。
  *
- * 之所以以磁盘实际大小为准：任务快照里的 transferredBytes 有 500ms 持久化节流，
- * 进程被杀时可能落后于磁盘，用快照偏移续写会把数据写歪；磁盘大小才是唯一可信的续传位置。
+ * 调用方 [DownloadPreallocationPolicy] 传入的已写字节数是「安全下界」而不是预分配后的文件大小：
+ * 预分配过的 pending 文件大小恒等于远端大小，不能代表真实进度；见该类的说明。
  */
 internal object DownloadResumePolicy {
 
@@ -1322,4 +1387,86 @@ internal object DownloadResumePolicy {
             else -> Decision.Resume(pendingBytes)
         }
     }
+}
+
+/**
+ * 下载「预分配 + 续传定位」决策（纯 JVM 逻辑，可单元测试）。
+ *
+ * 关键问题：下载前按远端大小预分配（[MediaStoreDownloadStore.preallocate]）会让 pending 文件的
+ * 磁盘大小立即等于远端大小，因此**磁盘大小不再等于已下载字节数**。如果直接沿用「磁盘大小即进度」，
+ * 一次中断后重试就会把预分配的空尾巴当成「已下载完成」，提交一个尾部全是 0 的损坏文件。
+ *
+ * 解决办法：真实已写偏移取「磁盘大小」和「任务快照记录的连续已写字节」中的较小者：
+ * - 预分配过的文件：磁盘大小 == 远端大小，记录值才是真实进度（可能因 500ms 持久化节流略小，
+ *   但只会让续写重复少量尾部字节，不会留下空洞）；
+ * - 未预分配 / 旧版本遗留的文件：磁盘大小是精确的已写字节；而多通道等乱序写实现上报的进度
+ *   可能超过连续已写前缀，磁盘大小正好是它的上界；
+ * 两者取小永远是安全下界。远端大小未知或远端变小（被替换）时无法校验已有内容，一律从头下载。
+ */
+internal object DownloadPreallocationPolicy {
+
+    /**
+     * 一次下载尝试的落盘计划。
+     *
+     * @property reusePending 是否复用上一次尝试遗留的 pending 文件；false 表示新建目标文件。
+     * @property startOffset 本次写入起点：真实「连续已写」字节数，绝不是预分配出来的文件大小。
+     * @property preallocateBytes 需要 ftruncate 预分配到的字节数；0 表示不预分配
+     *   （远端大小未知，或续传时文件已存在/无需重新占位）。
+     * @property needsTransfer 是否仍需传输；false 表示本地已写满（上次写完没来得及提交），直接提交即可。
+     */
+    data class Plan(
+        val reusePending: Boolean,
+        val startOffset: Long,
+        val preallocateBytes: Long,
+        val needsTransfer: Boolean
+    )
+
+    /**
+     * 决定「是否新建目标并预分配 / 从哪里续写 / 是否已完成」。
+     *
+     * @param remoteBytes 远端文件大小；<=0 表示未知。
+     * @param recordedBytes 任务快照记录的连续已写字节数（由 [DefaultTransferManager] 内的
+     *   CountingOutputStream 统计，是真实已写数据的安全下界）。
+     * @param pendingDiskBytes 可复用 pending 文件的磁盘大小；null 表示没有可复用的 pending 文件。
+     *   预分配过的文件该值等于远端大小，不能直接当成已下载字节。
+     * @param protocolSupportsResume 协议是否支持按偏移续传。
+     */
+    fun plan(
+        remoteBytes: Long,
+        recordedBytes: Long,
+        pendingDiskBytes: Long?,
+        protocolSupportsResume: Boolean
+    ): Plan {
+        // 1) 远端大小未知：无法预分配，也无法校验旧文件是否仍属于同一份内容 -> 从头下载。
+        if (remoteBytes <= 0L) return startNew(preallocateBytes = 0L)
+        // 2) 没有可复用的 pending 文件，或协议不支持续传：新建目标并预分配远端大小。
+        if (pendingDiskBytes == null || !protocolSupportsResume) return startNew(remoteBytes)
+        // 3) 磁盘文件比远端还大：远端文件被替换成更小版本，旧内容不能续写（预分配过也可能是旧大小）。
+        if (pendingDiskBytes > remoteBytes) return startNew(remoteBytes)
+
+        val writtenBytes = minOf(pendingDiskBytes, recordedBytes.coerceAtLeast(0L)).coerceAtLeast(0L)
+        return when (val decision = DownloadResumePolicy.decide(true, writtenBytes, remoteBytes)) {
+            is DownloadResumePolicy.Decision.Resume -> Plan(
+                reusePending = true,
+                startOffset = decision.offset,
+                // 从 0 开始写时需要（重新）预分配；真正的续写阶段文件已占好位。
+                preallocateBytes = if (decision.offset == 0L) remoteBytes else 0L,
+                needsTransfer = true
+            )
+            DownloadResumePolicy.Decision.AlreadyComplete -> Plan(
+                reusePending = true,
+                startOffset = remoteBytes,
+                preallocateBytes = 0L,
+                needsTransfer = false
+            )
+            DownloadResumePolicy.Decision.Restart -> startNew(remoteBytes)
+        }
+    }
+
+    private fun startNew(preallocateBytes: Long) = Plan(
+        reusePending = false,
+        startOffset = 0L,
+        preallocateBytes = preallocateBytes.coerceAtLeast(0L),
+        needsTransfer = true
+    )
 }
