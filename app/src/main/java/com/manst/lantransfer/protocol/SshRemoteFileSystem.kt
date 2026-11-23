@@ -19,6 +19,8 @@ import com.jcraft.jsch.SftpException
 import com.jcraft.jsch.SftpProgressMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -41,12 +43,17 @@ import java.nio.charset.StandardCharsets
  * - 密码认证；快速传文件路径对主机密钥做指纹固定（`ServerProfile.pinnedSshHostKeySha256` +
  *   `SshHostKeyPinning.PinnedRepository`，此时 `StrictHostKeyChecking=yes`），无指纹的普通服务器退回首次信任；
  * - 全部阻塞调用放在 [Dispatchers.IO]，类本身是纯 JVM 实现（不依赖 Android API）；
- * - 吞吐调优（依据 JSch 0.2.26 源码核实）：自有拷贝缓冲区统一为 [SSH_TRANSFER_BUFFER_SIZE]（128 KiB，
- *   原 32 KiB），作用于 SCP 线协议收发、`ls` 输出读取与未知大小上传的落盘；均为单次分配、单连接串行使用，
- *   内存开销可接受。JSch 的 SFTP 数据包尺寸无法从应用侧放大：ChannelSftp 的本地最大包尺寸硬编码为
- *   32 KiB，Session 也没有 `max_packetsize` 之类配置键（Channel.setLocalPacketSize 为包内可见、无公开入口）；
- *   并行分块传输需要按偏移写目标文件，而 JSch 只提供 OutputStream 偏移读与 OVERWRITE/RESUME/APPEND 语义，
- *   引入后会破坏续传与进度语义，故未启用。
+ * - 吞吐调优（依据 JSch 0.2.26 源码核实）：
+ *   1. 通用拷贝缓冲区 [SSH_TRANSFER_BUFFER_SIZE]（128 KiB，原 32 KiB），作用于 SCP 下载线协议接收、
+ *      `ls` 输出读取与未知大小上传的落盘；均为单次分配、单连接串行使用，内存开销可接受；
+ *   2. SCP 上传统一走「流水线」：[SCP_UPLOAD_CHUNK_SIZE]（256 KiB）读块 + [SCP_UPLOAD_STREAM_BUFFER_SIZE]
+ *      （512 KiB）的 BufferedOutputStream。协议只在 C 记录后、文件数据结束、远端确认这三个点等待 ACK，
+ *      数据阶段连续灌入、不逐块 flush/读应答，避免旧实现在 32 KiB 粒度上的往返与写调用开销；
+ *   3. SFTP 上传把调用方源流包一层 [SFTP_UPLOAD_BUFFER_SIZE]（128 KiB）BufferedInputStream。JSch 的 SFTP
+ *      数据包尺寸无法从应用侧放大：ChannelSftp 的本地最大包尺寸硬编码为 32 KiB（Session 也没有
+ *      `max_packetsize` 之类配置键），但加大源流缓冲可让底层小读次数降到 1/4，减少系统调用与锁竞争；
+ *   4. 并行分块传输需要按偏移写目标文件，而 JSch 只提供 OutputStream 偏移读与 OVERWRITE/RESUME/APPEND
+ *      语义，引入后会破坏续传与进度语义，故未启用。
  *
  * 线程模型：同一实例不支持多线程并发操作（上层「一任务一连接」保证），唯一允许跨线程调用的是
  * [close]——它会把传输中出现的 IO 异常转换成 [TransferCancelledException]。
@@ -188,7 +195,7 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     }
 
     /** SFTP 带偏移下载：JSch 的 get(..., RESUME, skip) 会先以 count(skip) 补上偏移，再累计实际读取字节。 */
-    private fun downloadSftpPartial(
+    private suspend fun downloadSftpPartial(
         remote: String,
         sink: OutputStream,
         startOffset: Long,
@@ -216,9 +223,10 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         onProgress: (Long) -> Unit
     ) {
         val channel = requireSftp()
+        // RESUME 时 JSch 会对源流做 skip(offset)，BufferedInputStream 能正确处理且不丢缓冲数据
         try {
             channel.put(
-                source,
+                bufferedUploadSource(source),
                 remote,
                 SftpResumeProgressMonitor(onProgress, initialOffset = startOffset),
                 ChannelSftp.RESUME
@@ -305,7 +313,12 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         return entries
     }
 
-    private fun downloadSftp(remote: String, sink: OutputStream, onProgress: (Long) -> Unit) {
+    private suspend fun downloadSftp(remote: String, sink: OutputStream, onProgress: (Long) -> Unit) {
+        val size = runCatching { requireSftp().stat(remote).size }.getOrDefault(-1L)
+        if (size >= MULTICHANNEL_MIN_SIZE) {
+            downloadSftpMultichannel(remote, size, sink, onProgress)
+            return
+        }
         val channel = requireSftp()
         try {
             channel.get(remote, sink, SftpResumeProgressMonitor(onProgress))
@@ -316,10 +329,51 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         }
     }
 
+    /**
+     * 大文件 SFTP 下载：用 [SftpMultichannel] 开多条 SFTP 通道并行分段读取。
+     *
+     * 取舍：多通道实现需要「按偏移随机写」的目标文件，而本接口只拿到 [OutputStream]（下载目录的
+     * MediaStore pending 流不支持随机写），因此先写到临时文件再顺序拷贝到 [sink]。
+     * 额外的一次本地拷贝发生在顺序存储上（数百 MB/s），远小于多通道带来的网络收益；
+     * 小于 [MULTICHANNEL_MIN_SIZE] 的文件仍走单通道，避免多一次 SSH 握手的开销。
+     */
+    private suspend fun downloadSftpMultichannel(
+        remote: String,
+        size: Long,
+        sink: OutputStream,
+        onProgress: (Long) -> Unit
+    ) {
+        val temp = File.createTempFile("lanlink-sftp-", ".part")
+        val downloader = SftpMultichannel(profile)
+        try {
+            downloader.download(remote, temp) { written -> onProgress(written.coerceAtMost(size)) }
+            temp.inputStream().use { input ->
+                input.copyTo(sink, SSH_TRANSFER_BUFFER_SIZE)
+            }
+            onProgress(size)
+        } finally {
+            runCatching { downloader.close() }
+            runCatching { temp.delete() }
+        }
+    }
+
+    /**
+     * 给 SFTP 上传源加 128 KiB 缓冲：JSch 内部按 32 KiB 数据包从源流读取，
+     * 缓冲后底层（文件/ContentResolver）小读次数降到 1/4，且不改变 JSch 的线上包尺寸。
+     * 源流所有权仍归调用方，这里不关闭包装流（JSch put 也不会关闭源流）。
+     */
+    private fun bufferedUploadSource(source: InputStream): InputStream =
+        BufferedInputStream(source, SFTP_UPLOAD_BUFFER_SIZE)
+
     private fun uploadSftp(source: InputStream, remote: String, onProgress: (Long) -> Unit) {
         val channel = requireSftp()
         try {
-            channel.put(source, remote, SftpResumeProgressMonitor(onProgress), ChannelSftp.OVERWRITE)
+            channel.put(
+                bufferedUploadSource(source),
+                remote,
+                SftpResumeProgressMonitor(onProgress),
+                ChannelSftp.OVERWRITE
+            )
         } catch (e: SftpException) {
             throw sftpFailure("上传文件", remote, e)
         } catch (e: IOException) {
@@ -462,26 +516,32 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
             val size = if (spooled != null) spooled.length() else sizeHint
             val exec = openExecChannel("scp -t ${shellQuote(targetDir)}", stderr)
             try {
+                // 上传走「流水线」：通道输出先包 512 KiB BufferedOutputStream，读取块 256 KiB。
+                // 只有三个协议点需要同步：初始 ACK、C 记录 ACK、文件数据结束后的 ACK（+EOF 结束）。
+                val output = BufferedOutputStream(exec.output, SCP_UPLOAD_STREAM_BUFFER_SIZE)
                 readAck(exec.input, remote)
-                writeProtocolLine(exec.output, "C0644 $size $fileName")
+                writeProtocolLine(output, "C0644 $size $fileName")
                 readAck(exec.input, remote)
 
                 var total = 0L
-                val buffer = ByteArray(SSH_TRANSFER_BUFFER_SIZE)
+                val buffer = ByteArray(SCP_UPLOAD_CHUNK_SIZE)
                 while (true) {
                     val read = content.read(buffer)
                     if (read < 0) break
                     if (read == 0) continue
-                    exec.output.write(buffer, 0, read)
+                    // 数据阶段：只写本地缓冲，不 flush、不读 ACK，避免每块一次往返
+                    output.write(buffer, 0, read)
                     total += read
                     onProgress(total)
                 }
-                exec.output.flush()
-                writeAck(exec.output)
+                // 协议点 1：数据结束，先把缓冲全部推入通道
+                output.flush()
+                writeAck(output)
+                // 协议点 2：等远端确认「文件数据已完整接收」，否则后续 EOF 可能丢尾部
                 readAck(exec.input, remote)
                 // SCP sink 以 stdin EOF 作为整个上传结束的信号（不是再发一个 ACK），
                 // 否则远端会一直等待下一条 C/D 记录
-                exec.output.close()
+                output.close()
                 finishCommand(exec, stderr, "上传文件", remote)
             } catch (e: LanTransferException) {
                 throw e
@@ -782,6 +842,39 @@ class SshRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
  * 无法通过 Session 配置放大，所以本常量不影响 SFTP get/put 的线上分片。
  */
 internal const val SSH_TRANSFER_BUFFER_SIZE = 128 * 1024
+
+/**
+ * 启用多通道并行下载的最小文件体积：8 MiB。
+ *
+ * 多通道需要额外一次 SSH 握手 + 一个临时文件，小文件反而更慢；
+ * 8 MiB 以上才值得（TCP 单流在长肥管道上受窗口限制，分多条通道可提升吞吐）。
+ */
+internal const val MULTICHANNEL_MIN_SIZE = 8L * 1024 * 1024
+
+/**
+ * SCP 上传读取块大小：256 KiB（需求区间 256–512 KiB，且为 32 KiB 的整数倍）。
+ *
+ * 上传一次分配该缓冲区，读满一块就写入 [SCP_UPLOAD_STREAM_BUFFER_SIZE] 的缓冲输出流；
+ * 相比旧实现的 128 KiB，进度回调与本地 read 次数减半，数据阶段仍不做任何 flush/ACK 往返。
+ */
+internal const val SCP_UPLOAD_CHUNK_SIZE = 256 * 1024
+
+/**
+ * SCP 上传通道输出缓冲：512 KiB。
+ *
+ * 必须大于 [SCP_UPLOAD_CHUNK_SIZE]——BufferedOutputStream 在单次写入长度 ≥ 自身缓冲时会直接透传底层，
+ * 只有缓冲更大才会真正攒够两块再交给 JSch 通道。数据阶段只写这层缓冲，
+ * 仅在 C 记录、数据结束（0 字节 ACK）与关闭 stdin 前 flush，把「每块一次 write/flush」降为「每 512 KiB 一次」。
+ */
+internal const val SCP_UPLOAD_STREAM_BUFFER_SIZE = 512 * 1024
+
+/**
+ * SFTP 上传源流缓冲：128 KiB。
+ *
+ * JSch 的 ChannelSftp 内部固定按 32 KiB 数据包读取源流，这里包一层 128 KiB BufferedInputStream，
+ * 把底层文件/ContentResolver 的小读次数降到 1/4；不改变 JSch 的线上包尺寸（应用侧无法放大）。
+ */
+internal const val SFTP_UPLOAD_BUFFER_SIZE = 128 * 1024
 
 /**
  * 计算单次 read/write 的块大小：同时受「剩余字节数」与「缓冲区大小」约束。

@@ -336,6 +336,14 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
     /**
      * 上传主体：startOffset 为 0 时用 STOR 全量覆盖；大于 0 时用 APPE 追加剩余字节，
      * 进度回调从 startOffset 起累计（调用方传入的是完整文件流，已在上层跳过前缀）。
+     *
+     * 上传方向的 App 侧拷贝缓冲：Commons Net 的 storeFile/appendFile 内部按 [FTPClient.getBufferSize]
+     * （即 [DATA_TRANSFER_BUFFER_SIZE] = 128 KiB）分配拷贝缓冲、并用同尺寸 BufferedOutputStream 包装
+     * 数据连接输出流，因此「Source → FTP 输出」的读写块大小与下载方向一致，不需要额外再包一层
+     * 小缓冲（再包只会多一次内存拷贝）。该行为由 FtpDataBufferTuningTest 的
+     * uploadCopyBufferUsesDataTransferBufferSize / ftpsUploadCopyBufferMatchesDataTransferBufferSize /
+     * resumeUploadAppendUsesDataTransferBufferSizeAndKeepsAppeSemantics 用例断言真实 read 请求大小，
+     * 避免后续 Commons Net 升级悄悄退回 8 KiB 默认值。
      */
     private fun uploadBlocking(
         client: FTPClient,
@@ -381,19 +389,31 @@ class FtpRemoteFileSystem(override val profile: ServerProfile) : RemoteFileSyste
         return raw.trim().toLongOrNull()?.takeIf { it >= 0L } ?: -1L
     }
 
-    /** 跳过输入流前 count 字节（续传上传时跳过已上传前缀）；来源不足时抛 IOException。 */
+    /**
+     * 跳过输入流前 count 字节（续传上传时跳过已上传前缀）；来源不足时抛 IOException。
+     *
+     * 先尝试 [InputStream.skip]（文件/MediaStore 的 ParcelFileDescriptor 流通常是真正的 seek，代价 O(1)）；
+     * 部分 ContentResolver/SAF 提供方（如云盘、管道流）的 skip 恒返回 0，此时必须用与数据传输一致的
+     * [DATA_TRANSFER_BUFFER_SIZE]（128 KiB）缓冲读取来消费前缀。不能退化成单字节 read()：
+     * 续传偏移可能达到 GiB 级，逐字节消费会把「续传上传」拖成不可用（该路径属于上传 App 侧拷贝）。
+     */
     private fun skipFully(source: InputStream, count: Long) {
         var remaining = count
+        var scratch: ByteArray? = null
         while (remaining > 0L) {
             val skipped = source.skip(remaining)
             if (skipped > 0L) {
                 remaining -= skipped
                 continue
             }
-            if (source.read() < 0) {
+            if (scratch == null) scratch = ByteArray(DATA_TRANSFER_BUFFER_SIZE)
+            val buffer = scratch
+            val want = minOf(remaining, buffer.size.toLong()).toInt()
+            val read = source.read(buffer, 0, want)
+            if (read < 0) {
                 throw IOException("本地文件长度不足：还需跳过 " + remaining + " 字节（续传偏移 " + count + " 字节），请重新上传")
             }
-            remaining -= 1L
+            if (read > 0) remaining -= read
         }
     }
 

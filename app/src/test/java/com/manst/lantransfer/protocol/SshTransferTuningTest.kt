@@ -55,6 +55,49 @@ class SshTransferTuningTest {
         )
     }
 
+    // ------------------------------------------------------------ 上传调优常量
+
+    @Test
+    fun scpUploadChunkIs256To512KiB() {
+        assertEquals("SCP 上传读块应为 256 KiB", 256 * 1024, SCP_UPLOAD_CHUNK_SIZE)
+        assertTrue(
+            "SCP 上传读块应落在 256 KiB~512 KiB 的建议区间",
+            SCP_UPLOAD_CHUNK_SIZE in (256 * 1024)..(512 * 1024)
+        )
+        assertEquals(
+            "上传读块应为 32 KiB 的整数倍，便于按页搬运",
+            0,
+            SCP_UPLOAD_CHUNK_SIZE % (32 * 1024)
+        )
+        assertTrue(
+            "上传读块应明显大于旧的 32 KiB 协议块",
+            SCP_UPLOAD_CHUNK_SIZE >= 8 * 32 * 1024
+        )
+    }
+
+    @Test
+    fun scpUploadStreamBufferIsAtLeast128KiBAndLargerThanChunk() {
+        assertTrue(
+            "带缓冲输出流应不小于 128 KiB",
+            SCP_UPLOAD_STREAM_BUFFER_SIZE >= 128 * 1024
+        )
+        assertTrue(
+            "输出缓冲必须大于读块，否则 BufferedOutputStream 会跳过缓冲直接透传到底层通道",
+            SCP_UPLOAD_STREAM_BUFFER_SIZE > SCP_UPLOAD_CHUNK_SIZE
+        )
+        assertEquals(
+            "输出缓冲应为 32 KiB 的整数倍",
+            0,
+            SCP_UPLOAD_STREAM_BUFFER_SIZE % (32 * 1024)
+        )
+    }
+
+    @Test
+    fun sftpUploadBufferIs128KiB() {
+        assertEquals("SFTP 上传源流缓冲应为 128 KiB", 128 * 1024, SFTP_UPLOAD_BUFFER_SIZE)
+        assertTrue("SFTP 上传源流缓冲不应小于 128 KiB", SFTP_UPLOAD_BUFFER_SIZE >= 128 * 1024)
+    }
+
     @Test
     fun transferBufferIsPageFriendlyAndCoversGlobalCopyBuffer() {
         // DefaultTransferManager.COPY_BUFFER_SIZE 为 64 KiB；SSH 侧不应小于全局拷贝缓冲
@@ -169,11 +212,17 @@ class SshTransferTuningTest {
             )
             assertEquals("进度末值应等于文件大小", payload.size.toLong(), progress.last())
             assertEquals(
-                "SCP 上传应按 128 KiB 缓冲区读取",
-                SSH_TRANSFER_BUFFER_SIZE,
+                "SCP 上传应按 256 KiB 读块读取源流",
+                SCP_UPLOAD_CHUNK_SIZE,
                 recording.maxRequestedLength
             )
             assertTrue("单次读取应明显大于旧的 32 KiB 缓冲区", recording.maxRequestedLength > 32 * 1024)
+            // 数据阶段不逐块 flush/等 ACK：进度回调次数应恰好等于读块数（700_000 / 256 KiB = 3 块）
+            assertEquals(
+                "进度回调次数应等于读块数，数据阶段不应产生额外同步点",
+                (payload.size + SCP_UPLOAD_CHUNK_SIZE - 1) / SCP_UPLOAD_CHUNK_SIZE,
+                progress.size
+            )
         } finally {
             server.close()
         }

@@ -116,6 +116,32 @@ class SshRemoteFileSystemSftpTest {
     }
 
     @Test
+    fun uploadBigFileWith128KiBBufferedSourceRoundTrips() = runBlocking {
+        // ≥4 MiB，且大小不是 128 KiB 缓冲的整数倍：覆盖缓冲边界填充、最后一块与回读一致性
+        val payload = randomBytes(4 * 1024 * 1024 + 65_537, 1_717L)
+        val source = RecordingInputStream(payload)
+        val progress = ArrayList<Long>()
+        withClient(profile()) { client ->
+            client.upload(source, "/big-upload.bin", payload.size.toLong()) { progress.add(it) }
+            assertEquals(
+                "SFTP 上传源应以 128 KiB BufferedInputStream 读取（JSch 内部 32 KiB 包读源的小读被合并）",
+                SFTP_UPLOAD_BUFFER_SIZE,
+                source.maxRequestedLength
+            )
+            assertEquals("进度末值应等于文件大小", payload.size.toLong(), progress.last())
+            assertEquals(payload.size.toLong(), client.size("/big-upload.bin"))
+            val readBack = ByteArrayOutputStream()
+            client.download("/big-upload.bin", readBack)
+            assertArrayEquals("大文件上传后回读应与源字节一致", payload, readBack.toByteArray())
+        }
+        assertArrayEquals(
+            "服务端落盘内容应与源字节一致",
+            payload,
+            Files.readAllBytes(root.resolve("big-upload.bin"))
+        )
+    }
+
+    @Test
     fun mkdirRenameDeleteWork() = runBlocking {
         withClient(profile()) { client ->
             client.mkdir("/newdir")
@@ -272,4 +298,40 @@ class SshRemoteFileSystemSftpTest {
         username = "tester",
         password = password
     )
+
+    /** 记录底层请求的最大读取长度，用于验证 SFTP 上传源确实被 128 KiB BufferedInputStream 包裹。 */
+    private class RecordingInputStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+        var maxRequestedLength = 0
+            private set
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (len > maxRequestedLength) maxRequestedLength = len
+            return super.read(b, off, len)
+        }
+    }
+
+    @Test
+    fun downloadsLargeFileThroughMultichannelPath() = runBlocking {
+        // 9 MiB > MULTICHANNEL_MIN_SIZE：走多通道并行下载（内部写临时文件后拷贝到 sink）
+        val large = randomBytes(9 * 1024 * 1024, 909L)
+        Files.write(root.resolve("large.bin"), large)
+        val sink = ByteArrayOutputStream()
+        var lastProgress = 0L
+        withClient(profile()) { client ->
+            client.download("large.bin", sink) { lastProgress = it }
+        }
+        assertArrayEquals(large, sink.toByteArray())
+        assertEquals(large.size.toLong(), lastProgress)
+    }
+
+    @Test
+    fun downloadsSmallFileWithSingleChannel() = runBlocking {
+        // 1 MiB < MULTICHANNEL_MIN_SIZE：仍走单通道，行为与旧实现一致
+        val sink = ByteArrayOutputStream()
+        withClient(profile()) { client ->
+            client.download("big.bin", sink) {}
+        }
+        assertArrayEquals(bigBytes, sink.toByteArray())
+    }
+
 }

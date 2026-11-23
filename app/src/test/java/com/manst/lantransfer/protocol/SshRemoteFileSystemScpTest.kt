@@ -109,6 +109,41 @@ class SshRemoteFileSystemScpTest {
     }
 
     @Test
+    fun uploadBigFileOverScpIsPipelinedAndByteIdentical() = runBlocking {
+        // ≥4 MiB 且大小不是 256 KiB 读块的整数倍：覆盖流水线最后一块与「数据结束 ACK」协议点。
+        // 若数据阶段错误地逐块等待 ACK（或多发/少发 ACK），本用例会在 Timeout 内挂起或内容校验失败。
+        val payload = randomBytes(4 * 1024 * 1024 + 123_457, 1_415L)
+        val progress = ArrayList<Long>()
+        withClient(profile()) { client ->
+            client.upload(
+                ByteArrayInputStream(payload),
+                "/big-upload.bin",
+                payload.size.toLong()
+            ) { progress.add(it) }
+            // 同一连接紧接着再上传一个小文件：验证大文件流水线结束后协议状态（ACK/EOF）没有错位
+            client.upload(ByteArrayInputStream(uploadBytes), "/after-big.bin", uploadBytes.size.toLong())
+        }
+        assertArrayEquals(
+            "大文件上传内容应字节一致",
+            payload,
+            Files.readAllBytes(root.resolve("big-upload.bin"))
+        )
+        assertEquals(
+            "服务端落盘大小应与源一致",
+            payload.size.toLong(),
+            Files.size(root.resolve("big-upload.bin"))
+        )
+        assertArrayEquals(
+            "大文件之后的第二个上传也应完整",
+            uploadBytes,
+            Files.readAllBytes(root.resolve("after-big.bin"))
+        )
+        assertTrue("大文件上传应有进度回调", progress.isNotEmpty())
+        assertEquals("进度末值应等于文件大小", payload.size.toLong(), progress.last())
+        assertTrue("进度应单调不减", progress.zipWithNext().all { (a, b) -> b >= a })
+    }
+
+    @Test
     fun uploadWithUnknownSizeSpoolsAndWorks() = runBlocking {
         withClient(profile()) { client ->
             client.upload(ByteArrayInputStream(uploadBytes), "/unknown-size.bin")

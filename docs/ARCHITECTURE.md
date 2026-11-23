@@ -63,8 +63,8 @@
 2. **手动依赖注入**：`AppContainer` 在 Application 中创建，按需 lazy 初始化；不引入 Hilt/KSP，避免注解处理器拖慢构建。
 3. **协议层纯 JVM**：不 import 任何 Android API，因此可以用 JVM 单元测试 + 内嵌服务器跑真实报文测试。
 4. **一任务一连接**：不做连接池。每次浏览会话、每个传输任务各自建立 `RemoteFileSystem`，结束即关闭；取消任务 = 关闭连接。FTP 控制连接并发限制、SSH 会话状态隔离问题都被绕开。
-5. **有限并发传输**：默认 3 路并发（`TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS`），每个任务独立连接；
-   小文件多时显著减少「连接/认证/断开」固定开销。极端场景（服务端限制并发数）可调为 1 退回串行。
+5. **有限并发传输**：默认 5 路并发（`TransferScheduler.DEFAULT_MAX_CONCURRENT_TASKS` = `TransferTuning.DEFAULT`），每个任务独立连接；用户可在「传输设置」页调整 1–6 路；
+   小文件多时显著减少「连接/认证/断开」固定开销。极端场景（服务端限制并发数）可在设置页调为 1 退回串行。
 6. **前台服务保活**：有活动任务时启动 `TransferService`（`dataSync` 类型）显示通知；队列清空即停止。
 7. **下载落盘**：Android 10+ 用 `MediaStore.Downloads` 直接写入公共目录 `Download/` 根目录（不新建子文件夹），无需存储权限；上传用系统文件选择器（SAF）返回的 content Uri 流式读取。
 
@@ -103,7 +103,7 @@ interface RemoteFileSystem : Closeable {
 ## 5. 数据与状态
 
 - `ServerRepository`：`servers.json`（org.json 手写序列化 + 原子写临时文件后 rename），`StateFlow<List<ServerProfile>>` 驱动 UI；单元测试传入临时文件，可在 JVM 直接测。
-- `TransferManager`：`StateFlow<List<TransferTask>>`；任务按 `TransferScheduler` 有限并发执行（默认 3 路，同一 taskId 不会重复启动），进度按 100ms 节流推送到 UI，并计算瞬时速度；`cancel` 关闭连接，`retry` 重新入队。
+- `TransferManager`：`StateFlow<List<TransferTask>>`；任务按 `TransferScheduler` 有限并发执行（默认 5 路可配置，同一 taskId 不会重复启动），进度按 100ms 节流推送到 UI，并计算瞬时速度；`cancel` 关闭连接，`retry` 重新入队。
 - 不引入 Room：数据量是「几十条服务器配置 + 内存态队列」，Room 只增加构建复杂度与 APK 体积。
 
 ## 6. 工程与构建
@@ -127,6 +127,20 @@ interface RemoteFileSystem : Closeable {
 2. 仅快速传文件路径做证书/主机密钥指纹固定；手动配置的普通服务器仍为首次信任；
 3. 监听地址固定 `0.0.0.0`，依赖服务端认证限流（`ServerAuthGuard`）兜底；多网卡/VPN/公网暴露场景需谨慎；
 4. SFTP 数据包尺寸受 JSch 硬编码 32 KiB（`LOCAL_MAXIMUM_PACKET_SIZE`）限制，应用侧无法放大；
+
+### 吞吐调优小结（v2.3.2 起）
+
+| 项 | 取值 | 说明 |
+| --- | --- | --- |
+| 自动协议顺序 | FTPS → SFTP → SCP | FTPS 实测明显快于 SFTP，且已有证书指纹固定，安全不降级；明文 FTP 仅手动选择 |
+| FTP/FTPS 数据缓冲 | 128 KiB（流 + 数据 socket SO_RCVBUF/SO_SNDBUF） | 上传与下载一致；续传跳过前缀也用 128 KiB 缓冲消费 |
+| SCP 上传 | 256 KiB 读块 + 512 KiB 通道输出缓冲，数据阶段不逐块 ACK | 只在 C 记录、数据结束、E 记录处同步 |
+| SFTP 上传 | 源流 128 KiB BufferedInputStream | JSch 内部仍 32 KiB 包 |
+| SFTP 大文件下载 | ≥8 MiB 走 `SftpMultichannel`（多 channel 并行分段） | 需按偏移随机写，故先写临时文件再顺序拷贝到 sink |
+| 下载落盘 | 直接写 MediaStore pending 文件（IS_PENDING=1） | 完成仅提交，去掉「缓存暂存 + 复制」双重写盘 |
+| 并发路数 | 默认 5（1–6 可配置） | 设置页热更新，对新入队任务生效 |
+
+测速脚本：`python scripts/speed_bench.py --host <ip> --user <user> --password <pass>`
 5. Keystore 加密异常时降级为明文保存（优先保证可用性，日志可查）。
 
 ## 9. 验证记录（2026-11-13）
