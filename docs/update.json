@@ -1,35 +1,35 @@
 {
-  "versionCode": 12,
-  "versionName": "2.3.1",
-  "changelog": "LanLink v2.3.1：修复调试版误提示应用内更新（debug 与 release 签名不同，装不上）的问题；新增 GitHub / F-Droid 双分发渠道（签名一致可互相覆盖，F-Droid 版由商店负责升级）；开源协议变更为 GPL-3.0-or-later；构建工具链对齐 Gradle 8.9 + AGP 8.7 并把 lint 重新纳入 CI 门禁；新增 GitHub Actions CI、一键发版脚本与公开安全设计文档。",
-  "releasePageUrl": "https://github.com/likebe1-1/lan-transfer-android/releases/tag/v2.3.1",
+  "versionCode": 13,
+  "versionName": "2.3.2",
+  "changelog": "LanLink v2.3.2：性能专项 + 安全加固：自动协议顺序改为 FTPS→SFTP→SCP；下载直写 MediaStore 去掉双重写盘；传输并发可配置（默认 5 路）；SFTP 大文件多通道下载与 MINA SSHD 上传引擎（≥8MiB）；SCP 上传流水线；下载前预分配；敏感页面禁止截屏（FLAG_SECURE）；release 日志剥离；显式网络安全配置（禁明文 HTTP）。单元测试增至 437。",
+  "releasePageUrl": "https://github.com/likebe1-1/lan-transfer-android/releases/tag/v2.3.2",
   "lanzouUrl": "https://wwbds.lanzoum.com/b0139vopuf",
   "lanzouPassword": "1234",
   "apks": [
     {
       "abi": "arm64-v8a",
-      "size": 11119925,
-      "sha256": "12c36bc0a0363fe29fdcc01d573d73b2c40f31a8a24f97dfcce4b7160a163252",
+      "size": 11170977,
+      "sha256": "e0e5c57067242cb92674b75c1eb3512e8c502ef6e567e7482fd2769f9614195d",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-arm64-v8a.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-arm64-v8a.apk"
       ]
     },
     {
       "abi": "armeabi-v7a",
-      "size": 11117083,
-      "sha256": "d004ccbd612755ddc5a32928c9ccf2ebf4624e0b2b4270d0c66f57517db8aa8e",
+      "size": 11168135,
+      "sha256": "90ff4c5478c716f17bbed9e463cafa7280c0e286d1aaac4d31e8788ff79898a3",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-armeabi-v7a.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-armeabi-v7a.apk"
       ]
     },
     {
       "abi": "universal",
-      "size": 11169998,
-      "sha256": "f44f46ff894eaf87228e86fe58004c80f8c893e4f84be96c940f2df6659b784c",
+      "size": 11221050,
+      "sha256": "9bd320172a32a3d9a64c9beb4e79d6aa1bfbc3052938a8463c6d8dcfc2002178",
       "urls": [
-        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-universal.apk"
+        "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-universal.apk"
       ]
     }
   ],
-  "sig": "K6qXSX5cpuHwkVybu3U5RZnOvfI1/l9lG28bkHu8f3KnoCq5zg1ZV3hPSAkM5CpQpwNAuIJjOO18KldTJW7yAA=="
+  "sig": "BL+7luKM+v7gTLNYhCMEOCDMRlHjB+oqGipeSwlNu5V7SKyhExGys2dNnS0tJ3O8kqe5z/7LMOD4g7jQrKdbCA=="
 }

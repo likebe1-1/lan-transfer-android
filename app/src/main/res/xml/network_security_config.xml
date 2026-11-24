@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LanLink 网络安全配置。
+
+  - 应用内所有 HTTPS（更新清单、签名校验、Release 说明）都必须走系统信任链，禁止明文 HTTP；
+  - FTP/FTPS/SFTP/SCP 走原始 TCP/TLS socket，不受本配置约束（FTPS 证书固定由 CertificatePinning 负责）；
+  - 明文流量全局关闭：即使第三方库尝试 HTTP 也会被系统拒绝（targetSdk 35 默认已关闭，这里显式声明便于审计）。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

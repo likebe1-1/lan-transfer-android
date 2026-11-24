@@ -1,6 +1,7 @@
 package com.manst.lantransfer.ui.editor
 
 import com.manst.lantransfer.R
+import com.manst.lantransfer.ui.security.SecureScreen
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +70,8 @@ import com.manst.lantransfer.ui.common.SnackbarMessageEffect
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerEditorScreen(viewModel: ServerEditorViewModel, onBack: () -> Unit) {
+    // 本页包含服务器密码输入，禁止截图/录屏
+    SecureScreen()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var passwordVisible by remember { mutableStateOf(false) }

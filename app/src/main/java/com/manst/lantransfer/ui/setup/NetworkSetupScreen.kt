@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.manst.lantransfer.R
+import com.manst.lantransfer.ui.security.SecureScreen
 import com.manst.lantransfer.ui.common.QrCodeRenderer
 import kotlinx.coroutines.launch
 
@@ -75,6 +76,8 @@ fun NetworkSetupScreen(
     onBack: () -> Unit,
     onOpenQuickReceive: () -> Unit
 ) {
+    // 本页展示热点名/密码与热点二维码（内含 Wi-Fi 密码），禁止截图/录屏
+    SecureScreen()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }

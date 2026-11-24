@@ -1,6 +1,7 @@
 package com.manst.lantransfer.ui.quick
 
 import com.manst.lantransfer.R
+import com.manst.lantransfer.ui.security.SecureScreen
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -95,6 +96,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickSendScreen(viewModel: QuickSendViewModel, onBack: () -> Unit) {
+    // 本页展示 8 位接收码与二维码（等价于临时凭据），禁止截图/录屏与最近任务缩略图
+    SecureScreen()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current

@@ -36,3 +36,16 @@
 -dontwarn javax.naming.**
 -dontwarn kotlinx.coroutines.**
 -dontwarn org.json.**
+
+# ---------------------------------------------------------------------------
+# Release 日志剥离：R8 直接删除 Log.d/v/i/w 调用（含字符串拼接与参数求值），
+# 避免日志泄露文件路径、服务器地址、接收码等运行期信息，也减小包体。
+# Log.e / Log.wtf 保留：崩溃与错误诊断需要，且不打印业务敏感字段。
+# ---------------------------------------------------------------------------
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+    public static boolean isLoggable(...);
+}
