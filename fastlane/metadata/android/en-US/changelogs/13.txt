@@ -1,0 +1,1 @@
+v2.3.2: performance release — FTPS-first protocol order, no double-write on downloads, configurable transfer concurrency (default 5), multichannel SFTP downloads and MINA upload engine for large files, pipelined SCP uploads, download preallocation; security hardening — FLAG_SECURE on sensitive screens, stripped release logs, explicit cleartext block.
