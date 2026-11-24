@@ -1,8 +1,41 @@
 {
-  "generatedAt": "2026-11-22T12:41:40+08:00",
+  "generatedAt": "2026-11-24T19:50:46+08:00",
   "repo": "likebe1-1/lan-transfer-android",
   "version": 1,
   "files": [
+    {
+      "id": "v2.3.2/LanLink-v2.3.2-universal.apk",
+      "name": "LanLink-v2.3.2-universal.apk",
+      "tag": "v2.3.2",
+      "size": 11221050,
+      "sha256": "9bd320172a32a3d9a64c9beb4e79d6aa1bfbc3052938a8463c6d8dcfc2002178",
+      "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-universal.apk",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-24T11:38:35Z",
+      "mirrorable": true
+    },
+    {
+      "id": "v2.3.2/LanLink-v2.3.2-armeabi-v7a.apk",
+      "name": "LanLink-v2.3.2-armeabi-v7a.apk",
+      "tag": "v2.3.2",
+      "size": 11168135,
+      "sha256": "90ff4c5478c716f17bbed9e463cafa7280c0e286d1aaac4d31e8788ff79898a3",
+      "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-armeabi-v7a.apk",
+      "downloadCount": 0,
+      "publishedAt": "2026-11-24T11:38:35Z",
+      "mirrorable": true
+    },
+    {
+      "id": "v2.3.2/LanLink-v2.3.2-arm64-v8a.apk",
+      "name": "LanLink-v2.3.2-arm64-v8a.apk",
+      "tag": "v2.3.2",
+      "size": 11170977,
+      "sha256": "e0e5c57067242cb92674b75c1eb3512e8c502ef6e567e7482fd2769f9614195d",
+      "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.2/LanLink-v2.3.2-arm64-v8a.apk",
+      "downloadCount": 1,
+      "publishedAt": "2026-11-24T11:38:35Z",
+      "mirrorable": true
+    },
     {
       "id": "v2.3.1/LanLink-v2.3.1-universal.apk",
       "name": "LanLink-v2.3.1-universal.apk",
@@ -10,7 +43,7 @@
       "size": 11169998,
       "sha256": "f44f46ff894eaf87228e86fe58004c80f8c893e4f84be96c940f2df6659b784c",
       "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-universal.apk",
-      "downloadCount": 0,
+      "downloadCount": 4,
       "publishedAt": "2026-11-22T04:38:42Z",
       "mirrorable": true
     },
@@ -21,7 +54,7 @@
       "size": 11117083,
       "sha256": "d004ccbd612755ddc5a32928c9ccf2ebf4624e0b2b4270d0c66f57517db8aa8e",
       "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-armeabi-v7a.apk",
-      "downloadCount": 0,
+      "downloadCount": 3,
       "publishedAt": "2026-11-22T04:38:42Z",
       "mirrorable": true
     },
@@ -32,7 +65,7 @@
       "size": 11119925,
       "sha256": "12c36bc0a0363fe29fdcc01d573d73b2c40f31a8a24f97dfcce4b7160a163252",
       "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.3.1/LanLink-v2.3.1-arm64-v8a.apk",
-      "downloadCount": 0,
+      "downloadCount": 7,
       "publishedAt": "2026-11-22T04:38:42Z",
       "mirrorable": true
     },
@@ -98,7 +131,7 @@
       "size": 11119049,
       "sha256": "ef9bc0c76316e05924d20ede54d1b7079e53bfea866e11c07765ff7bd52f980b",
       "url": "https://github.com/likebe1-1/lan-transfer-android/releases/download/v2.2.0/LanLink-v2.2.0-arm64-v8a.apk",
-      "downloadCount": 23,
+      "downloadCount": 26,
       "publishedAt": "2026-11-15T09:19:41Z",
       "mirrorable": true
     },

@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import sys
+import shutil
 import tempfile
 import urllib.parse
 import urllib.request
@@ -97,6 +98,11 @@ def main():
     parser.add_argument("--tag", default="", help="只同步指定版本")
     parser.add_argument("--files", default="", help="只同步指定文件名（逗号分隔）")
     parser.add_argument("--out", default=os.path.join("docs", "gitee", "files.json"))
+    parser.add_argument(
+        "--assets-dir",
+        default="",
+        help="本地资产目录：存在同名文件时直接使用，避免重复从 GitHub 下载（网络不稳时很有用）",
+    )
     args = parser.parse_args()
 
     token = os.environ.get("GITEE_TOKEN", "").strip()
@@ -183,8 +189,13 @@ def main():
 
         with tempfile.TemporaryDirectory() as temp_dir:
             path = os.path.join(temp_dir, item["name"])
-            print(f"下载 {item['name']} …")
-            download(item["url"], path)
+            local = os.path.join(args.assets_dir, item["name"]) if args.assets_dir else ""
+            if local and os.path.exists(local):
+                print(f"使用本地资产 {item['name']} …")
+                shutil.copyfile(local, path)
+            else:
+                print(f"下载 {item['name']} …")
+                download(item["url"], path)
             digest = sha256_file(path)
             print(f"上传 {tag}/{item['name']}（{len(open(path,'rb').read())} B）…")
             upload_attachment(release["id"], token, path, item["name"])
