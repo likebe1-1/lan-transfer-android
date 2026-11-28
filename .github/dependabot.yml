@@ -37,6 +37,16 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+      # 构建设备链固定策略（见 docs/ARCHITECTURE.md §23）：
+      # - AGP 8.7.x 与 Gradle 8.9 是当前验证过的组合，AGP 8.8+ 需要更高 Gradle，
+      #   而 Gradle 9.x 会让 lint worker 崩溃；因此在完成整体升级前，AGP 的 minor 也忽略。
+      # - 需要升级时人工改 libs.versions.toml + gradle-wrapper.properties，并跑全量回归。
+      - dependency-name: "com.android.tools.build:gradle"
+        update-types:
+          - "version-update:semver-minor"
+      - dependency-name: "com.android.tools.build:gradle"
+        update-types:
+          - "version-update:semver-patch"
     # 分组匹配规则：一个依赖只归入自上而下第一个命中的分组，因此先放具体分组，
     # 最后放 patterns: ["*"] 的 minor-patch 兜底组。
     groups:

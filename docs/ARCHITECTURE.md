@@ -128,6 +128,19 @@ interface RemoteFileSystem : Closeable {
 3. 监听地址固定 `0.0.0.0`，依赖服务端认证限流（`ServerAuthGuard`）兜底；多网卡/VPN/公网暴露场景需谨慎；
 4. SFTP 数据包尺寸受 JSch 硬编码 32 KiB（`LOCAL_MAXIMUM_PACKET_SIZE`）限制，应用侧无法放大；
 
+### 已知构建风险：R8 与 Kotlin 版本耦合
+
+依赖升级到 Kotlin 2.4.21 后，release 构建（R8）会打印：
+
+```
+WARNING: R8: An error occurred when parsing kotlin metadata ...
+```
+
+- 原因：AGP 8.7.3 内置的 R8 版本早于 Kotlin 2.4，无法解析新版 kotlin.Metadata；
+- 影响：仅影响 R8 对 Kotlin 元数据的重写/裁剪；本项目不使用 kotlin-reflect，且 SSHD / JSch / BouncyCastle / ZXing 均整类 keep，release 构建与全部 437 单测通过，判断为可接受；
+- 计划：下一次整体升级 AGP（需要 Gradle 8.13+ 且不能升到 Gradle 9，否则 lint worker 会崩，见 §23）后该警告自动消失；
+- 在此之前不要单独升级 AGP 或 Gradle wrapper（Dependabot 已配置忽略 AGP 的 minor/patch 与所有 major）。
+
 ### 吞吐调优小结（v2.3.2 起）
 
 | 项 | 取值 | 说明 |
