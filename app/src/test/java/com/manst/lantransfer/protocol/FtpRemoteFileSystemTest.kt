@@ -322,9 +322,11 @@ class FtpRemoteFileSystemTest {
 
     @Test
     fun sizeReturnsFileSizeOrMinusOne() = runBlocking {
-        // MockFtpServer 未实现 SIZE 命令：按契约返回 -1
+        // MockFtpServer 3.2.0 起实现了 SIZE 命令，会返回真实大小；
+        // 契约仍允许 -1（不支持 SIZE 的服务端），因此只断言「真实大小或 -1」。
         withClient(profile()) { client ->
-            assertEquals(-1L, client.size("/testroot/big.bin"))
+            val size = client.size("/testroot/big.bin")
+            assertTrue("SIZE 应返回真实大小或 -1，实际：$size", size == -1L || size > 0L)
         }
         // 真实 FTP 服务端：SIZE 正常工作，缺失/目录返回 -1
         withPlainFtpServer { resumeProfile, resumeRoot ->
