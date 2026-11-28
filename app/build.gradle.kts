@@ -146,6 +146,10 @@ android {
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE",
                 "META-INF/LICENSE.txt",
+                // BouncyCastle 1.87 起 bcprov/bcpkix/bcutil 各自携带 LICENSE.md/README.md，
+                // 归档时重名冲突（运行时不需要这些元数据）
+                "META-INF/LICENSE.md",
+                "META-INF/README.md",
                 "META-INF/NOTICE",
                 "META-INF/NOTICE.txt",
                 "META-INF/INDEX.LIST",
