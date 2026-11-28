@@ -17,7 +17,7 @@ mockftpserver = "3.2.0"
 bouncycastle = "1.87"
 jsonOrg = "20240303"
 slf4j = "2.0.20"
-zxingCore = "3.5.3"
+zxingCore = "3.5.4"
 zxingEmbedded = "4.3.0"
 documentFile = "1.0.1"
 
